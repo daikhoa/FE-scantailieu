@@ -15,6 +15,7 @@ import {
   type ImageImportFailureCode,
   type ImportedImage,
 } from './image-import';
+import { mapLiveDetectionToCrop } from './live-capture-crop';
 
 type CameraViewState =
   | { readonly kind: 'idle' }
@@ -225,15 +226,25 @@ export function CameraScreen({
     }
   };
 
-  const selectImage = async (source: Blob) => {
+  const selectImage = async (source: Blob, captureDetection?: LiveDetectionResult | null) => {
     request.current?.abort();
     service.stop();
     const controller = new AbortController();
     request.current = controller;
     setState({ kind: 'importing' });
     try {
-      const image = await importer(source, controller.signal);
+      const importedImage = await importer(source, controller.signal);
       if (!mounted.current || request.current !== controller) return;
+      const image =
+        captureDetection === undefined
+          ? importedImage
+          : {
+              ...importedImage,
+              captureCrop: mapLiveDetectionToCrop(
+                captureDetection,
+                importedImage.original.dimensions,
+              ),
+            };
       setState({ kind: 'imported', image });
       onImageImported?.(image);
     } catch (error) {
@@ -250,6 +261,7 @@ export function CameraScreen({
 
   const capturePhoto = async () => {
     if (state.kind !== 'active' || video.current === null || capturing) return;
+    const captureDetection = liveDetection;
     request.current?.abort();
     const controller = new AbortController();
     request.current = controller;
@@ -258,7 +270,7 @@ export function CameraScreen({
     try {
       const photo = await resolvedCapture.capture(state.stream, video.current, controller.signal);
       if (!mounted.current || request.current !== controller) return;
-      await selectImage(photo);
+      await selectImage(photo, captureDetection);
     } catch (error) {
       if (!mounted.current || request.current !== controller) return;
       if (!(error instanceof Error && error.name === 'AbortError')) setCaptureFailed(true);

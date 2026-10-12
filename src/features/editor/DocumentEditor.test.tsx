@@ -39,7 +39,7 @@ function fakeEngine() {
     render: renderPage,
     dispose,
   };
-  return { engine, renderPage, dispose };
+  return { engine, detect, renderPage, dispose };
 }
 
 const image = {
@@ -74,7 +74,35 @@ afterEach(() => {
 });
 
 describe('DocumentEditor', () => {
-  it('detects the document again after capture and renders the default OCR filter locally', async () => {
+  it('uses the crop fixed at shutter time without detecting the captured image again', async () => {
+    const fixture = fakeEngine();
+    const captureCrop = {
+      kind: 'document' as const,
+      corners: [
+        { x: 120, y: 160 },
+        { x: 1080, y: 160 },
+        { x: 1080, y: 1440 },
+        { x: 120, y: 1440 },
+      ] as const,
+    };
+    render(
+      <DocumentEditor
+        image={{ ...image, captureCrop }}
+        engineFactory={() => fixture.engine}
+        frameSource={fakeFrameSource()}
+        onBack={vi.fn()}
+        headingRef={null}
+      />,
+    );
+
+    await waitFor(() => {
+      expect(fixture.renderPage).toHaveBeenCalledOnce();
+    });
+    expect(fixture.detect).not.toHaveBeenCalled();
+    expect(fixture.renderPage.mock.calls[0]?.[0].recipe.crop).toEqual(captureCrop);
+  });
+
+  it('detects a library image and renders the default OCR filter locally', async () => {
     const fixture = fakeEngine();
     const frameSource = fakeFrameSource();
     render(

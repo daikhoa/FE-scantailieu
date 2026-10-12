@@ -119,12 +119,14 @@ export function DocumentEditor({
     void (async () => {
       try {
         await localEngine.initialize(controller.signal);
-        const detectedCrop = await detectDocumentCrop(
-          localEngine,
-          detectionSource,
-          image.original,
-          controller.signal,
-        );
+        const detectedCrop =
+          image.captureCrop ??
+          (await detectDocumentCrop(
+            localEngine,
+            detectionSource,
+            image.original,
+            controller.signal,
+          ));
         crop.current = detectedCrop;
         const variant = await localEngine.render(
           {
@@ -161,7 +163,7 @@ export function DocumentEditor({
       void localEngine.dispose().catch(() => undefined);
       engine.current = null;
     };
-  }, [detectionSource, engineFactory, image.original, originalUrl]);
+  }, [detectionSource, engineFactory, image.captureCrop, image.original, originalUrl]);
 
   const chooseFilter = async (option: FilterOption) => {
     const localEngine = engine.current;

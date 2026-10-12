@@ -1,4 +1,4 @@
-import type { ImageAsset, ImageDimensions } from '../../domain/document';
+import type { CropRegion, ImageAsset, ImageDimensions } from '../../domain/document';
 import { MAX_ENCODED_INPUT_BYTES } from '../../imaging/codecs/browser-rgba-codec';
 import { isValidImageDimensions } from '../../imaging/geometry/coordinates';
 import {
@@ -37,6 +37,8 @@ export class ImageImportError extends Error {
 
 export interface ImportedImage {
   readonly original: ImageAsset;
+  /** Present for camera captures: the live guide frozen at shutter time in original axes. */
+  readonly captureCrop?: CropRegion;
 }
 
 export type ImageImporter = (source: Blob, signal: AbortSignal) => Promise<ImportedImage>;

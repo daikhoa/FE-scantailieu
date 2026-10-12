@@ -267,7 +267,10 @@ describe('CameraScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Chụp tài liệu' }));
 
     await waitFor(() => {
-      expect(onImageImported).toHaveBeenCalledWith(image);
+      expect(onImageImported).toHaveBeenCalledWith({
+        ...image,
+        captureCrop: { kind: 'full-frame' },
+      });
     });
     expect(capture).toHaveBeenCalledWith(
       stream,
@@ -275,5 +278,71 @@ describe('CameraScreen', () => {
       expect.any(AbortSignal),
     );
     expect(importer).toHaveBeenCalledWith(photo, expect.any(AbortSignal));
+  });
+
+  it('sends the live document frame as the final crop when the shutter is pressed', async () => {
+    const stream = {
+      getTracks: () => [],
+      getVideoTracks: () => [{} as MediaStreamTrack],
+    } as unknown as MediaStream;
+    const detect = vi.fn<ScannerEngine['detect']>((frame) =>
+      Promise.resolve({
+        kind: 'document',
+        dimensions: frame.dimensions,
+        confidence: 0.92,
+        corners: [
+          { x: 10, y: 10 },
+          { x: 90, y: 10 },
+          { x: 90, y: 90 },
+          { x: 10, y: 90 },
+        ],
+      }),
+    );
+    const engine: ScannerEngine = {
+      lifecycle: { kind: 'uninitialized' },
+      initialize: vi.fn(() => Promise.resolve()),
+      detect,
+      render: vi.fn(() => Promise.reject(new Error('not used'))),
+      dispose: vi.fn(() => Promise.resolve()),
+    };
+    const source: VideoFrameSource = {
+      capture: vi.fn(() => ({ dimensions: { width: 100, height: 100 }, close: vi.fn() })),
+      dispose: vi.fn(),
+    };
+    const photo = new Blob(['captured'], { type: 'image/jpeg' });
+    const image = {
+      original: { blob: photo, dimensions: { width: 200, height: 100 } },
+    };
+    const onImageImported = vi.fn();
+    renderCamera(
+      fakeService(() => Promise.resolve({ stream, stop: vi.fn() })),
+      vi.fn(),
+      {
+        engineFactory: () => engine,
+        frameSourceFactory: () => source,
+        cameraCapture: { capture: vi.fn(() => Promise.resolve(photo)) },
+        importer: vi.fn(() => Promise.resolve(image)),
+        onImageImported,
+      },
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cho phép camera' }));
+    await screen.findByText('Đã định khung tài liệu.');
+    fireEvent.click(screen.getByRole('button', { name: 'Chụp tài liệu' }));
+
+    await waitFor(() => {
+      expect(onImageImported).toHaveBeenCalledWith({
+        ...image,
+        captureCrop: {
+          kind: 'document',
+          corners: [
+            { x: 60, y: 10 },
+            { x: 140, y: 10 },
+            { x: 140, y: 90 },
+            { x: 60, y: 90 },
+          ],
+        },
+      });
+    });
   });
 });
