@@ -1,0 +1,70 @@
+import { Scanner } from 'scanic';
+import { applyDocumentFilter } from '../rendering/document-filter';
+import { rotateOwnedRgba } from '../rendering/rgba-rotation';
+import type { RgbaBackendInput } from './scanic-backend-contract';
+import type { ScanicWorkerRequest, ScanicWorkerResponse } from './scanic-worker-backend';
+import { warpPerspectiveRgba } from '../rendering/perspective-warp';
+
+let scanner: Scanner | null = null;
+
+async function execute(request: ScanicWorkerRequest): Promise<unknown> {
+  if (request.operation === 'initialize') {
+    // Scanic's DOM-canvas fallback cannot run in a worker (notably Safari 16.0–16.3).
+    if (typeof OffscreenCanvas === 'undefined' || typeof ImageData === 'undefined') {
+      return { unavailable: true };
+    }
+    scanner = new Scanner({
+      detector: 'classical',
+      mode: 'detect',
+      output: 'imagedata',
+      debug: false,
+      // Input is already bounded; avoid upstream rounding scale mismatches on thin frames.
+      maxProcessingDimension: 8192,
+    });
+    await scanner.initialize();
+    return null;
+  }
+  if (request.operation === 'warp') {
+    const corrected = warpPerspectiveRgba(request.input, request.corners);
+    const filtered = applyDocumentFilter(corrected, request.filter);
+    return rotateOwnedRgba(filtered, request.rotation);
+  }
+  if (scanner === null) throw new Error('Scanner not initialized.');
+  const input: RgbaBackendInput = request.input;
+  const image = new ImageData(input.pixels, input.dimensions.width, input.dimensions.height);
+  const result = await scanner.scan(image, {
+    detector: 'classical',
+    mode: 'detect',
+    output: 'imagedata',
+    debug: false,
+  });
+  // Do not send raw messages, debug images, contours or timings over the internal boundary.
+  return { success: result.success, confidence: result.confidence, corners: result.corners };
+}
+
+globalThis.addEventListener('message', (event: MessageEvent<ScanicWorkerRequest>) => {
+  const request = event.data;
+  void execute(request).then(
+    (output: unknown) => {
+      const response: ScanicWorkerResponse =
+        typeof output === 'object' && output !== null && 'unavailable' in output
+          ? { id: request.id, kind: 'failure', code: 'unavailable' }
+          : { id: request.id, kind: 'success', output };
+      if (
+        request.operation === 'warp' &&
+        typeof output === 'object' &&
+        output !== null &&
+        'pixels' in output &&
+        output.pixels instanceof Uint8ClampedArray
+      ) {
+        globalThis.postMessage(response, { transfer: [output.pixels.buffer] });
+      } else {
+        globalThis.postMessage(response);
+      }
+    },
+    () => {
+      const response: ScanicWorkerResponse = { id: request.id, kind: 'failure', code: 'failed' };
+      globalThis.postMessage(response);
+    },
+  );
+});

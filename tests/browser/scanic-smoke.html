@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scanic browser smoke</title>
+  </head>
+  <body>
+    <main>
+      <h1>Scanic browser smoke</h1>
+      <pre id="result" data-status="running">Running…</pre>
+    </main>
+    <script type="module">
+      import {
+        createRgbaScannerFrame,
+        createScanicClassicalEngine,
+      } from '/src/imaging/engines/scanic-classical-engine.ts';
+
+      const fixturePaths = [
+        '/tests/fixtures/synthetic/flat-document.png',
+        '/tests/fixtures/synthetic/perspective-document.png',
+        '/tests/fixtures/synthetic/no-document-room.png',
+        '/tests/fixtures/synthetic/no-document-clutter.png',
+      ];
+      const resultElement = document.querySelector('#result');
+      const engine = createScanicClassicalEngine();
+      const controller = new AbortController();
+
+      async function rgbaFrame(path) {
+        const response = await fetch(path);
+        if (!response.ok) throw new Error(`Fixture request failed (${response.status}).`);
+        const bitmap = await createImageBitmap(await response.blob());
+        const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (!context) throw new Error('2D canvas is unavailable.');
+        context.drawImage(bitmap, 0, 0);
+        bitmap.close();
+        const image = context.getImageData(0, 0, canvas.width, canvas.height);
+        return createRgbaScannerFrame({ width: image.width, height: image.height }, image.data);
+      }
+
+      async function run() {
+        const initializationStarted = performance.now();
+        await engine.initialize(controller.signal);
+        const initializationMs = performance.now() - initializationStarted;
+        const fixtures = [];
+        for (const path of fixturePaths) {
+          const frame = await rgbaFrame(path);
+          const detectionStarted = performance.now();
+          try {
+            const result = await engine.detect(frame, controller.signal);
+            fixtures.push({
+              path,
+              detectionMs: performance.now() - detectionStarted,
+              result,
+            });
+          } finally {
+            frame.close();
+          }
+        }
+        return {
+          capabilities: {
+            worker: typeof Worker !== 'undefined',
+            offscreenCanvas: typeof OffscreenCanvas !== 'undefined',
+            imageData: typeof ImageData !== 'undefined',
+          },
+          initializationMs,
+          fixtures,
+        };
+      }
+
+      try {
+        const result = await run();
+        resultElement.dataset.status = 'complete';
+        resultElement.textContent = JSON.stringify(result, null, 2);
+      } catch (error) {
+        resultElement.dataset.status = 'failed';
+        resultElement.textContent = JSON.stringify(
+          { error: error instanceof Error ? error.name : 'UnknownError' },
+          null,
+          2,
+        );
+      } finally {
+        await engine.dispose().catch(() => undefined);
+      }
+    </script>
+  </body>
+</html>

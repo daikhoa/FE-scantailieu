@@ -1,0 +1,183 @@
+import type {
+  DocumentCorners,
+  FilterMode,
+  ImageDimensions,
+  QuarterTurn,
+} from '../../domain/document';
+import { isValidImageDimensions } from '../geometry/coordinates';
+import { MAX_WORKING_IMAGE_PIXELS, MAX_WORKING_IMAGE_SIDE } from '../working-image-limits';
+import type { ClassicalBackend, RgbaBackendInput } from './scanic-backend-contract';
+import { ScannerEngineError } from './scanic-backend-contract';
+
+export type ScanicWorkerRequest =
+  | { readonly id: number; readonly operation: 'initialize' }
+  | { readonly id: number; readonly operation: 'detect'; readonly input: RgbaBackendInput }
+  | {
+      readonly id: number;
+      readonly operation: 'warp';
+      readonly input: RgbaBackendInput;
+      readonly corners: DocumentCorners;
+      readonly rotation: QuarterTurn;
+      readonly filter: FilterMode;
+    };
+
+export type ScanicWorkerResponse =
+  | { readonly id: number; readonly kind: 'success'; readonly output: unknown }
+  | { readonly id: number; readonly kind: 'failure'; readonly code: 'unavailable' | 'failed' };
+
+function isImageDimensions(value: unknown): value is ImageDimensions {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'width' in value &&
+    'height' in value &&
+    typeof value.width === 'number' &&
+    typeof value.height === 'number' &&
+    isValidImageDimensions({ width: value.width, height: value.height })
+  );
+}
+
+function isRgbaBackendInput(value: unknown): value is RgbaBackendInput {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    !('dimensions' in value) ||
+    !('pixels' in value)
+  ) {
+    return false;
+  }
+  const { dimensions, pixels } = value;
+  return (
+    isImageDimensions(dimensions) &&
+    Math.max(dimensions.width, dimensions.height) <= MAX_WORKING_IMAGE_SIDE &&
+    dimensions.width * dimensions.height <= MAX_WORKING_IMAGE_PIXELS &&
+    pixels instanceof Uint8ClampedArray &&
+    pixels.buffer instanceof ArrayBuffer &&
+    pixels.byteLength === dimensions.width * dimensions.height * 4
+  );
+}
+
+/** Each instance owns its worker, and thus Scanic's otherwise non-disposable WASM singleton. */
+export function createScanicWorkerBackend(): ClassicalBackend {
+  if (typeof Worker === 'undefined') throw new ScannerEngineError('unavailable');
+  const worker = new Worker(new URL('./scanic-classical.worker.ts', import.meta.url), {
+    type: 'module',
+    name: 'scanic-classical-1.6.0',
+  });
+  let closed = false;
+  let nextId = 0;
+  let current: {
+    readonly id: number;
+    readonly operation: ScanicWorkerRequest['operation'];
+    readonly resolve: (output: unknown) => void;
+    readonly reject: (error: Error) => void;
+    readonly timer: ReturnType<typeof setTimeout>;
+  } | null = null;
+
+  const fail = (code: 'failed' | 'unavailable' | 'timeout') => {
+    const job = current;
+    current = null;
+    if (job !== null) clearTimeout(job.timer);
+    job?.reject(new ScannerEngineError(code));
+  };
+
+  const onMessage = (event: MessageEvent<unknown>) => {
+    const reply = event.data;
+    if (
+      typeof reply !== 'object' ||
+      reply === null ||
+      !('id' in reply) ||
+      current === null ||
+      reply.id !== current.id ||
+      !('kind' in reply)
+    ) {
+      close('failed');
+      return;
+    }
+    if (reply.kind === 'failure') {
+      close('code' in reply && reply.code === 'unavailable' ? 'unavailable' : 'failed');
+      return;
+    }
+    if (reply.kind !== 'success' || !('output' in reply)) {
+      close('failed');
+      return;
+    }
+    if (current.operation === 'warp' && !isRgbaBackendInput(reply.output)) {
+      close('failed');
+      return;
+    }
+    const job = current;
+    current = null;
+    clearTimeout(job.timer);
+    job.resolve(reply.output);
+  };
+  const onError = () => {
+    close('failed');
+  };
+  worker.addEventListener('message', onMessage);
+  worker.addEventListener('error', onError);
+  worker.addEventListener('messageerror', onError);
+
+  function close(code: 'failed' | 'unavailable' | 'timeout'): void {
+    if (closed) return;
+    closed = true;
+    worker.removeEventListener('message', onMessage);
+    worker.removeEventListener('error', onError);
+    worker.removeEventListener('messageerror', onError);
+    worker.terminate();
+    fail(code);
+  }
+
+  function request(
+    operation: ScanicWorkerRequest['operation'],
+    input?: RgbaBackendInput,
+    corners?: DocumentCorners,
+    rotation?: QuarterTurn,
+    filter?: FilterMode,
+  ): Promise<unknown> {
+    if (closed || current !== null) return Promise.reject(new ScannerEngineError('unavailable'));
+    const id = ++nextId;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        close('timeout');
+      }, 30_000);
+      current = { id, operation, resolve, reject, timer };
+      try {
+        if (
+          operation === 'warp' &&
+          input !== undefined &&
+          corners !== undefined &&
+          rotation !== undefined &&
+          filter !== undefined
+        ) {
+          const message: ScanicWorkerRequest = { id, operation, input, corners, rotation, filter };
+          worker.postMessage(message, [input.pixels.buffer]);
+        } else if (operation === 'detect' && input !== undefined) {
+          const message: ScanicWorkerRequest = { id, operation, input };
+          worker.postMessage(message, [input.pixels.buffer]);
+        } else {
+          const message: ScanicWorkerRequest = { id, operation: 'initialize' };
+          worker.postMessage(message);
+        }
+      } catch {
+        close('failed');
+      }
+    });
+  }
+
+  return {
+    async initialize() {
+      await request('initialize');
+    },
+    detect: (input) => request('detect', input),
+    async warp(input, corners, rotation, filter) {
+      const output = await request('warp', input, corners, rotation, filter);
+      if (!isRgbaBackendInput(output)) throw new ScannerEngineError('failed');
+      return output;
+    },
+    dispose() {
+      close('unavailable');
+      return Promise.resolve();
+    },
+  };
+}

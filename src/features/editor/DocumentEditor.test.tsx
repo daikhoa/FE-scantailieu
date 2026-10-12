@@ -1,0 +1,172 @@
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+
+import type { ScannerEngine } from '../../imaging/contracts/scanner-engine';
+import type { ImageAssetFrameSource } from '../scanner/image-asset-frame-source';
+import { DocumentEditor } from './DocumentEditor';
+
+function fakeEngine() {
+  const initialize = vi.fn<ScannerEngine['initialize']>(() => Promise.resolve());
+  const detect = vi.fn<ScannerEngine['detect']>(() =>
+    Promise.resolve({
+      kind: 'document',
+      dimensions: { width: 600, height: 800 },
+      confidence: 0.9,
+      corners: [
+        { x: 30, y: 40 },
+        { x: 570, y: 40 },
+        { x: 570, y: 760 },
+        { x: 30, y: 760 },
+      ],
+    }),
+  );
+  const renderPage = vi.fn<ScannerEngine['render']>((request) =>
+    Promise.resolve({
+      recipeKey: `key-${request.recipe.filter.mode}`,
+      engineVersion: 'test-engine',
+      image: {
+        blob: new Blob([request.recipe.filter.mode], { type: 'image/png' }),
+        dimensions: request.original.dimensions,
+      },
+      dewarp: { kind: 'not-requested' },
+    }),
+  );
+  const dispose = vi.fn<ScannerEngine['dispose']>(() => Promise.resolve());
+  const engine: ScannerEngine = {
+    lifecycle: { kind: 'uninitialized' },
+    initialize,
+    detect,
+    render: renderPage,
+    dispose,
+  };
+  return { engine, renderPage, dispose };
+}
+
+const image = {
+  original: {
+    blob: new Blob(['original'], { type: 'image/png' }),
+    dimensions: { width: 1200, height: 1600 },
+  },
+};
+
+function fakeFrameSource(): ImageAssetFrameSource {
+  return {
+    create: vi.fn(() =>
+      Promise.resolve({ dimensions: { width: 600, height: 800 }, close: vi.fn() }),
+    ),
+  };
+}
+
+let revokeObjectUrl = vi.fn();
+
+beforeEach(() => {
+  let nextUrl = 0;
+  revokeObjectUrl = vi.fn();
+  vi.stubGlobal('URL', {
+    ...URL,
+    createObjectURL: vi.fn(() => `blob:preview-${String(++nextUrl)}`),
+    revokeObjectURL: revokeObjectUrl,
+  });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe('DocumentEditor', () => {
+  it('detects the document again after capture and renders the default OCR filter locally', async () => {
+    const fixture = fakeEngine();
+    const frameSource = fakeFrameSource();
+    render(
+      <DocumentEditor
+        image={image}
+        engineFactory={() => fixture.engine}
+        frameSource={frameSource}
+        onBack={vi.fn()}
+        headingRef={null}
+      />,
+    );
+
+    expect(screen.getByRole('img', { name: 'Bản xem trước tài liệu' })).toHaveAttribute(
+      'src',
+      'blob:preview-1',
+    );
+    await waitFor(() => {
+      expect(fixture.renderPage).toHaveBeenCalledOnce();
+    });
+    const request = fixture.renderPage.mock.calls[0]?.[0];
+    expect(request?.original).toBe(image.original);
+    expect(request?.recipe).toEqual({
+      version: 1,
+      crop: {
+        kind: 'document',
+        corners: [
+          { x: 60, y: 80 },
+          { x: 1140, y: 80 },
+          { x: 1140, y: 1520 },
+          { x: 60, y: 1520 },
+        ],
+      },
+      rotation: 0,
+      dewarp: { mode: 'perspective-only' },
+      filter: { mode: 'ocr-color', presetVersion: 'ocr-color-v1', parameters: {} },
+    });
+    expect(screen.getByRole('button', { name: 'Tự động' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('img', { name: 'Bản xem trước tài liệu' })).toHaveAttribute(
+      'src',
+      'blob:preview-2',
+    );
+    expect(screen.getByRole('status')).toHaveTextContent('Đã áp dụng Tự động');
+  });
+
+  it('reports processing failure safely and releases the engine and object URLs', async () => {
+    const fixture = fakeEngine();
+    fixture.renderPage.mockRejectedValueOnce(new Error('private pixel data'));
+    const { unmount } = render(
+      <DocumentEditor
+        image={image}
+        engineFactory={() => fixture.engine}
+        frameSource={fakeFrameSource()}
+        onBack={vi.fn()}
+        headingRef={null}
+      />,
+    );
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Không thể xử lý ảnh');
+    expect(screen.queryByText('private pixel data')).not.toBeInTheDocument();
+    unmount();
+    expect(fixture.dispose).toHaveBeenCalledOnce();
+    expect(revokeObjectUrl).toHaveBeenCalledWith('blob:preview-1');
+  });
+
+  it('exports the currently processed page as a naturally sized PDF', async () => {
+    const fixture = fakeEngine();
+    const pdf = new Blob(['pdf'], { type: 'application/pdf' });
+    const pdfExporter = vi.fn<
+      (pages: readonly (typeof image.original)[], signal: AbortSignal) => Promise<Blob>
+    >(() => Promise.resolve(pdf));
+    const download = vi.fn<(blob: Blob, filename: string) => void>();
+    render(
+      <DocumentEditor
+        image={image}
+        engineFactory={() => fixture.engine}
+        frameSource={fakeFrameSource()}
+        pdfExporter={pdfExporter}
+        download={download}
+        onBack={vi.fn()}
+        headingRef={null}
+      />,
+    );
+    await screen.findByText('Đã nhận diện, cắt và làm thẳng tài liệu.');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tải PDF' }));
+
+    await waitFor(() => {
+      expect(pdfExporter).toHaveBeenCalledOnce();
+    });
+    expect(pdfExporter.mock.calls[0]?.[0]).toEqual([
+      expect.objectContaining({ dimensions: image.original.dimensions }),
+    ]);
+    expect(download).toHaveBeenCalledWith(pdf, 'clonecamscanner.pdf');
+  });
+});

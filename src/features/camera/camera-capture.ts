@@ -1,0 +1,152 @@
+import { isValidImageDimensions } from '../../imaging/geometry/coordinates';
+import {
+  MAX_WORKING_IMAGE_PIXELS,
+  MAX_WORKING_IMAGE_SIDE,
+} from '../../imaging/working-image-limits';
+
+export type CameraCaptureFailureCode = 'unavailable' | 'invalid-input' | 'failed';
+
+const SAFE_MESSAGES: Readonly<Record<CameraCaptureFailureCode, string>> = {
+  unavailable: 'Camera capture is unavailable.',
+  'invalid-input': 'Camera frame dimensions are invalid.',
+  failed: 'Camera capture failed.',
+};
+const HAVE_CURRENT_DATA = 2;
+const OUTPUT_TYPE = 'image/jpeg';
+const OUTPUT_QUALITY = 0.95;
+const SUPPORTED_PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+
+export class CameraCaptureError extends Error {
+  override readonly name = 'CameraCaptureError';
+
+  constructor(readonly code: CameraCaptureFailureCode) {
+    super(SAFE_MESSAGES[code]);
+  }
+}
+
+interface ImageCapturePort {
+  takePhoto(): Promise<Blob>;
+}
+
+interface CameraCaptureOptions {
+  readonly createImageCapture?: ((track: MediaStreamTrack) => ImageCapturePort) | null;
+  readonly createCanvas?: () => HTMLCanvasElement;
+}
+
+export interface CameraCapture {
+  capture(stream: MediaStream, video: HTMLVideoElement, signal: AbortSignal): Promise<Blob>;
+}
+
+function abortError(): Error {
+  const error = new Error('Camera capture cancelled.');
+  error.name = 'AbortError';
+  return error;
+}
+
+function checkAbort(signal: AbortSignal): void {
+  if (signal.aborted) throw abortError();
+}
+
+function browserCanvas(): HTMLCanvasElement {
+  if (typeof document === 'undefined') throw new CameraCaptureError('unavailable');
+  return document.createElement('canvas');
+}
+
+function browserImageCapture(track: MediaStreamTrack): ImageCapturePort {
+  const candidate: unknown = Reflect.get(globalThis, 'ImageCapture');
+  if (typeof candidate !== 'function') throw new CameraCaptureError('unavailable');
+  return Reflect.construct(candidate, [track]) as ImageCapturePort;
+}
+
+function validDimensions(width: number, height: number): boolean {
+  const dimensions = { width, height };
+  return (
+    isValidImageDimensions(dimensions) &&
+    Math.max(width, height) <= MAX_WORKING_IMAGE_SIDE &&
+    width * height <= MAX_WORKING_IMAGE_PIXELS
+  );
+}
+
+function canvasBlob(canvas: HTMLCanvasElement, signal: AbortSignal): Promise<Blob> {
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finish = (action: () => void) => {
+      if (settled) return;
+      settled = true;
+      signal.removeEventListener('abort', onAbort);
+      action();
+    };
+    const onAbort = () => {
+      finish(() => {
+        reject(abortError());
+      });
+    };
+    signal.addEventListener('abort', onAbort, { once: true });
+    canvas.toBlob(
+      (blob) => {
+        finish(() => {
+          if (blob === null || blob.size <= 0 || blob.type !== OUTPUT_TYPE) {
+            reject(new CameraCaptureError('failed'));
+          } else {
+            resolve(blob);
+          }
+        });
+      },
+      OUTPUT_TYPE,
+      OUTPUT_QUALITY,
+    );
+  });
+}
+
+export function createCameraCapture(options: CameraCaptureOptions = {}): CameraCapture {
+  const createImageCapture =
+    options.createImageCapture === undefined ? browserImageCapture : options.createImageCapture;
+  const createCanvas = options.createCanvas ?? browserCanvas;
+
+  return {
+    async capture(stream, video, signal) {
+      checkAbort(signal);
+      if (
+        video.readyState < HAVE_CURRENT_DATA ||
+        !validDimensions(video.videoWidth, video.videoHeight)
+      ) {
+        throw new CameraCaptureError('invalid-input');
+      }
+
+      const track = stream.getVideoTracks()[0];
+      if (createImageCapture !== null && track !== undefined) {
+        try {
+          const photo = await createImageCapture(track).takePhoto();
+          checkAbort(signal);
+          if (photo instanceof Blob && photo.size > 0 && SUPPORTED_PHOTO_TYPES.has(photo.type)) {
+            return photo;
+          }
+        } catch {
+          checkAbort(signal);
+          // Safari and some Android cameras expose ImageCapture but reject takePhoto.
+        }
+      }
+
+      let canvas: HTMLCanvasElement | null = null;
+      try {
+        canvas = createCanvas();
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const context = canvas.getContext('2d', { alpha: false });
+        if (context === null) throw new CameraCaptureError('unavailable');
+        context.drawImage(video, 0, 0, canvas.width, canvas.height);
+        checkAbort(signal);
+        return await canvasBlob(canvas, signal);
+      } catch (error) {
+        if (signal.aborted) throw abortError();
+        if (error instanceof CameraCaptureError) throw error;
+        throw new CameraCaptureError('failed');
+      } finally {
+        if (canvas !== null) {
+          canvas.width = 1;
+          canvas.height = 1;
+        }
+      }
+    },
+  };
+}

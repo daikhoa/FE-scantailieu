@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Scanic SmartDoc benchmark</title>
+  </head>
+  <body>
+    <main>
+      <h1>Scanic SmartDoc benchmark</h1>
+      <pre id="result" data-status="running">Running…</pre>
+    </main>
+    <script type="module">
+      import {
+        createRgbaScannerFrame,
+        createScanicClassicalEngine,
+      } from '/src/imaging/engines/scanic-classical-engine.ts';
+      import { aggregateBenchmarkResults } from '/tests/golden/metrics.ts';
+      import { parseFixtureManifest } from '/tests/golden/schema.ts';
+
+      const manifestPaths = [
+        '/tests/fixtures/smartdoc15/development/manifest.json',
+        '/tests/fixtures/smartdoc15/holdout/manifest.json',
+      ];
+      const resultElement = document.querySelector('#result');
+      const engine = createScanicClassicalEngine();
+      const controller = new AbortController();
+
+      async function loadJson(path) {
+        const response = await fetch(path, { cache: 'no-store' });
+        if (!response.ok) throw new Error('Fixture manifest request failed.');
+        return response.json();
+      }
+
+      async function rgbaFrame(path) {
+        const response = await fetch(path, { cache: 'no-store' });
+        if (!response.ok) throw new Error('Fixture image request failed.');
+        const bitmap = await createImageBitmap(await response.blob());
+        try {
+          const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+          const context = canvas.getContext('2d', { willReadFrequently: true });
+          if (!context) throw new Error('2D canvas is unavailable.');
+          context.drawImage(bitmap, 0, 0);
+          const image = context.getImageData(0, 0, canvas.width, canvas.height);
+          return createRgbaScannerFrame({ width: image.width, height: image.height }, image.data);
+        } finally {
+          bitmap.close();
+        }
+      }
+
+      function percentile(values, ratio) {
+        if (values.length === 0) return null;
+        const sorted = [...values].sort((left, right) => left - right);
+        return sorted[Math.ceil(ratio * sorted.length) - 1];
+      }
+
+      async function benchmarkManifest(manifestPath) {
+        const manifest = parseFixtureManifest(await loadJson(manifestPath));
+        const predictions = [];
+        const fixtureTimings = [];
+        for (const fixture of manifest.fixtures) {
+          const imagePath = new URL(fixture.image.path, new URL(manifestPath, location.href))
+            .pathname;
+          const frame = await rgbaFrame(imagePath);
+          const timings = [];
+          let finalResult;
+          try {
+            for (let run = 0; run < 3; run += 1) {
+              const started = performance.now();
+              finalResult = await engine.detect(frame, controller.signal);
+              timings.push(performance.now() - started);
+            }
+          } finally {
+            frame.close();
+          }
+          if (!finalResult) throw new Error('Detection returned no result.');
+          predictions.push({
+            fixtureId: fixture.id,
+            prediction:
+              finalResult.kind === 'document'
+                ? { kind: 'document', corners: finalResult.corners }
+                : { kind: 'no-document' },
+          });
+          fixtureTimings.push({
+            fixtureId: fixture.id,
+            result: finalResult,
+            medianMs: percentile(timings, 0.5),
+            p95Ms: percentile(timings, 0.95),
+            runsMs: timings,
+          });
+        }
+        return {
+          aggregate: aggregateBenchmarkResults(manifest, predictions),
+          timings: fixtureTimings,
+        };
+      }
+
+      async function run() {
+        const initializationStarted = performance.now();
+        await engine.initialize(controller.signal);
+        const initializationMs = performance.now() - initializationStarted;
+        const datasets = [];
+        for (const manifestPath of manifestPaths) {
+          datasets.push({ manifestPath, ...(await benchmarkManifest(manifestPath)) });
+        }
+        const externalRequests = performance
+          .getEntriesByType('resource')
+          .filter((entry) => new URL(entry.name, location.href).origin !== location.origin).length;
+        return {
+          engine: 'scanic-1.6.0-classical',
+          runsPerFixture: 3,
+          previewMaxSide: 960,
+          initializationMs,
+          network: { policy: 'deny-external', externalRequests },
+          capabilities: {
+            worker: typeof Worker !== 'undefined',
+            offscreenCanvas: typeof OffscreenCanvas !== 'undefined',
+            imageData: typeof ImageData !== 'undefined',
+          },
+          datasets,
+        };
+      }
+
+      try {
+        const result = await run();
+        resultElement.dataset.status = 'complete';
+        resultElement.textContent = JSON.stringify(result, null, 2);
+      } catch (error) {
+        resultElement.dataset.status = 'failed';
+        resultElement.textContent = JSON.stringify(
+          {
+            error: error instanceof Error ? error.name : 'UnknownError',
+            code:
+              typeof error === 'object' && error !== null && 'code' in error
+                ? error.code
+                : undefined,
+            lifecycle: engine.lifecycle,
+          },
+          null,
+          2,
+        );
+      } finally {
+        await engine.dispose().catch(() => undefined);
+      }
+    </script>
+  </body>
+</html>

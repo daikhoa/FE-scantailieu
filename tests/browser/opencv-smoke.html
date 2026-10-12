@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OpenCV browser smoke</title>
+  </head>
+  <body>
+    <main>
+      <h1>OpenCV browser smoke</h1>
+      <pre id="result" data-status="running">Running…</pre>
+    </main>
+    <script type="module">
+      import { selectOpenCvDocumentCandidate } from '/src/imaging/engines/opencv-classical-candidate.ts';
+      import { orderCorners } from '/src/imaging/geometry/quad.ts';
+      import { calculatePolygonIoU } from '/tests/golden/metrics.ts';
+
+      const fixturePaths = [
+        '/tests/fixtures/synthetic/flat-document.png',
+        '/tests/fixtures/synthetic/perspective-document.png',
+        '/tests/fixtures/synthetic/no-document-room.png',
+        '/tests/fixtures/synthetic/no-document-clutter.png',
+      ];
+      const resultElement = document.querySelector('#result');
+
+      function loadScript(source) {
+        return new Promise((resolve, reject) => {
+          const script = document.createElement('script');
+          script.src = source;
+          script.onload = resolve;
+          script.onerror = () => reject(new Error('OpenCV runtime failed to load.'));
+          document.head.append(script);
+        });
+      }
+
+      async function loadOpenCv() {
+        const runtime = new URLSearchParams(location.search).get('runtime');
+        if (runtime === null || !runtime.startsWith('/@fs/')) {
+          throw new Error('A same-origin /@fs/ OpenCV runtime URL is required.');
+        }
+        await loadScript(runtime);
+        const loaded = window.cv;
+        if (loaded === undefined) throw new Error('OpenCV did not expose cv.');
+        return loaded instanceof Promise ? await loaded : loaded;
+      }
+
+      async function sourceCanvas(path) {
+        const response = await fetch(path);
+        if (!response.ok) throw new Error(`Fixture request failed (${response.status}).`);
+        const bitmap = await createImageBitmap(await response.blob());
+        const canvas = document.createElement('canvas');
+        canvas.width = bitmap.width;
+        canvas.height = bitmap.height;
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        if (context === null) throw new Error('2D canvas is unavailable.');
+        context.drawImage(bitmap, 0, 0);
+        bitmap.close();
+        return canvas;
+      }
+
+      function supportedPixel(matrix, x, y) {
+        const width = matrix.cols;
+        const height = matrix.rows;
+        for (let offsetY = -2; offsetY <= 2; offsetY += 1) {
+          const sampleY = Math.round(y) + offsetY;
+          if (sampleY < 0 || sampleY >= height) continue;
+          for (let offsetX = -2; offsetX <= 2; offsetX += 1) {
+            const sampleX = Math.round(x) + offsetX;
+            if (sampleX < 0 || sampleX >= width) continue;
+            if (matrix.data[sampleY * width + sampleX] !== 0) return true;
+          }
+        }
+        return false;
+      }
+
+      function edgeSupport(matrix, corners) {
+        let samples = 0;
+        let supported = 0;
+        for (let edge = 0; edge < 4; edge += 1) {
+          const start = corners[edge];
+          const end = corners[(edge + 1) % 4];
+          const count = Math.max(
+            8,
+            Math.min(80, Math.ceil(Math.hypot(end.x - start.x, end.y - start.y) / 6)),
+          );
+          for (let index = 0; index <= count; index += 1) {
+            const ratio = index / count;
+            const x = start.x + (end.x - start.x) * ratio;
+            const y = start.y + (end.y - start.y) * ratio;
+            samples += 1;
+            if (supportedPixel(matrix, x, y)) supported += 1;
+          }
+        }
+        return samples === 0 ? 0 : supported / samples;
+      }
+
+      function detect(cv, canvas) {
+        const owned = [];
+        const own = (value) => {
+          owned.push(value);
+          return value;
+        };
+        try {
+          const source = own(cv.imread(canvas));
+          const gray = own(new cv.Mat());
+          const blurred = own(new cv.Mat());
+          const edges = own(new cv.Mat());
+          const closed = own(new cv.Mat());
+          const kernel = own(cv.getStructuringElement(cv.MORPH_RECT, new cv.Size(3, 3)));
+          const contours = own(new cv.MatVector());
+          const hierarchy = own(new cv.Mat());
+          cv.cvtColor(source, gray, cv.COLOR_RGBA2GRAY);
+          cv.GaussianBlur(gray, blurred, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
+          cv.Canny(blurred, edges, 50, 150);
+          cv.morphologyEx(edges, closed, cv.MORPH_CLOSE, kernel);
+          cv.findContours(closed, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+
+          const largest = [];
+          for (let index = 0; index < contours.size(); index += 1) {
+            const contour = contours.get(index);
+            try {
+              largest.push({ index, area: Math.abs(cv.contourArea(contour, false)) });
+            } finally {
+              contour.delete();
+            }
+          }
+          largest.sort((a, b) => b.area - a.area);
+          const candidates = [];
+          for (const { index } of largest.slice(0, 15)) {
+            const contour = contours.get(index);
+            const approximation = new cv.Mat();
+            try {
+              const perimeter = cv.arcLength(contour, true);
+              cv.approxPolyDP(contour, approximation, perimeter * 0.02, true);
+              if (approximation.rows !== 4 || approximation.data32S.length < 8) continue;
+              const points = [
+                { x: approximation.data32S[0], y: approximation.data32S[1] },
+                { x: approximation.data32S[2], y: approximation.data32S[3] },
+                { x: approximation.data32S[4], y: approximation.data32S[5] },
+                { x: approximation.data32S[6], y: approximation.data32S[7] },
+              ];
+              const ordered = orderCorners(points);
+              if (ordered === null) continue;
+              candidates.push({ points, edgeSupport: edgeSupport(closed, ordered) });
+            } finally {
+              approximation.delete();
+              contour.delete();
+            }
+          }
+          return {
+            contourCount: contours.size(),
+            candidateCount: candidates.length,
+            selected: selectOpenCvDocumentCandidate(
+              { width: canvas.width, height: canvas.height },
+              candidates,
+            ),
+          };
+        } finally {
+          for (const value of owned.reverse()) value.delete();
+        }
+      }
+
+      async function run() {
+        const runtimeStarted = performance.now();
+        const cv = await loadOpenCv();
+        const runtimeMs = performance.now() - runtimeStarted;
+        const manifest = await fetch('/tests/fixtures/manifest.example.json').then((response) => {
+          if (!response.ok) throw new Error(`Manifest request failed (${response.status}).`);
+          return response.json();
+        });
+        const labels = new Map(
+          manifest.fixtures.map((fixture) => [fixture.image.path, fixture.label]),
+        );
+        const fixtures = [];
+        for (const path of fixturePaths) {
+          const canvas = await sourceCanvas(path);
+          const detectionStarted = performance.now();
+          const detection = detect(cv, canvas);
+          const label = labels.get(path.replace('/tests/fixtures/', ''));
+          const selected = detection.selected;
+          fixtures.push({
+            path,
+            detectionMs: performance.now() - detectionStarted,
+            contourCount: detection.contourCount,
+            candidateCount: detection.candidateCount,
+            result: selected === null ? { kind: 'full-frame' } : { kind: 'document', ...selected },
+            falseCrop: label?.kind === 'no-document' && selected !== null,
+            iou:
+              label?.kind === 'document' && selected !== null
+                ? calculatePolygonIoU(label.corners, selected.corners, {
+                    width: canvas.width,
+                    height: canvas.height,
+                  })
+                : null,
+          });
+        }
+        const externalRequests = performance
+          .getEntriesByType('resource')
+          .filter((entry) => new URL(entry.name, location.href).origin !== location.origin).length;
+        return {
+          runtimeMs,
+          network: { policy: 'deny-external', externalRequests },
+          fixtures,
+        };
+      }
+
+      try {
+        resultElement.textContent = JSON.stringify(await run(), null, 2);
+        resultElement.dataset.status = 'complete';
+      } catch (error) {
+        resultElement.dataset.status = 'failed';
+        resultElement.textContent = JSON.stringify(
+          { error: error instanceof Error ? `${error.name}: ${error.message}` : 'UnknownError' },
+          null,
+          2,
+        );
+      }
+    </script>
+  </body>
+</html>
