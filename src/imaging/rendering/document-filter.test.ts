@@ -61,6 +61,32 @@ describe('document post-capture filters', () => {
     expect(rgbaAt(output, 2, 4)[0]).toBeLessThan(rgbaAt(output, 2, 3)[0] ?? -1);
   });
 
+  it('protects bright paper from clipping while increasing text edge contrast', () => {
+    const input = image(9, 9, (x) =>
+      x === 4 ? [130, 130, 130, 255] : [245, 245, 245, 255],
+    );
+    const contrastBefore = 245 - 130;
+
+    const output = applyDocumentFilter(input, 'ocr-color');
+    const paper = rgbaAt(output, 0, 4)[0] ?? 0;
+    const text = rgbaAt(output, 4, 4)[0] ?? 0;
+
+    expect(paper).toBeGreaterThan(225);
+    expect(paper).toBeLessThan(252);
+    expect(paper - text).toBeGreaterThan(contrastBefore);
+  });
+
+  it('preserves color separation instead of washing saturated areas toward white', () => {
+    const input = image(5, 5, () => [220, 150, 110, 255]);
+
+    const output = applyDocumentFilter(input, 'ocr-color');
+    const [red = 0, green = 0, blue = 0] = rgbaAt(output, 2, 2);
+
+    expect(red).toBeLessThan(250);
+    expect(red - blue).toBeGreaterThanOrEqual(100);
+    expect(green - blue).toBeGreaterThanOrEqual(35);
+  });
+
   it('uses a local threshold to create an opaque black-and-white page', () => {
     const input = image(9, 9, (x, y) => {
       const paper = 90 + x * 10;

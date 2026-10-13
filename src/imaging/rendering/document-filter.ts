@@ -36,6 +36,30 @@ function clampByte(value: number): number {
   return Math.max(0, Math.min(255, Math.round(value)));
 }
 
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.max(minimum, Math.min(maximum, value));
+}
+
+function highlightProtected(value: number): number {
+  const bounded = clamp(value, 0, 255);
+  return bounded <= 244 ? bounded : 244 + (bounded - 244) * 0.25;
+}
+
+function edgeDetail(
+  gray: Uint8Array<ArrayBuffer>,
+  width: number,
+  height: number,
+  x: number,
+  y: number,
+  source: number,
+): number {
+  const left = gray[y * width + Math.max(0, x - 1)] ?? source;
+  const right = gray[y * width + Math.min(width - 1, x + 1)] ?? source;
+  const top = gray[Math.max(0, y - 1) * width + x] ?? source;
+  const bottom = gray[Math.min(height - 1, y + 1) * width + x] ?? source;
+  return source - (left + right + top + bottom) / 4;
+}
+
 function localRadius(width: number, height: number): number {
   return Math.max(2, Math.min(48, Math.round(Math.min(width, height) / 32)));
 }
@@ -98,15 +122,43 @@ function filterPixels(
       if (mode === 'black-and-white') {
         targetLuminance = sourceLuminance < mean * 0.85 ? 0 : 255;
       } else {
-        const normalized = clampByte(255 + sourceLuminance - mean);
-        targetLuminance = clampByte(255 - (255 - normalized) * 1.35);
+        const red = input.pixels[offset] ?? 0;
+        const green = input.pixels[offset + 1] ?? 0;
+        const blue = input.pixels[offset + 2] ?? 0;
+        const chroma = Math.max(red, green, blue) - Math.min(red, green, blue);
+        const neutralWeight = 1 - clamp((chroma - 16) / 56, 0, 1);
+        const illuminationStrength = 0.28 + neutralWeight * 0.57;
+        const positiveCorrectionLimit = 20 + neutralWeight * 76;
+        const illuminationCorrection = clamp(
+          (238 - mean) * illuminationStrength,
+          -12,
+          positiveCorrectionLimit,
+        );
+        const localContrast = (sourceLuminance - mean) * 0.28;
+        const sharpening = clamp(
+          edgeDetail(gray, width, height, x, y, sourceLuminance) * 0.55,
+          -18,
+          18,
+        );
+        targetLuminance = clampByte(
+          highlightProtected(
+            sourceLuminance + illuminationCorrection + localContrast + sharpening,
+          ),
+        );
       }
 
       if (mode === 'ocr-color') {
-        const adjustment = targetLuminance - sourceLuminance;
-        output[offset] = clampByte((input.pixels[offset] ?? 0) + adjustment);
-        output[offset + 1] = clampByte((input.pixels[offset + 1] ?? 0) + adjustment);
-        output[offset + 2] = clampByte((input.pixels[offset + 2] ?? 0) + adjustment);
+        const red = input.pixels[offset] ?? 0;
+        const green = input.pixels[offset + 1] ?? 0;
+        const blue = input.pixels[offset + 2] ?? 0;
+        const adjustment = clamp(
+          targetLuminance - sourceLuminance,
+          -Math.min(red, green, blue),
+          248 - Math.max(red, green, blue),
+        );
+        output[offset] = clampByte(red + adjustment);
+        output[offset + 1] = clampByte(green + adjustment);
+        output[offset + 2] = clampByte(blue + adjustment);
       } else {
         output[offset] = targetLuminance;
         output[offset + 1] = targetLuminance;

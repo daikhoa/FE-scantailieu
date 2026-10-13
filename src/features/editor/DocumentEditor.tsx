@@ -42,12 +42,13 @@ interface DocumentEditorProps {
 }
 
 function recipe(crop: CropRegion, mode: FilterMode): EditRecipe {
+  const presetVersion = mode === 'ocr-color' || mode === 'grayscale' ? `${mode}-v2` : `${mode}-v1`;
   return {
     version: 1,
     crop,
     rotation: 0,
     dewarp: { mode: 'perspective-only' },
-    filter: { mode, presetVersion: `${mode}-v1`, parameters: {} },
+    filter: { mode, presetVersion, parameters: {} },
   };
 }
 

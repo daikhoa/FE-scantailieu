@@ -500,7 +500,7 @@ describe('Scanic serialized work, cancellation and cleanup', () => {
     expect(encode).toHaveBeenCalledWith(warped, { type: 'image/png' }, expect.any(AbortSignal));
     expect(result.recipeKey).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(result).toMatchObject({
-      engineVersion: 'scanic-1.6.0+ml-classical-fallback-perspective-filter-v1',
+      engineVersion: 'scanic-1.6.0+ml-classical-fallback-perspective-filter-v2',
       image: { dimensions: warped.dimensions },
       dewarp: { kind: 'not-requested' },
     });
