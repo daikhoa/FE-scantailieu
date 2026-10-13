@@ -310,6 +310,7 @@ export function CameraScreen({
               ref={video}
               className="camera-preview"
               aria-label="Hình ảnh trực tiếp từ camera"
+              data-frame-fit="contain"
               autoPlay
               muted
               playsInline

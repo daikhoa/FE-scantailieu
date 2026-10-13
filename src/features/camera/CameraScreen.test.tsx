@@ -76,6 +76,10 @@ describe('CameraScreen', () => {
         stream,
       );
     });
+    expect(screen.getByLabelText('Hình ảnh trực tiếp từ camera')).toHaveAttribute(
+      'data-frame-fit',
+      'contain',
+    );
   });
 
   it('shows a busy state and prevents duplicate permission requests', () => {

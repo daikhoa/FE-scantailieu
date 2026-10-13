@@ -576,6 +576,8 @@ p {
 }
 
 .camera-frame--active {
+  width: min(100%, 34rem);
+  aspect-ratio: 3 / 4;
   background: #000;
 }
 
@@ -587,7 +589,7 @@ p {
   width: 100%;
   height: 100%;
   display: block;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .document-overlay {

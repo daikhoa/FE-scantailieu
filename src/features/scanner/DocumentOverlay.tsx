@@ -38,7 +38,7 @@ export function DocumentOverlay({ result }: DocumentOverlayProps) {
             String(result.dimensions.width),
             String(result.dimensions.height),
           ].join(' ')}
-          preserveAspectRatio="xMidYMid slice"
+          preserveAspectRatio="xMidYMid meet"
           aria-hidden="true"
           focusable="false"
         >

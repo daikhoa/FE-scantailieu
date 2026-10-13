@@ -31,6 +31,10 @@ describe('DocumentOverlay', () => {
       '0,0 1000,0 1000,1400 0,1400',
     );
     expect(view.container.querySelector('svg')).toHaveAttribute('viewBox', '0 0 1000 1400');
+    expect(view.container.querySelector('svg')).toHaveAttribute(
+      'preserveAspectRatio',
+      'xMidYMid meet',
+    );
   });
 
   it('draws a stable document quad and announces successful detection', () => {
