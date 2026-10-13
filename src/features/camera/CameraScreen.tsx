@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
 
 import type { ScannerEngine } from '../../imaging/contracts/scanner-engine';
-import { createScanicClassicalEngine } from '../../imaging/engines/scanic-classical-engine';
+import { createScanicEngine } from '../../imaging/engines/scanic-classical-engine';
 import type { LiveDetectionResult } from '../scanner/detection-scheduler';
 import { DocumentOverlay } from '../scanner/DocumentOverlay';
 import { startLiveDetectionSession } from '../scanner/live-detection-session';
@@ -114,7 +114,7 @@ export function CameraScreen({
   onBack,
   importer = importImage,
   onImageImported,
-  engineFactory = createScanicClassicalEngine,
+  engineFactory = createScanicEngine,
   frameSourceFactory = defaultFrameSourceFactory,
   cameraCapture,
 }: CameraScreenProps) {

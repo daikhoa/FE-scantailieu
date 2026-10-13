@@ -31,6 +31,8 @@ let response = vi.fn<(message: unknown, options?: StructuredSerializeOptions) =>
 beforeEach(async () => {
   vi.resetModules();
   vendor.options = [];
+  vendor.initialize.mockReset().mockResolvedValue(undefined);
+  vendor.scan.mockReset().mockResolvedValue({ success: false, corners: null, confidence: null });
   receive = null;
   response = vi.fn<(message: unknown, options?: StructuredSerializeOptions) => void>();
   vi.stubGlobal('ImageData', FakeImageData);
@@ -65,16 +67,21 @@ async function send(request: ScanicWorkerRequest) {
   });
 }
 
-describe('Scanic classical worker runtime', () => {
-  it('forces classical detection with no vendor DOM/image types in its reply', async () => {
+describe('Scanic ML worker runtime', () => {
+  it('uses the self-hosted ML detector with no vendor DOM/image types in its reply', async () => {
     await send({ id: 1, operation: 'initialize' });
     expect(vendor.options).toEqual([
       {
-        detector: 'classical',
+        detector: 'ml',
         mode: 'detect',
         output: 'imagedata',
         debug: false,
         maxProcessingDimension: 8192,
+        ml: {
+          assetBaseUrl: '/scanic-ml/',
+          minScore: 0.5,
+          modelFetchTimeoutMs: 30_000,
+        },
       },
     ]);
     const pixels = new Uint8ClampedArray(16);
@@ -84,15 +91,45 @@ describe('Scanic classical worker runtime', () => {
       input: { dimensions: { width: 2, height: 2 }, pixels },
     });
     expect(vendor.scan).toHaveBeenCalledWith(new FakeImageData(pixels, 2, 2), {
-      detector: 'classical',
+      detector: 'ml',
       mode: 'detect',
       output: 'imagedata',
       debug: false,
+      maxProcessingDimension: 8192,
+      ml: {
+        assetBaseUrl: '/scanic-ml/',
+        minScore: 0.5,
+        modelFetchTimeoutMs: 30_000,
+      },
     });
     expect(response).toHaveBeenLastCalledWith({
       id: 2,
       kind: 'success',
-      output: { success: false, corners: null, confidence: null },
+      output: { success: false, corners: null, confidence: null, detector: 'ml' },
+    });
+  });
+
+  it('falls back to the guarded classical detector only when ML cannot run', async () => {
+    await send({ id: 1, operation: 'initialize' });
+    vendor.scan.mockRejectedValueOnce(new Error('ML runtime unavailable'));
+    await send({
+      id: 2,
+      operation: 'detect',
+      input: { dimensions: { width: 2, height: 2 }, pixels: new Uint8ClampedArray(16) },
+    });
+
+    expect(vendor.options.at(-1)).toEqual({
+      detector: 'classical',
+      mode: 'detect',
+      output: 'imagedata',
+      debug: false,
+      maxProcessingDimension: 8192,
+      minDetectionConfidence: 0.72,
+    });
+    expect(response).toHaveBeenLastCalledWith({
+      id: 2,
+      kind: 'success',
+      output: { success: false, corners: null, confidence: null, detector: 'classical' },
     });
   });
 
@@ -151,7 +188,7 @@ describe('Scanic classical worker runtime', () => {
 
   it('sanitizes backend exceptions rather than returning a successful no-document result', async () => {
     await send({ id: 1, operation: 'initialize' });
-    vendor.scan.mockRejectedValueOnce(new Error('private vendor content'));
+    vendor.scan.mockRejectedValue(new Error('private vendor content'));
     await send({
       id: 2,
       operation: 'detect',

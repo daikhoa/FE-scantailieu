@@ -62,7 +62,7 @@ export function createScanicWorkerBackend(): ClassicalBackend {
   if (typeof Worker === 'undefined') throw new ScannerEngineError('unavailable');
   const worker = new Worker(new URL('./scanic-classical.worker.ts', import.meta.url), {
     type: 'module',
-    name: 'scanic-classical-1.6.0',
+    name: 'scanic-ml-1.6.0',
   });
   let closed = false;
   let nextId = 0;

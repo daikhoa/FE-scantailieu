@@ -1,7 +1,7 @@
 # ADR 001: Phạm vi spike engine scan phẳng
 
 - Trạng thái: **Đang adapt — Scanic đã được nối theo quyết định chủ dự án, chưa đạt qualification production**
-- Ngày rà soát nguồn: 2026-10-11
+- Ngày rà soát nguồn: 2026-10-13
 - Phạm vi: Task 7 và Checkpoint B
 
 ## Phạm vi spike đã được duyệt
@@ -62,9 +62,10 @@ Không được chọn engine chỉ vì nó tốt hơn ứng viên còn lại. N
 ## Bằng chứng hiện có và phần chưa có
 
 - Contract, geometry và benchmark harness đã có unit test. Bộ smoke 4 fixture synthetic tái lập được đã thay placeholder; nó chỉ dùng để kiểm wiring/tuning ban đầu, chưa đủ kết luận chất lượng engine. Sample chính thức SmartDoc 2015 (CC BY 4.0) đã bổ sung 10 frame development và 5 frame holdout có ground truth, cạnh dài 960 px và hash khóa trong manifest.
-- `scanic@1.6.0` đã được pin exact, xác minh registry integrity/signature/attestation/license/install scripts và bọc bằng adapter classical-only trong Worker có lifecycle, timeout, dispose và validation rõ ràng.
+- `scanic@1.6.0` đã được pin exact, xác minh registry integrity/signature/attestation/license/install scripts và bọc trong Worker có lifecycle, timeout, dispose và validation rõ ràng. Classical là fallback có ngưỡng 0,72; ML là detector chính.
 - Smoke test Chromium thật đã phát hiện ngưỡng 0,60 gây false crop 1/2 cảnh âm tính; ngưỡng spike 0,72 sửa smoke set thành 0/2 false crop trong khi hai tài liệu đạt IoU 0,9631 và 0,9615. Đây không phải holdout hay device qualification. Số liệu chi tiết ở [báo cáo benchmark](../benchmarks/scanner-engine.md).
 - Với ngưỡng `0,72` đã khóa trước khi mở SmartDoc holdout, Scanic fallback `low-confidence` cho 10/10 development và 5/5 holdout: geometry pass rate 0%. Median/p95 của 45 lượt detect desktop là 96,8/144,8 ms và không có request khác origin. Cấu hình Scanic classical hiện tại vì vậy fail geometry gate; verdict vẫn là `adapt`, không phải `adopt`, và không được hạ ngưỡng bằng cách nhìn holdout.
+- Gate ML riêng hoàn tất ngày 2026-10-13: `scanic-ml@0.2.0` được pin exact, MIT, model/ORT tự lưu cùng origin và production build không phụ thuộc CDN. Smoke Chromium đạt 2/2 tài liệu, 0/2 false crop; SmartDoc đạt 15/15 ảnh ở IoU ≥0,90 với mean IoU 0,9779 development và 0,9523 holdout, 0 request khác origin. Kết quả đủ thay classical bằng ML trong bản test nhưng chưa đủ qualification thiết bị thật.
 - Đường extractDocument của Scanic vẫn bị loại vì phụ thuộc DOM canvas. Thay vào đó, primitive inverse projective warp RGBA độc lập đã được nối qua Worker với xoay quarter-turn, codec JPEG/PNG/WebP có giới hạn, PNG output, abort và khóa recipe SHA-256. Renderer hiện hỗ trợ `original`, `ocr-color`, `grayscale` và `black-and-white`; yêu cầu dewarp `auto` vẫn trả fallback perspective trung thực. Golden browser output, so sánh OCR và số đo thiết bị vẫn còn thiếu nên chưa được tính là renderer production-qualified.
 - Official OpenCV 4.14.0 docs artifact đã được tải và xác minh đúng release digest. Runtime 11.059.007 B (3.559.472 B gzip, 2.591.300 B Brotli) không ready trong 60 giây ở Node và làm Chromium local không phản hồi quá 60 giây; official prebuilt vì vậy bị reject khỏi production path hiện tại trước bước detect. Prototype contour/ranking có 4 unit test nhưng không được tính là benchmark engine hoàn chỉnh. Custom export-minimal chưa build vì máy không có Docker/Emscripten/CMake.
 - Chưa test iPhone/Android thật, camera FPS, memory hoặc perspective output, nên Checkpoint B vẫn chưa thể pass. Candidate Scanic hiện chỉ là hướng `adapt`, chưa phải dependency production được duyệt.

@@ -61,7 +61,7 @@ describe('Scanic isolated worker backend', () => {
     const backend = createScanicWorkerBackend();
     const worker = latestWorker();
     expect(worker.url.pathname).toMatch(/scanic-classical.worker.ts$/);
-    expect(worker.options).toEqual({ type: 'module', name: 'scanic-classical-1.6.0' });
+    expect(worker.options).toEqual({ type: 'module', name: 'scanic-ml-1.6.0' });
     const initialization = backend.initialize();
     worker.reply({ id: 1, kind: 'success', output: null });
     await initialization;

@@ -1,6 +1,6 @@
 # Benchmark engine scan — bằng chứng đang tích lũy
 
-- Cập nhật: 2026-10-12
+- Cập nhật: 2026-10-13
 - Trạng thái: **spike đang chạy; chưa đủ điều kiện chọn engine production**
 - Dataset hiện tại: 4 fixture tổng hợp 640×480 để smoke test và 15 frame camera SmartDoc 2015 sample ở cạnh dài 960 px, tách development/holdout
 
@@ -78,6 +78,20 @@ Ngưỡng Scanic `0,72` đã được khóa từ smoke set trước khi chạy t
 Cold initialization ở vòng xác nhận là 31,7 ms. Trên 45 lần detect, median 96,8 ms và p95 144,8 ms; cả 15 kết quả đều fallback `low-confidence`. Không có fixture `no-document` trong SmartDoc sample nên phép đo này không tạo được false-crop rate. Kết luận: tốc độ desktop nằm trong ngân sách preview đề xuất nhưng **cấu hình Scanic classical hiện tại fail geometry gate** và không được adopt. Chỉ được tiếp tục theo hướng `adapt` nếu có development set rộng hơn, đặc biệt thêm cảnh không có tài liệu, rồi hiệu chuẩn confidence/detector mà không nhìn holdout.
 
 Runner tái lập là `npm run benchmark:scanic-smartdoc` khi Vite dev server local đang chạy. Runner chỉ chấp nhận URL loopback, điều khiển Chrome headless bằng DevTools local, chờ kết quả thật rồi đóng Chrome và xóa profile tạm.
+
+## Candidate A2 — Scanic 1.6.0 ML tự lưu cùng origin
+
+Sau khi người dùng xác nhận classical nhận diện kém trên điện thoại, detector ML của cùng phiên bản Scanic được bật làm đường chính; classical chỉ là fallback khi ML runtime không thể thực thi. `scanic-ml@0.2.0` được pin exact, MIT, không có install script và ba artifact được đưa vào production build tại `/scanic-ml/`, không gọi CDN:
+
+| Artifact | SHA-256 | Raw |
+| --- | --- | ---: |
+| `doccornernet_lean.ort` | `732eb8d02d83cc63efb3f9467f01e0c458205a89b2547de3870bc6db1a80c8b3` | 1.925.824 B |
+| `ort-wasm-simd-threaded.mjs` | `d6841aca121bba413020e1de9009c9e557cc8b424cc4b5d3ebfd8c5e0fec4fce` | 19.531 B |
+| `ort-wasm-simd-threaded.wasm` | `8acb4d26fe0537379e83478e52b20e681035ca70a3eca45f2a147c19e1241f87` | 1.523.774 B |
+
+ML dùng `minScore=0,50`; fallback classical vẫn giữ `minDetectionConfidence=0,72`. Smoke Chromium nhận đúng 2/2 tài liệu và giữ full-frame 2/2 cảnh không có tài liệu. SmartDoc 2015 đạt 10/10 development và 5/5 holdout ở gate IoU ≥0,90; mean IoU lần lượt 0,9779 và 0,9523, không miss/error. Cold initialization 151 ms; warm detect trên 15 ảnh có median quan sát khoảng 15–18 ms. Network gate ghi nhận 0 request khác origin.
+
+Đây là cải thiện có kiểm chứng so với classical 0/15, nhưng chưa thay thế qualification iPhone/Android thật, camera FPS, memory dài hạn hoặc tập no-document lớn hơn.
 
 ## Candidate B — OpenCV.js 4.14.0
 

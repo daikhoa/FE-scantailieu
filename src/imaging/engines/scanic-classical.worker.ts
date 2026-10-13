@@ -1,11 +1,11 @@
-import { Scanner } from 'scanic';
 import { applyDocumentFilter } from '../rendering/document-filter';
 import { rotateOwnedRgba } from '../rendering/rgba-rotation';
 import type { RgbaBackendInput } from './scanic-backend-contract';
 import type { ScanicWorkerRequest, ScanicWorkerResponse } from './scanic-worker-backend';
 import { warpPerspectiveRgba } from '../rendering/perspective-warp';
+import { ScanicDetectorRuntime } from './scanic-detector-runtime';
 
-let scanner: Scanner | null = null;
+let detector: ScanicDetectorRuntime | null = null;
 
 async function execute(request: ScanicWorkerRequest): Promise<unknown> {
   if (request.operation === 'initialize') {
@@ -13,15 +13,8 @@ async function execute(request: ScanicWorkerRequest): Promise<unknown> {
     if (typeof OffscreenCanvas === 'undefined' || typeof ImageData === 'undefined') {
       return { unavailable: true };
     }
-    scanner = new Scanner({
-      detector: 'classical',
-      mode: 'detect',
-      output: 'imagedata',
-      debug: false,
-      // Input is already bounded; avoid upstream rounding scale mismatches on thin frames.
-      maxProcessingDimension: 8192,
-    });
-    await scanner.initialize();
+    detector = new ScanicDetectorRuntime();
+    await detector.initialize();
     return null;
   }
   if (request.operation === 'warp') {
@@ -29,17 +22,17 @@ async function execute(request: ScanicWorkerRequest): Promise<unknown> {
     const filtered = applyDocumentFilter(corrected, request.filter);
     return rotateOwnedRgba(filtered, request.rotation);
   }
-  if (scanner === null) throw new Error('Scanner not initialized.');
+  if (detector === null) throw new Error('Scanner not initialized.');
   const input: RgbaBackendInput = request.input;
   const image = new ImageData(input.pixels, input.dimensions.width, input.dimensions.height);
-  const result = await scanner.scan(image, {
-    detector: 'classical',
-    mode: 'detect',
-    output: 'imagedata',
-    debug: false,
-  });
+  const result = await detector.scan(image);
   // Do not send raw messages, debug images, contours or timings over the internal boundary.
-  return { success: result.success, confidence: result.confidence, corners: result.corners };
+  return {
+    success: result.success,
+    confidence: result.confidence,
+    corners: result.corners,
+    detector: result.detector,
+  };
 }
 
 globalThis.addEventListener('message', (event: MessageEvent<ScanicWorkerRequest>) => {

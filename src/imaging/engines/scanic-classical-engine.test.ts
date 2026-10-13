@@ -154,6 +154,9 @@ describe('Scanic classical lifecycle', () => {
     for (const minimumConfidence of [-1, 2, Number.NaN]) {
       expect(() => createScanicClassicalEngine({ minimumConfidence })).toThrow();
     }
+    for (const mlMinimumConfidence of [-1, 2, Number.NaN]) {
+      expect(() => createScanicClassicalEngine({ mlMinimumConfidence })).toThrow();
+    }
   });
 
   it('rejects pre-aborted initialization without allocating a backend', async () => {
@@ -205,6 +208,34 @@ describe('Scanic result boundary', () => {
     expect(result.kind === 'document' && result.corners[0]).not.toBe(
       documentResult.corners.topLeft,
     );
+    input.close();
+    await engine.dispose();
+  });
+
+  it('accepts an ML result at the independently calibrated ML threshold', async () => {
+    const { engine, backend } = await ready();
+    backend.detect = () => Promise.resolve({ ...documentResult, detector: 'ml', confidence: 0.6 });
+    const input = frame();
+    await expect(engine.detect(input, signal())).resolves.toEqual({
+      kind: 'document',
+      dimensions,
+      corners,
+      confidence: 0.6,
+    });
+    input.close();
+    await engine.dispose();
+  });
+
+  it('keeps the full frame when ML reports a bounded score below its threshold', async () => {
+    const { engine, backend } = await ready();
+    backend.detect = () =>
+      Promise.resolve({ success: false, corners: null, confidence: 0.4, detector: 'ml' });
+    const input = frame();
+    await expect(engine.detect(input, signal())).resolves.toEqual({
+      kind: 'full-frame',
+      dimensions,
+      reason: 'low-confidence',
+    });
     input.close();
     await engine.dispose();
   });
@@ -469,7 +500,7 @@ describe('Scanic serialized work, cancellation and cleanup', () => {
     expect(encode).toHaveBeenCalledWith(warped, { type: 'image/png' }, expect.any(AbortSignal));
     expect(result.recipeKey).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(result).toMatchObject({
-      engineVersion: 'scanic-1.6.0+classical-perspective-filter-v1',
+      engineVersion: 'scanic-1.6.0+ml-classical-fallback-perspective-filter-v1',
       image: { dimensions: warped.dimensions },
       dewarp: { kind: 'not-requested' },
     });

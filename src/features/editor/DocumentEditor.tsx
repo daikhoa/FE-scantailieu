@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 
 import type { CropRegion, EditRecipe, FilterMode, RenderedVariant } from '../../domain/document';
 import type { ScannerEngine } from '../../imaging/contracts/scanner-engine';
-import { createScanicClassicalEngine } from '../../imaging/engines/scanic-classical-engine';
+import { createScanicEngine } from '../../imaging/engines/scanic-classical-engine';
 import type { ImportedImage } from '../camera/image-import';
 import { createImagePdf } from '../export/image-pdf';
 import {
@@ -73,7 +73,7 @@ export function DocumentEditor({
   image,
   onBack,
   headingRef,
-  engineFactory = createScanicClassicalEngine,
+  engineFactory = createScanicEngine,
   frameSource,
   onVariantReady,
   pdfExporter = createImagePdf,

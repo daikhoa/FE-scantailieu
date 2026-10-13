@@ -21,15 +21,17 @@ import { createRenderRecipeKey } from '../rendering/render-recipe-key';
 import { MAX_WORKING_IMAGE_PIXELS, MAX_WORKING_IMAGE_SIDE } from '../working-image-limits';
 import { createCompatibleScanicBackend } from './scanic-compatible-backend';
 import { type ClassicalBackend, ScannerEngineError } from './scanic-backend-contract';
+import { SCANIC_CLASSICAL_MIN_CONFIDENCE, SCANIC_ML_MIN_SCORE } from './scanic-detector-runtime';
 export type { ClassicalBackend, RgbaBackendInput } from './scanic-backend-contract';
 
-export interface ScanicClassicalOptions {
+export interface ScanicEngineOptions {
   readonly minimumConfidence?: number;
+  readonly mlMinimumConfidence?: number;
   readonly createBackend?: () => ClassicalBackend;
   readonly codec?: RgbaImageCodec;
 }
 
-const ENGINE_VERSION = 'scanic-1.6.0+classical-perspective-filter-v1';
+const ENGINE_VERSION = 'scanic-1.6.0+ml-classical-fallback-perspective-filter-v1';
 const FILTER_MODES: readonly FilterMode[] = [
   'original',
   'ocr-color',
@@ -99,18 +101,25 @@ function detectionResult(
   output: unknown,
   dimensions: ImageDimensions,
   minimumConfidence: number,
+  mlMinimumConfidence: number,
 ): DetectionResult {
   if (!record(output) || typeof output.success !== 'boolean') {
     throw new ScannerEngineError('failed');
   }
   if (!output.success) {
-    if (
-      output.corners !== null ||
-      (output.confidence !== null && output.confidence !== undefined)
-    ) {
+    const hasBoundedConfidence =
+      typeof output.confidence === 'number' &&
+      Number.isFinite(output.confidence) &&
+      output.confidence >= 0 &&
+      output.confidence <= 1;
+    if (output.corners !== null || (!hasBoundedConfidence && output.confidence != null)) {
       throw new ScannerEngineError('failed');
     }
-    return { kind: 'full-frame', dimensions, reason: 'no-document' };
+    return {
+      kind: 'full-frame',
+      dimensions,
+      reason: hasBoundedConfidence ? 'low-confidence' : 'no-document',
+    };
   }
   if (
     typeof output.confidence !== 'number' ||
@@ -133,7 +142,8 @@ function detectionResult(
   if ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x) <= 0) {
     throw new ScannerEngineError('failed');
   }
-  if (output.confidence < minimumConfidence) {
+  const detectorMinimum = output.detector === 'ml' ? mlMinimumConfidence : minimumConfidence;
+  if (output.confidence < detectorMinimum) {
     return { kind: 'full-frame', dimensions, reason: 'low-confidence' };
   }
   return { kind: 'document', dimensions, corners, confidence: output.confidence };
@@ -203,7 +213,7 @@ function operationFailure(error: unknown, signal: AbortSignal): Error {
   return error instanceof ScannerEngineError ? error : new ScannerEngineError('failed');
 }
 
-class ScanicClassicalEngine implements ScannerEngine {
+class ScanicEngine implements ScannerEngine {
   private state: EngineLifecycle = { kind: 'uninitialized' };
   private backend: ClassicalBackend | null = null;
   private tail: Promise<unknown> = Promise.resolve();
@@ -215,6 +225,7 @@ class ScanicClassicalEngine implements ScannerEngine {
   constructor(
     private readonly createBackend: () => ClassicalBackend,
     private readonly minimumConfidence: number,
+    private readonly mlMinimumConfidence: number,
     private readonly codec: RgbaImageCodec,
   ) {}
 
@@ -295,14 +306,14 @@ class ScanicClassicalEngine implements ScannerEngine {
         this.backend = backend;
         await backend.initialize();
         checkAbort(signal, this.disposal.signal);
-        // Scanic.initialize swallows failures. A real classical scan must work before ready.
+        // Scanic.initialize swallows failures. A real scan must work before ready.
         const warmupDimensions = { width: 8, height: 8 };
         const output = await backend.detect({
           dimensions: warmupDimensions,
           pixels: new Uint8ClampedArray(8 * 8 * 4),
         });
         checkAbort(signal, this.disposal.signal);
-        detectionResult(output, warmupDimensions, this.minimumConfidence);
+        detectionResult(output, warmupDimensions, this.minimumConfidence, this.mlMinimumConfidence);
         this.state = { kind: 'ready' };
       } catch (error) {
         // Dispose owns cleanup once it starts; never call a backend's cleanup twice.
@@ -348,7 +359,12 @@ class ScanicClassicalEngine implements ScannerEngine {
         }
         checkAbort(signal, this.disposal.signal);
         try {
-          return detectionResult(output, frame.dimensions, this.minimumConfidence);
+          return detectionResult(
+            output,
+            frame.dimensions,
+            this.minimumConfidence,
+            this.mlMinimumConfidence,
+          );
         } catch (error) {
           return await this.failBackendOperation(error, signal);
         }
@@ -432,15 +448,27 @@ class ScanicClassicalEngine implements ScannerEngine {
   }
 }
 
-export function createScanicClassicalEngine(options: ScanicClassicalOptions = {}): ScannerEngine {
+export function createScanicEngine(options: ScanicEngineOptions = {}): ScannerEngine {
   // Initial spike policy, not an empirically qualified production threshold.
-  const minimumConfidence = options.minimumConfidence ?? 0.72;
-  if (!Number.isFinite(minimumConfidence) || minimumConfidence < 0 || minimumConfidence > 1) {
+  const minimumConfidence = options.minimumConfidence ?? SCANIC_CLASSICAL_MIN_CONFIDENCE;
+  const mlMinimumConfidence = options.mlMinimumConfidence ?? SCANIC_ML_MIN_SCORE;
+  if (
+    !Number.isFinite(minimumConfidence) ||
+    minimumConfidence < 0 ||
+    minimumConfidence > 1 ||
+    !Number.isFinite(mlMinimumConfidence) ||
+    mlMinimumConfidence < SCANIC_ML_MIN_SCORE ||
+    mlMinimumConfidence > 1
+  ) {
     throw new ScannerEngineError('invalid-input');
   }
-  return new ScanicClassicalEngine(
+  return new ScanicEngine(
     options.createBackend ?? createCompatibleScanicBackend,
     minimumConfidence,
+    mlMinimumConfidence,
     options.codec ?? createBrowserRgbaCodec(),
   );
 }
+
+/** Internal compatibility alias; production callers use createScanicEngine. */
+export const createScanicClassicalEngine = createScanicEngine;

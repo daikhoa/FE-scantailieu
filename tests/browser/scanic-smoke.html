@@ -13,7 +13,7 @@
     <script type="module">
       import {
         createRgbaScannerFrame,
-        createScanicClassicalEngine,
+        createScanicEngine,
       } from '/src/imaging/engines/scanic-classical-engine.ts';
 
       const fixturePaths = [
@@ -23,7 +23,7 @@
         '/tests/fixtures/synthetic/no-document-clutter.png',
       ];
       const resultElement = document.querySelector('#result');
-      const engine = createScanicClassicalEngine();
+      const engine = createScanicEngine();
       const controller = new AbortController();
 
       async function rgbaFrame(path) {

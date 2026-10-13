@@ -13,7 +13,7 @@
     <script type="module">
       import {
         createRgbaScannerFrame,
-        createScanicClassicalEngine,
+        createScanicEngine,
       } from '/src/imaging/engines/scanic-classical-engine.ts';
       import { aggregateBenchmarkResults } from '/tests/golden/metrics.ts';
       import { parseFixtureManifest } from '/tests/golden/schema.ts';
@@ -23,7 +23,7 @@
         '/tests/fixtures/smartdoc15/holdout/manifest.json',
       ];
       const resultElement = document.querySelector('#result');
-      const engine = createScanicClassicalEngine();
+      const engine = createScanicEngine();
       const controller = new AbortController();
 
       async function loadJson(path) {
@@ -107,7 +107,7 @@
           .getEntriesByType('resource')
           .filter((entry) => new URL(entry.name, location.href).origin !== location.origin).length;
         return {
-          engine: 'scanic-1.6.0-classical',
+          engine: 'scanic-1.6.0-ml-self-hosted-classical-fallback',
           runsPerFixture: 3,
           previewMaxSide: 960,
           initializationMs,
