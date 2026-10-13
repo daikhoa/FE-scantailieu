@@ -62,9 +62,7 @@ describe('document post-capture filters', () => {
   });
 
   it('protects bright paper from clipping while increasing text edge contrast', () => {
-    const input = image(9, 9, (x) =>
-      x === 4 ? [130, 130, 130, 255] : [245, 245, 245, 255],
-    );
+    const input = image(9, 9, (x) => (x === 4 ? [130, 130, 130, 255] : [245, 245, 245, 255]));
     const contrastBefore = 245 - 130;
 
     const output = applyDocumentFilter(input, 'ocr-color');

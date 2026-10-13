@@ -141,9 +141,7 @@ function filterPixels(
           18,
         );
         targetLuminance = clampByte(
-          highlightProtected(
-            sourceLuminance + illuminationCorrection + localContrast + sharpening,
-          ),
+          highlightProtected(sourceLuminance + illuminationCorrection + localContrast + sharpening),
         );
       }
 
