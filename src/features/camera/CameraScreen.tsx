@@ -190,6 +190,7 @@ export function CameraScreen({
       },
       onError: () => {
         if (!mounted.current) return;
+        setLiveDetection(null);
         setDetectionFailed(true);
       },
     });

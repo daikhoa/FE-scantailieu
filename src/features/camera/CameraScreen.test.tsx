@@ -245,6 +245,56 @@ describe('CameraScreen', () => {
     expect(detect).toHaveBeenCalled();
   });
 
+  it('removes a stale document overlay when live detection fails', async () => {
+    const stream = {
+      getTracks: () => [],
+      getVideoTracks: () => [{} as MediaStreamTrack],
+    } as unknown as MediaStream;
+    let detections = 0;
+    const detect = vi.fn<ScannerEngine['detect']>((frame) => {
+      detections++;
+      if (detections > 3) return Promise.reject(new Error('transient worker failure'));
+      return Promise.resolve({
+        kind: 'document',
+        dimensions: frame.dimensions,
+        confidence: 0.92,
+        corners: [
+          { x: 10, y: 10 },
+          { x: 90, y: 10 },
+          { x: 90, y: 90 },
+          { x: 10, y: 90 },
+        ],
+      });
+    });
+    const engine: ScannerEngine = {
+      lifecycle: { kind: 'uninitialized' },
+      initialize: vi.fn(() => Promise.resolve()),
+      detect,
+      render: vi.fn(() => Promise.reject(new Error('not used'))),
+      dispose: vi.fn(() => Promise.resolve()),
+    };
+    const source: VideoFrameSource = {
+      capture: vi.fn(() => ({ dimensions: { width: 100, height: 100 }, close: vi.fn() })),
+      dispose: vi.fn(),
+    };
+    renderCamera(
+      fakeService(() => Promise.resolve({ stream, stop: vi.fn() })),
+      vi.fn(),
+      {
+        engineFactory: () => engine,
+        frameSourceFactory: () => source,
+      },
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cho phép camera' }));
+
+    expect(await screen.findByText('Đã định khung tài liệu.')).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Scanic tạm thời không nhận diện được',
+    );
+    expect(screen.queryByText('Đã định khung tài liệu.')).not.toBeInTheDocument();
+  });
+
   it('captures a high-resolution photo and sends the validated original to the editor', async () => {
     const stream = {
       getTracks: () => [],
