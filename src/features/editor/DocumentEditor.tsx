@@ -45,7 +45,7 @@ interface DocumentEditorProps {
 }
 
 function recipe(crop: CropRegion, mode: FilterMode): EditRecipe {
-  const presetVersion = mode === 'ocr-color' || mode === 'grayscale' ? `${mode}-v3` : `${mode}-v1`;
+  const presetVersion = mode === 'ocr-color' || mode === 'grayscale' ? `${mode}-v4` : `${mode}-v1`;
   return {
     version: 1,
     crop,

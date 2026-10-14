@@ -94,6 +94,20 @@ describe('document post-capture filters', () => {
     expect(paper - text).toBeGreaterThan(contrastBefore);
   });
 
+  it('makes low-contrast thin text materially crisper without brightening the paper', () => {
+    const input = image(31, 31, (x) => (x === 15 ? [175, 175, 175, 255] : [238, 238, 238, 255]));
+    const exposureBefore = averageRed(input);
+    const contrastBefore = 238 - 175;
+
+    const output = applyDocumentFilter(input, 'ocr-color');
+    const paper = rgbaAt(output, 4, 15)[0] ?? 0;
+    const text = rgbaAt(output, 15, 15)[0] ?? 0;
+
+    expect(paper).toBeLessThanOrEqual(238);
+    expect(paper - text).toBeGreaterThanOrEqual(contrastBefore + 36);
+    expect(averageRed(output)).toBeLessThanOrEqual(exposureBefore);
+  });
+
   it('preserves color separation instead of washing saturated areas toward white', () => {
     const input = image(5, 5, () => [220, 150, 110, 255]);
 

@@ -32,7 +32,7 @@ export function createDefaultPageRecipe(crop: CropRegion): EditRecipe {
     crop,
     rotation: 0,
     dewarp: { mode: 'perspective-only' },
-    filter: { mode: 'ocr-color', presetVersion: 'ocr-color-v3', parameters: {} },
+    filter: { mode: 'ocr-color', presetVersion: 'ocr-color-v4', parameters: {} },
   };
 }
 

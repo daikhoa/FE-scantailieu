@@ -137,7 +137,7 @@ describe('DocumentEditor', () => {
       },
       rotation: 0,
       dewarp: { mode: 'perspective-only' },
-      filter: { mode: 'ocr-color', presetVersion: 'ocr-color-v3', parameters: {} },
+      filter: { mode: 'ocr-color', presetVersion: 'ocr-color-v4', parameters: {} },
     });
     expect(screen.getByRole('button', { name: 'Tự động' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('Làm nét chữ, giữ màu')).toBeInTheDocument();

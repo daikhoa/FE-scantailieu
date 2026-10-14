@@ -31,7 +31,7 @@ export interface ScanicEngineOptions {
   readonly codec?: RgbaImageCodec;
 }
 
-const ENGINE_VERSION = 'scanic-1.6.0+ml-classical-fallback-perspective-filter-v2';
+const ENGINE_VERSION = 'scanic-1.6.0+ml-classical-fallback-perspective-filter-v3';
 const FILTER_MODES: readonly FilterMode[] = [
   'original',
   'ocr-color',

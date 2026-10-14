@@ -57,15 +57,13 @@ function edgeDetail(
 
 function enhancementAdjustment(source: number, localMean: number, edge: number): number {
   const localDeviation = source - localMean;
-  const darkDetailContrast = localDeviation < -6 ? (localDeviation + 6) * 0.16 : 0;
-  const edgeMagnitude = Math.max(0, Math.abs(edge) - 4);
-  const sharpenedEdge =
-    edgeMagnitude === 0 ? 0 : Math.sign(edge) * edgeMagnitude * (edge < 0 ? 0.7 : 0.25);
-  let adjustment = clamp(darkDetailContrast + sharpenedEdge, -26, 6);
-  if (adjustment > 0) {
-    adjustment *= clamp((246 - source) / 32, 0, 1);
-  }
-  return adjustment;
+  const darkDetailContrast = localDeviation < -5 ? (localDeviation + 5) * 0.34 : 0;
+  const darkEdgeMagnitude = Math.max(0, -edge - 3);
+  const sharpenedDarkEdge = -darkEdgeMagnitude * 1.05;
+
+  // OCR benefits most from darker glyph edges. Keeping the adjustment non-positive avoids
+  // the bright halos and clipped paper highlights produced by symmetric unsharp masking.
+  return clamp(darkDetailContrast + sharpenedDarkEdge, -46, 0);
 }
 
 function localRadius(width: number, height: number): number {
