@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CameraCaptureError, createCameraCapture } from './camera-capture';
 
@@ -21,27 +21,32 @@ function canvasFixture(blob: Blob | null = new Blob(['photo'], { type: 'image/jp
 }
 
 describe('camera capture', () => {
-  it('prefers a high-resolution ImageCapture photo when supported', async () => {
-    const photo = new Blob(['full-resolution'], { type: 'image/jpeg' });
-    const takePhoto = vi.fn(() => Promise.resolve(photo));
-    const createImageCapture = vi.fn(() => ({ takePhoto }));
-    const createCanvas = vi.fn(() => canvasFixture().canvas);
-    const track = {} as MediaStreamTrack;
-    const capture = createCameraCapture({ createImageCapture, createCanvas });
-
-    await expect(
-      capture.capture(stream(track), video(), new AbortController().signal),
-    ).resolves.toBe(photo);
-    expect(createImageCapture).toHaveBeenCalledWith(track);
-    expect(createCanvas).not.toHaveBeenCalled();
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
-  it('falls back to a full video frame when ImageCapture is missing or fails', async () => {
-    const fixture = canvasFixture();
-    const capture = createCameraCapture({
-      createImageCapture: () => ({ takePhoto: () => Promise.reject(new Error('browser failure')) }),
-      createCanvas: () => fixture.canvas,
+  it('freezes the visible video frame immediately instead of waiting for a still photo', async () => {
+    const stillPhoto = new Blob(['late-photo'], { type: 'image/jpeg' });
+    const takePhoto = vi.fn(() => Promise.resolve(stillPhoto));
+    const ImageCapture = vi.fn(function ImageCapture() {
+      return { takePhoto };
     });
+    vi.stubGlobal('ImageCapture', ImageCapture);
+    const fixture = canvasFixture();
+    const track = {} as MediaStreamTrack;
+    const capture = createCameraCapture({ createCanvas: () => fixture.canvas });
+
+    const result = capture.capture(stream(track), video(), new AbortController().signal);
+
+    expect(fixture.drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 1920, 1080);
+    await expect(result).resolves.toEqual(expect.objectContaining({ type: 'image/jpeg' }));
+    expect(ImageCapture).not.toHaveBeenCalled();
+    expect(takePhoto).not.toHaveBeenCalled();
+  });
+
+  it('encodes the frozen full video frame as a high-quality JPEG', async () => {
+    const fixture = canvasFixture();
+    const capture = createCameraCapture({ createCanvas: () => fixture.canvas });
 
     const output = await capture.capture(stream(), video(1280, 720), new AbortController().signal);
 
@@ -54,7 +59,7 @@ describe('camera capture', () => {
 
   it('rejects unsafe video dimensions before allocating a canvas', async () => {
     const createCanvas = vi.fn(() => canvasFixture().canvas);
-    const capture = createCameraCapture({ createImageCapture: null, createCanvas });
+    const capture = createCameraCapture({ createCanvas });
 
     await expect(
       capture.capture(stream(), video(9000, 1000), new AbortController().signal),
@@ -68,10 +73,7 @@ describe('camera capture', () => {
     fixture.drawImage.mockImplementationOnce(() => {
       controller.abort('private image data');
     });
-    const capture = createCameraCapture({
-      createImageCapture: null,
-      createCanvas: () => fixture.canvas,
-    });
+    const capture = createCameraCapture({ createCanvas: () => fixture.canvas });
 
     await expect(capture.capture(stream(), video(), controller.signal)).rejects.toMatchObject({
       name: 'AbortError',
@@ -82,10 +84,7 @@ describe('camera capture', () => {
   });
 
   it('reports an honest failure when the browser cannot encode a frame', async () => {
-    const capture = createCameraCapture({
-      createImageCapture: null,
-      createCanvas: () => canvasFixture(null).canvas,
-    });
+    const capture = createCameraCapture({ createCanvas: () => canvasFixture(null).canvas });
 
     await expect(capture.capture(stream(), video(), new AbortController().signal)).rejects.toEqual(
       new CameraCaptureError('failed'),

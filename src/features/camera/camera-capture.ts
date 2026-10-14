@@ -14,7 +14,6 @@ const SAFE_MESSAGES: Readonly<Record<CameraCaptureFailureCode, string>> = {
 const HAVE_CURRENT_DATA = 2;
 const OUTPUT_TYPE = 'image/jpeg';
 const OUTPUT_QUALITY = 0.95;
-const SUPPORTED_PHOTO_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 export class CameraCaptureError extends Error {
   override readonly name = 'CameraCaptureError';
@@ -24,12 +23,7 @@ export class CameraCaptureError extends Error {
   }
 }
 
-interface ImageCapturePort {
-  takePhoto(): Promise<Blob>;
-}
-
 interface CameraCaptureOptions {
-  readonly createImageCapture?: ((track: MediaStreamTrack) => ImageCapturePort) | null;
   readonly createCanvas?: () => HTMLCanvasElement;
 }
 
@@ -50,12 +44,6 @@ function checkAbort(signal: AbortSignal): void {
 function browserCanvas(): HTMLCanvasElement {
   if (typeof document === 'undefined') throw new CameraCaptureError('unavailable');
   return document.createElement('canvas');
-}
-
-function browserImageCapture(track: MediaStreamTrack): ImageCapturePort {
-  const candidate: unknown = Reflect.get(globalThis, 'ImageCapture');
-  if (typeof candidate !== 'function') throw new CameraCaptureError('unavailable');
-  return Reflect.construct(candidate, [track]) as ImageCapturePort;
 }
 
 function validDimensions(width: number, height: number): boolean {
@@ -99,32 +87,16 @@ function canvasBlob(canvas: HTMLCanvasElement, signal: AbortSignal): Promise<Blo
 }
 
 export function createCameraCapture(options: CameraCaptureOptions = {}): CameraCapture {
-  const createImageCapture =
-    options.createImageCapture === undefined ? browserImageCapture : options.createImageCapture;
   const createCanvas = options.createCanvas ?? browserCanvas;
 
   return {
-    async capture(stream, video, signal) {
+    async capture(_stream, video, signal) {
       checkAbort(signal);
       if (
         video.readyState < HAVE_CURRENT_DATA ||
         !validDimensions(video.videoWidth, video.videoHeight)
       ) {
         throw new CameraCaptureError('invalid-input');
-      }
-
-      const track = stream.getVideoTracks()[0];
-      if (createImageCapture !== null && track !== undefined) {
-        try {
-          const photo = await createImageCapture(track).takePhoto();
-          checkAbort(signal);
-          if (photo instanceof Blob && photo.size > 0 && SUPPORTED_PHOTO_TYPES.has(photo.type)) {
-            return photo;
-          }
-        } catch {
-          checkAbort(signal);
-          // Safari and some Android cameras expose ImageCapture but reject takePhoto.
-        }
       }
 
       let canvas: HTMLCanvasElement | null = null;
