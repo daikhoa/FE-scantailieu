@@ -74,7 +74,7 @@ afterEach(() => {
 });
 
 describe('DocumentEditor', () => {
-  it('detects the captured pixels again instead of trusting preview coordinates', async () => {
+  it('keeps the crop frozen from the live guide at the moment of capture', async () => {
     const fixture = fakeEngine();
     const captureCrop = {
       kind: 'document' as const,
@@ -98,16 +98,8 @@ describe('DocumentEditor', () => {
     await waitFor(() => {
       expect(fixture.renderPage).toHaveBeenCalledOnce();
     });
-    expect(fixture.detect).toHaveBeenCalledOnce();
-    expect(fixture.renderPage.mock.calls[0]?.[0].recipe.crop).toEqual({
-      kind: 'document',
-      corners: [
-        { x: 60, y: 80 },
-        { x: 1140, y: 80 },
-        { x: 1140, y: 1520 },
-        { x: 60, y: 1520 },
-      ],
-    });
+    expect(fixture.detect).not.toHaveBeenCalled();
+    expect(fixture.renderPage.mock.calls[0]?.[0].recipe.crop).toEqual(captureCrop);
   });
 
   it('detects a library image and renders the default OCR filter locally', async () => {

@@ -3,6 +3,7 @@ import { createRef, type ComponentProps } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ScannerEngine } from '../../imaging/contracts/scanner-engine';
+import type { LiveDetectionResult } from '../scanner/detection-scheduler';
 import type { VideoFrameSource } from '../scanner/video-frame-source';
 import type { CameraCapture } from './camera-capture';
 import type { CameraService } from './camera-service';
@@ -282,6 +283,66 @@ describe('CameraScreen', () => {
       expect.any(AbortSignal),
     );
     expect(importer).toHaveBeenCalledWith(photo, expect.any(AbortSignal));
+  });
+
+  it('keeps the camera open while captured pages are queued in the background', async () => {
+    const stream = {
+      getTracks: () => [],
+      getVideoTracks: () => [{} as MediaStreamTrack],
+    } as unknown as MediaStream;
+    const stopCamera = vi.fn();
+    const service: CameraService = {
+      lifecycle: { kind: 'idle' },
+      start: () => Promise.resolve({ stream, stop: vi.fn() }),
+      stop: stopCamera,
+    };
+    const first = new Blob(['first'], { type: 'image/jpeg' });
+    const second = new Blob(['second'], { type: 'image/jpeg' });
+    const capture = vi
+      .fn<CameraCapture['capture']>()
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(second);
+    const onPhotoCaptured = vi.fn<(source: Blob, detection: LiveDetectionResult | null) => void>();
+    const onFinishCapture = vi.fn();
+    const view = renderCamera(service, vi.fn(), {
+      cameraCapture: { capture },
+      importer: vi.fn(() => Promise.reject(new Error('background processor owns import'))),
+      onPhotoCaptured,
+      onFinishCapture,
+      batchStatus: { total: 0, processing: 0, failed: 0 },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Cho phép camera' }));
+    await screen.findByRole('heading', { name: 'Camera đã sẵn sàng' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Chụp tài liệu' }));
+    await waitFor(() => {
+      expect(onPhotoCaptured).toHaveBeenCalledWith(first, null);
+    });
+    expect(screen.getByRole('heading', { name: 'Camera đã sẵn sàng' })).toBeInTheDocument();
+    expect(stopCamera).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Chụp tài liệu' }));
+    await waitFor(() => {
+      expect(onPhotoCaptured).toHaveBeenCalledWith(second, null);
+    });
+    view.rerender(
+      <CameraScreen
+        service={service}
+        headingRef={createRef<HTMLHeadingElement>()}
+        onBack={vi.fn()}
+        cameraCapture={{ capture }}
+        onPhotoCaptured={onPhotoCaptured}
+        onFinishCapture={onFinishCapture}
+        batchStatus={{ total: 2, processing: 1, failed: 0 }}
+      />,
+    );
+
+    expect(screen.getByRole('status', { name: 'Tiến độ chụp' })).toHaveTextContent(
+      '2 trang · 1 đang xử lý',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Hoàn tất chụp 2 trang' }));
+    expect(onFinishCapture).toHaveBeenCalledOnce();
+    expect(stopCamera).toHaveBeenCalledOnce();
   });
 
   it('sends the live document frame as the final crop when the shutter is pressed', async () => {

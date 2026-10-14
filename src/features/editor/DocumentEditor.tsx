@@ -4,6 +4,7 @@ import type { CropRegion, EditRecipe, FilterMode, RenderedVariant } from '../../
 import type { ScannerEngine } from '../../imaging/contracts/scanner-engine';
 import { createScanicEngine } from '../../imaging/engines/scanic-classical-engine';
 import type { ImportedImage } from '../camera/image-import';
+import { downloadBlob } from '../export/download-blob';
 import { createImagePdf } from '../export/image-pdf';
 import {
   createImageAssetFrameSource,
@@ -36,9 +37,11 @@ interface DocumentEditorProps {
   readonly headingRef: RefObject<HTMLHeadingElement | null> | null;
   readonly engineFactory?: () => ScannerEngine;
   readonly frameSource?: ImageAssetFrameSource;
-  readonly onVariantReady?: (variant: RenderedVariant) => void;
+  readonly onVariantReady?: (variant: RenderedVariant, recipe: EditRecipe) => void;
   readonly pdfExporter?: typeof createImagePdf;
   readonly download?: (blob: Blob, filename: string) => void;
+  readonly backLabel?: string;
+  readonly showExport?: boolean;
 }
 
 function recipe(crop: CropRegion, mode: FilterMode): EditRecipe {
@@ -56,20 +59,6 @@ function isAbort(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
 
-function downloadBlob(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  link.rel = 'noopener';
-  document.body.append(link);
-  link.click();
-  link.remove();
-  setTimeout(() => {
-    URL.revokeObjectURL(url);
-  }, 1000);
-}
-
 export function DocumentEditor({
   image,
   onBack,
@@ -79,6 +68,8 @@ export function DocumentEditor({
   onVariantReady,
   pdfExporter = createImagePdf,
   download = downloadBlob,
+  backLabel = 'Chụp lại',
+  showExport = true,
 }: DocumentEditorProps) {
   const [mode, setMode] = useState<FilterMode>('ocr-color');
   const [status, setStatus] = useState<EditorStatus>({ kind: 'preparing' });
@@ -102,13 +93,13 @@ export function DocumentEditor({
     onVariantReadyRef.current = onVariantReady;
   }, [onVariantReady]);
 
-  const showVariant = (variant: RenderedVariant) => {
+  const showVariant = (variant: RenderedVariant, appliedRecipe: EditRecipe) => {
     if (processedUrlRef.current !== null) URL.revokeObjectURL(processedUrlRef.current);
     const next = URL.createObjectURL(variant.image.blob);
     processedUrlRef.current = next;
     setProcessedUrl(next);
     setLatestVariant(variant);
-    onVariantReadyRef.current?.(variant);
+    onVariantReadyRef.current?.(variant, appliedRecipe);
   };
 
   useEffect(() => {
@@ -120,18 +111,21 @@ export function DocumentEditor({
     void (async () => {
       try {
         await localEngine.initialize(controller.signal);
-        const detectedCrop = await detectDocumentCrop(
-          localEngine,
-          detectionSource,
-          image.original,
-          controller.signal,
-        );
+        const detectedCrop =
+          image.captureCrop ??
+          (await detectDocumentCrop(
+            localEngine,
+            detectionSource,
+            image.original,
+            controller.signal,
+          ));
         crop.current = detectedCrop;
+        const initialRecipe = recipe(detectedCrop, 'ocr-color');
         const variant = await localEngine.render(
           {
             original: image.original,
             orientation: 0,
-            recipe: recipe(detectedCrop, 'ocr-color'),
+            recipe: initialRecipe,
           },
           controller.signal,
         );
@@ -139,7 +133,7 @@ export function DocumentEditor({
         ready.current = true;
         setCropKind(detectedCrop.kind);
         setMode('ocr-color');
-        showVariant(variant);
+        showVariant(variant, initialRecipe);
         setStatus({ kind: 'ready', label: 'Tự động' });
       } catch (error) {
         if (mounted.current && activeOperation.current === controller && !isAbort(error)) {
@@ -162,7 +156,7 @@ export function DocumentEditor({
       void localEngine.dispose().catch(() => undefined);
       engine.current = null;
     };
-  }, [detectionSource, engineFactory, image.original, originalUrl]);
+  }, [detectionSource, engineFactory, image.captureCrop, image.original, originalUrl]);
 
   const chooseFilter = async (option: FilterOption) => {
     const localEngine = engine.current;
@@ -172,12 +166,13 @@ export function DocumentEditor({
     activeOperation.current = controller;
     setStatus({ kind: 'processing', label: option.label });
     try {
+      const nextRecipe = recipe(crop.current, option.mode);
       const variant = await localEngine.render(
-        { original: image.original, orientation: 0, recipe: recipe(crop.current, option.mode) },
+        { original: image.original, orientation: 0, recipe: nextRecipe },
         controller.signal,
       );
       if (!mounted.current || activeOperation.current !== controller) return;
-      showVariant(variant);
+      showVariant(variant, nextRecipe);
       setMode(option.mode);
       setStatus({ kind: 'ready', label: option.label });
     } catch (error) {
@@ -216,7 +211,7 @@ export function DocumentEditor({
     <main id="main-content" className="app-main editor" aria-label="Chỉnh chất lượng tài liệu">
       <button className="back-button" type="button" onClick={onBack} aria-label="Quay lại chọn ảnh">
         <span aria-hidden="true">←</span>
-        Chụp lại
+        {backLabel}
       </button>
 
       <section className="editor__content" aria-labelledby="editor-title">
@@ -271,21 +266,23 @@ export function DocumentEditor({
           </p>
         )}
 
-        {exportFailed ? (
+        {showExport && exportFailed ? (
           <p className="editor__error" role="alert">
             Không thể tạo PDF. Trang đã xử lý vẫn còn và bạn có thể thử lại.
           </p>
         ) : null}
-        <button
-          className="primary-button editor__export"
-          type="button"
-          aria-label="Tải PDF"
-          aria-busy={exporting}
-          disabled={busy || latestVariant === null}
-          onClick={() => void exportPdf()}
-        >
-          {exporting ? 'Đang tạo PDF…' : 'Tải PDF'}
-        </button>
+        {showExport ? (
+          <button
+            className="primary-button editor__export"
+            type="button"
+            aria-label="Tải PDF"
+            aria-busy={exporting}
+            disabled={busy || latestVariant === null}
+            onClick={() => void exportPdf()}
+          >
+            {exporting ? 'Đang tạo PDF…' : 'Tải PDF'}
+          </button>
+        ) : null}
       </section>
     </main>
   );

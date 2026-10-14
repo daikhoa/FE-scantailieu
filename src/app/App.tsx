@@ -1,10 +1,18 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useReducer, useRef, useState } from 'react';
 
 import { CameraScreen } from '../features/camera/CameraScreen';
+import type { CameraCapture } from '../features/camera/camera-capture';
 import { createCameraService, type CameraService } from '../features/camera/camera-service';
 import type { ImageImporter, ImportedImage } from '../features/camera/image-import';
 import { DocumentEditor } from '../features/editor/DocumentEditor';
+import {
+  createBackgroundPageProcessor,
+  type BackgroundPageProcessor,
+} from '../features/scanner/background-page-processor';
 import type { ImageAssetFrameSource } from '../features/scanner/image-asset-frame-source';
+import { ScanBatchReview } from '../features/scanner/ScanBatchReview';
+import { scanBatchReducer, scanBatchStatus } from '../features/scanner/scan-batch';
+import type { VideoFrameSource } from '../features/scanner/video-frame-source';
 import type { ScannerEngine } from '../imaging/contracts/scanner-engine';
 
 export type LibraryState =
@@ -19,9 +27,13 @@ interface AppProps {
   readonly imageImporter?: ImageImporter;
   readonly editorEngineFactory?: () => ScannerEngine;
   readonly editorFrameSource?: ImageAssetFrameSource;
+  readonly cameraCapture?: CameraCapture;
+  readonly cameraEngineFactory?: () => ScannerEngine;
+  readonly cameraFrameSourceFactory?: () => VideoFrameSource;
+  readonly pageProcessorFactory?: () => BackgroundPageProcessor;
 }
 
-type AppView = 'library' | 'scan-intro' | 'editor';
+type AppView = 'library' | 'scan-intro' | 'batch-review' | 'editor';
 
 const EMPTY_LIBRARY: LibraryState = { kind: 'empty' };
 
@@ -101,12 +113,38 @@ export function App({
   imageImporter,
   editorEngineFactory,
   editorFrameSource,
+  cameraCapture,
+  cameraEngineFactory,
+  cameraFrameSourceFactory,
+  pageProcessorFactory,
 }: AppProps) {
   const [view, setView] = useState<AppView>('library');
   const [editorImage, setEditorImage] = useState<ImportedImage | null>(null);
+  const [selectedBatchPageId, setSelectedBatchPageId] = useState<string | null>(null);
+  const [batch, dispatchBatch] = useReducer(scanBatchReducer, { pages: [] });
   const [resolvedCameraService] = useState(() => cameraService ?? createCameraService());
   const viewHeadingRef = useRef<HTMLHeadingElement>(null);
   const shouldMoveFocus = useRef(false);
+  const pageProcessor = useRef<BackgroundPageProcessor | null>(null);
+  const pageOperations = useRef(new Map<string, AbortController>());
+  const pageSequence = useRef(0);
+
+  useEffect(() => {
+    const processor =
+      pageProcessorFactory?.() ??
+      createBackgroundPageProcessor({
+        ...(imageImporter === undefined ? {} : { importer: imageImporter }),
+        ...(editorEngineFactory === undefined ? {} : { engineFactory: editorEngineFactory }),
+      });
+    const operations = pageOperations.current;
+    pageProcessor.current = processor;
+    return () => {
+      if (pageProcessor.current === processor) pageProcessor.current = null;
+      for (const operation of operations.values()) operation.abort();
+      operations.clear();
+      void processor.dispose().catch(() => undefined);
+    };
+  }, [editorEngineFactory, imageImporter, pageProcessorFactory]);
 
   useEffect(() => {
     if (shouldMoveFocus.current) {
@@ -118,6 +156,45 @@ export function App({
   const navigateTo = (nextView: AppView) => {
     shouldMoveFocus.current = true;
     setView(nextView);
+  };
+
+  const processPage = (
+    id: string,
+    source: Blob,
+    captureDetection: Parameters<BackgroundPageProcessor['enqueue']>[1],
+  ) => {
+    const processor = pageProcessor.current;
+    if (processor === null) {
+      dispatchBatch({ type: 'failed', id });
+      return;
+    }
+    const controller = new AbortController();
+    pageOperations.current.get(id)?.abort();
+    pageOperations.current.set(id, controller);
+    void processor
+      .enqueue(source, captureDetection, controller.signal, () => {
+        dispatchBatch({ type: 'started', id });
+      })
+      .then((page) => {
+        dispatchBatch({ type: 'ready', id, page });
+      })
+      .catch((error: unknown) => {
+        if (!(error instanceof Error && error.name === 'AbortError')) {
+          dispatchBatch({ type: 'failed', id });
+        }
+      })
+      .finally(() => {
+        if (pageOperations.current.get(id) === controller) pageOperations.current.delete(id);
+      });
+  };
+
+  const startNewBatch = () => {
+    for (const operation of pageOperations.current.values()) operation.abort();
+    pageOperations.current.clear();
+    dispatchBatch({ type: 'reset' });
+    setSelectedBatchPageId(null);
+    setEditorImage(null);
+    navigateTo('scan-intro');
   };
 
   const isLibrary = view === 'library';
@@ -155,9 +232,7 @@ export function App({
             <button
               className="primary-action"
               type="button"
-              onClick={() => {
-                navigateTo('scan-intro');
-              }}
+              onClick={startNewBatch}
               aria-label="Bắt đầu quét"
             >
               <span className="primary-action__icon" aria-hidden="true">
@@ -193,12 +268,56 @@ export function App({
           service={resolvedCameraService}
           headingRef={viewHeadingRef}
           {...(imageImporter === undefined ? {} : { importer: imageImporter })}
+          {...(cameraCapture === undefined ? {} : { cameraCapture })}
+          {...(cameraEngineFactory === undefined ? {} : { engineFactory: cameraEngineFactory })}
+          {...(cameraFrameSourceFactory === undefined
+            ? {}
+            : { frameSourceFactory: cameraFrameSourceFactory })}
+          batchStatus={scanBatchStatus(batch)}
+          onPhotoCaptured={(source, captureDetection) => {
+            const id = `page-${String(++pageSequence.current)}`;
+            dispatchBatch({ type: 'captured', id, source, captureDetection });
+            processPage(id, source, captureDetection);
+          }}
+          onFinishCapture={() => {
+            navigateTo('batch-review');
+          }}
           onImageImported={(image) => {
             setEditorImage(image);
+            setSelectedBatchPageId(null);
             navigateTo('editor');
           }}
           onBack={() => {
             navigateTo('library');
+          }}
+        />
+      ) : view === 'batch-review' ? (
+        <ScanBatchReview
+          pages={batch.pages}
+          headingRef={viewHeadingRef}
+          onCaptureMore={() => {
+            navigateTo('scan-intro');
+          }}
+          onEditPage={(id) => {
+            const selected = batch.pages.find((page) => page.id === id);
+            if (selected?.kind !== 'ready') return;
+            setSelectedBatchPageId(id);
+            setEditorImage({
+              original: selected.page.original,
+              captureCrop: selected.page.crop,
+            });
+            navigateTo('editor');
+          }}
+          onRetryPage={(id) => {
+            const selected = batch.pages.find((page) => page.id === id);
+            if (selected?.kind !== 'failed') return;
+            dispatchBatch({ type: 'retry', id });
+            processPage(id, selected.source, selected.captureDetection);
+          }}
+          onRemovePage={(id) => {
+            pageOperations.current.get(id)?.abort();
+            pageOperations.current.delete(id);
+            dispatchBatch({ type: 'removed', id });
           }}
         />
       ) : editorImage === null ? null : (
@@ -209,8 +328,28 @@ export function App({
           {...(editorFrameSource === undefined ? {} : { frameSource: editorFrameSource })}
           onBack={() => {
             setEditorImage(null);
-            navigateTo('scan-intro');
+            if (selectedBatchPageId === null) {
+              navigateTo('scan-intro');
+            } else {
+              setSelectedBatchPageId(null);
+              navigateTo('batch-review');
+            }
           }}
+          {...(selectedBatchPageId === null
+            ? {}
+            : {
+                backLabel: 'Tài liệu',
+                showExport: false,
+                onVariantReady: (variant, recipe) => {
+                  const selected = batch.pages.find((page) => page.id === selectedBatchPageId);
+                  if (selected?.kind !== 'ready') return;
+                  dispatchBatch({
+                    type: 'updated',
+                    id: selectedBatchPageId,
+                    page: { ...selected.page, crop: recipe.crop, recipe, variant },
+                  });
+                },
+              })}
         />
       )}
 

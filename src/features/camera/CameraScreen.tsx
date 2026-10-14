@@ -66,6 +66,13 @@ interface CameraScreenProps {
   readonly onBack: () => void;
   readonly importer?: ImageImporter;
   readonly onImageImported?: (image: ImportedImage) => void;
+  readonly onPhotoCaptured?: (source: Blob, detection: LiveDetectionResult | null) => void;
+  readonly onFinishCapture?: () => void;
+  readonly batchStatus?: {
+    readonly total: number;
+    readonly processing: number;
+    readonly failed: number;
+  };
   readonly engineFactory?: () => ScannerEngine;
   readonly frameSourceFactory?: () => VideoFrameSource;
   readonly cameraCapture?: CameraCapture;
@@ -114,6 +121,9 @@ export function CameraScreen({
   onBack,
   importer = importImage,
   onImageImported,
+  onPhotoCaptured,
+  onFinishCapture,
+  batchStatus,
   engineFactory = createScanicEngine,
   frameSourceFactory = defaultFrameSourceFactory,
   cameraCapture,
@@ -270,7 +280,11 @@ export function CameraScreen({
     try {
       const photo = await resolvedCapture.capture(state.stream, video.current, controller.signal);
       if (!mounted.current || request.current !== controller) return;
-      await selectImage(photo, captureDetection);
+      if (onPhotoCaptured === undefined) {
+        await selectImage(photo, captureDetection);
+      } else {
+        onPhotoCaptured(photo, captureDetection);
+      }
     } catch (error) {
       if (!mounted.current || request.current !== controller) return;
       if (!(error instanceof Error && error.name === 'AbortError')) setCaptureFailed(true);
@@ -343,6 +357,20 @@ export function CameraScreen({
 
         {cameraActive ? (
           <div className="camera-actions">
+            {batchStatus === undefined ? null : (
+              <div className="capture-progress" role="status" aria-label="Tiến độ chụp">
+                <strong>{batchStatus.total} trang</strong>
+                {batchStatus.processing > 0 ? (
+                  <span> · {batchStatus.processing} đang xử lý</span>
+                ) : batchStatus.failed > 0 ? (
+                  <span> · {batchStatus.failed} cần kiểm tra</span>
+                ) : batchStatus.total > 0 ? (
+                  <span> · đã xử lý xong</span>
+                ) : (
+                  <span> · hãy chụp trang đầu tiên</span>
+                )}
+              </div>
+            )}
             {detectionFailed ? (
               <p className="camera-error" role="alert">
                 Scanic tạm thời không nhận diện được; ảnh chụp vẫn được giữ toàn khung.
@@ -364,6 +392,20 @@ export function CameraScreen({
               <span aria-hidden="true" />
               {capturing ? 'Đang chụp…' : 'Chụp tài liệu'}
             </button>
+            {onFinishCapture === undefined || batchStatus === undefined ? null : (
+              <button
+                className="primary-button camera-finish"
+                type="button"
+                aria-label={`Hoàn tất chụp ${String(batchStatus.total)} trang`}
+                disabled={batchStatus.total === 0}
+                onClick={() => {
+                  closeCamera();
+                  onFinishCapture();
+                }}
+              >
+                Xong ({batchStatus.total})
+              </button>
+            )}
             <button className="secondary-button" type="button" onClick={closeCamera}>
               Đóng camera
             </button>

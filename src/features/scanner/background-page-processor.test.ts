@@ -2,8 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { ScannerEngine } from '../../imaging/contracts/scanner-engine';
 import type { ImageImporter } from '../camera/image-import';
-import type { ImageAssetFrameSource } from './image-asset-frame-source';
 import { createBackgroundPageProcessor } from './background-page-processor';
+
+const FULL_FRAME_DETECTION = {
+  kind: 'full-frame' as const,
+  dimensions: { width: 600, height: 800 },
+  reason: 'no-document' as const,
+};
 
 function deferred<T>() {
   let resolve: ((value: T) => void) | undefined;
@@ -29,6 +34,19 @@ function imported(source: Blob) {
 }
 
 function fakeEngine() {
+  const detectPage = vi.fn<ScannerEngine['detect']>(() =>
+    Promise.resolve({
+      kind: 'document' as const,
+      dimensions: { width: 600, height: 800 },
+      confidence: 0.95,
+      corners: [
+        { x: 30, y: 40 },
+        { x: 570, y: 40 },
+        { x: 570, y: 760 },
+        { x: 30, y: 760 },
+      ],
+    }),
+  );
   const renderPage = vi.fn<ScannerEngine['render']>((request) =>
     Promise.resolve({
       recipeKey: 'ready-page',
@@ -43,31 +61,11 @@ function fakeEngine() {
   const engine: ScannerEngine = {
     lifecycle: { kind: 'uninitialized' },
     initialize: vi.fn(() => Promise.resolve()),
-    detect: vi.fn<ScannerEngine['detect']>(() =>
-      Promise.resolve({
-        kind: 'document' as const,
-        dimensions: { width: 600, height: 800 },
-        confidence: 0.95,
-        corners: [
-          { x: 30, y: 40 },
-          { x: 570, y: 40 },
-          { x: 570, y: 760 },
-          { x: 30, y: 760 },
-        ],
-      }),
-    ),
+    detect: detectPage,
     render: renderPage,
     dispose: vi.fn(() => Promise.resolve()),
   };
-  return { engine, renderPage };
-}
-
-function frameSource(): ImageAssetFrameSource {
-  return {
-    create: vi.fn(() =>
-      Promise.resolve({ dimensions: { width: 600, height: 800 }, close: vi.fn() }),
-    ),
-  };
+  return { engine, detectPage, renderPage };
 }
 
 describe('background page processor', () => {
@@ -81,13 +79,22 @@ describe('background page processor', () => {
     const processor = createBackgroundPageProcessor({
       importer,
       engineFactory: () => fakeEngine().engine,
-      frameSource: frameSource(),
     });
     const firstStarted = vi.fn();
     const secondStarted = vi.fn();
 
-    const firstResult = processor.enqueue(first, new AbortController().signal, firstStarted);
-    const secondResult = processor.enqueue(second, new AbortController().signal, secondStarted);
+    const firstResult = processor.enqueue(
+      first,
+      FULL_FRAME_DETECTION,
+      new AbortController().signal,
+      firstStarted,
+    );
+    const secondResult = processor.enqueue(
+      second,
+      FULL_FRAME_DETECTION,
+      new AbortController().signal,
+      secondStarted,
+    );
 
     await vi.waitFor(() => {
       expect(firstStarted).toHaveBeenCalledOnce();
@@ -104,16 +111,29 @@ describe('background page processor', () => {
     await processor.dispose();
   });
 
-  it('re-detects the captured image and renders the default OCR page', async () => {
+  it('locks the live guide to the captured image and renders the default OCR page', async () => {
     const source = new Blob(['page'], { type: 'image/jpeg' });
-    const { engine, renderPage } = fakeEngine();
+    const { engine, detectPage, renderPage } = fakeEngine();
     const processor = createBackgroundPageProcessor({
       importer: () => Promise.resolve(imported(source)),
       engineFactory: () => engine,
-      frameSource: frameSource(),
     });
 
-    const result = await processor.enqueue(source, new AbortController().signal);
+    const result = await processor.enqueue(
+      source,
+      {
+        kind: 'document',
+        dimensions: { width: 600, height: 800 },
+        confidence: 0.95,
+        corners: [
+          { x: 30, y: 40 },
+          { x: 570, y: 40 },
+          { x: 570, y: 760 },
+          { x: 30, y: 760 },
+        ],
+      },
+      new AbortController().signal,
+    );
 
     expect(result.crop).toEqual({
       kind: 'document',
@@ -135,6 +155,7 @@ describe('background page processor', () => {
       { original: result.original, orientation: 0, recipe: result.recipe },
       expect.any(AbortSignal),
     );
+    expect(detectPage).not.toHaveBeenCalled();
 
     await processor.dispose();
   });
@@ -150,13 +171,20 @@ describe('background page processor', () => {
     const processor = createBackgroundPageProcessor({
       importer,
       engineFactory: () => fakeEngine().engine,
-      frameSource: frameSource(),
     });
     const cancelledController = new AbortController();
 
-    const firstResult = processor.enqueue(first, new AbortController().signal);
-    const cancelledResult = processor.enqueue(cancelled, cancelledController.signal);
-    const lastResult = processor.enqueue(last, new AbortController().signal);
+    const firstResult = processor.enqueue(
+      first,
+      FULL_FRAME_DETECTION,
+      new AbortController().signal,
+    );
+    const cancelledResult = processor.enqueue(
+      cancelled,
+      FULL_FRAME_DETECTION,
+      cancelledController.signal,
+    );
+    const lastResult = processor.enqueue(last, FULL_FRAME_DETECTION, new AbortController().signal);
     cancelledController.abort();
     gate.resolve(imported(first));
 
