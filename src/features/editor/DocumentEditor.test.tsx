@@ -137,9 +137,10 @@ describe('DocumentEditor', () => {
       },
       rotation: 0,
       dewarp: { mode: 'perspective-only' },
-      filter: { mode: 'ocr-color', presetVersion: 'ocr-color-v2', parameters: {} },
+      filter: { mode: 'ocr-color', presetVersion: 'ocr-color-v3', parameters: {} },
     });
     expect(screen.getByRole('button', { name: 'Tự động' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('Làm nét chữ, giữ màu')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Bản xem trước tài liệu' })).toHaveAttribute(
       'src',
       'blob:preview-2',

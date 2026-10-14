@@ -158,7 +158,7 @@ describe('App shell', () => {
           dewarp: { mode: 'perspective-only' as const },
           filter: {
             mode: 'ocr-color' as const,
-            presetVersion: 'ocr-color-v2',
+            presetVersion: 'ocr-color-v3',
             parameters: {},
           },
         };

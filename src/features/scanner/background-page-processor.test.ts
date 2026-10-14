@@ -149,7 +149,7 @@ describe('background page processor', () => {
       crop: result.crop,
       rotation: 0,
       dewarp: { mode: 'perspective-only' },
-      filter: { mode: 'ocr-color', presetVersion: 'ocr-color-v2', parameters: {} },
+      filter: { mode: 'ocr-color', presetVersion: 'ocr-color-v3', parameters: {} },
     });
     expect(renderPage).toHaveBeenCalledWith(
       { original: result.original, orientation: 0, recipe: result.recipe },

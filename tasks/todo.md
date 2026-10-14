@@ -49,6 +49,8 @@ Progress Tasks 8–10/12 và PDF một trang (2026-10-12): theo quyết định 
 
 Progress detector ML (2026-10-13): bật Scanic ML làm detector chính, tự lưu `scanic-ml@0.2.0` cùng origin và giữ classical 0,72 làm fallback chỉ khi runtime ML lỗi. Boundary chấp nhận score ML thấp như full-frame thay vì làm engine fail. Focused tests 55/55; smoke Chromium đạt 2/2 tài liệu và 0/2 false crop. SmartDoc tăng từ classical 0/15 lên ML 15/15 đạt IoU ≥0,90; mean IoU development/holdout 0,9779/0,9523, 0 request khác origin. Chưa có kiểm thử camera/iPhone/Android thật; chủ dự án sẽ test bản web đã deploy.
 
+Progress bộ lọc làm nét v3 (2026-10-14): bỏ cơ chế kéo nền về khoảng 238/255 vì làm giấy màu và ảnh tối bị sáng gắt. `ocr-color` và `grayscale` nay giữ mức phơi sáng gốc, dùng tương phản cục bộ có ngưỡng khử nhiễu và unsharp bất đối xứng để làm đậm nét chữ nhiều hơn phần viền sáng; vùng highlight từ 246 trở lên không bị đẩy sáng thêm. Preset tăng lên v3 để không tái dùng cache cũ. Synthetic regression chứng minh trang đều 168/255 vẫn là 168/255, độ sáng trung bình của trang có gradient lệch không quá 3 mức và tương phản chữ tăng. Chưa có đánh giá OCR/ảnh thật trên điện thoại; chủ dự án sẽ kiểm tra bản deploy.
+
 ## Phase D — Dewarp cong/nhăn
 
 - [ ] Task 13 — Spike dewarp on-device

@@ -20,7 +20,7 @@ interface FilterOption {
 
 const FILTERS: readonly FilterOption[] = [
   { mode: 'original', label: 'Gốc', description: 'Chỉ cắt và làm thẳng' },
-  { mode: 'ocr-color', label: 'Tự động', description: 'Làm đều nền, giữ màu' },
+  { mode: 'ocr-color', label: 'Tự động', description: 'Làm nét chữ, giữ màu' },
   { mode: 'grayscale', label: 'Xám', description: 'Nền trung tính, chữ rõ' },
   { mode: 'black-and-white', label: 'Đen trắng', description: 'Tách chữ khỏi nền' },
 ];
@@ -45,7 +45,7 @@ interface DocumentEditorProps {
 }
 
 function recipe(crop: CropRegion, mode: FilterMode): EditRecipe {
-  const presetVersion = mode === 'ocr-color' || mode === 'grayscale' ? `${mode}-v2` : `${mode}-v1`;
+  const presetVersion = mode === 'ocr-color' || mode === 'grayscale' ? `${mode}-v3` : `${mode}-v1`;
   return {
     version: 1,
     crop,

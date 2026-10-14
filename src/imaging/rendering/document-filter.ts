@@ -40,11 +40,6 @@ function clamp(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, value));
 }
 
-function highlightProtected(value: number): number {
-  const bounded = clamp(value, 0, 255);
-  return bounded <= 244 ? bounded : 244 + (bounded - 244) * 0.25;
-}
-
 function edgeDetail(
   gray: Uint8Array<ArrayBuffer>,
   width: number,
@@ -58,6 +53,19 @@ function edgeDetail(
   const top = gray[Math.max(0, y - 1) * width + x] ?? source;
   const bottom = gray[Math.min(height - 1, y + 1) * width + x] ?? source;
   return source - (left + right + top + bottom) / 4;
+}
+
+function enhancementAdjustment(source: number, localMean: number, edge: number): number {
+  const localDeviation = source - localMean;
+  const darkDetailContrast = localDeviation < -6 ? (localDeviation + 6) * 0.16 : 0;
+  const edgeMagnitude = Math.max(0, Math.abs(edge) - 4);
+  const sharpenedEdge =
+    edgeMagnitude === 0 ? 0 : Math.sign(edge) * edgeMagnitude * (edge < 0 ? 0.7 : 0.25);
+  let adjustment = clamp(darkDetailContrast + sharpenedEdge, -26, 6);
+  if (adjustment > 0) {
+    adjustment *= clamp((246 - source) / 32, 0, 1);
+  }
+  return adjustment;
 }
 
 function localRadius(width: number, height: number): number {
@@ -122,27 +130,12 @@ function filterPixels(
       if (mode === 'black-and-white') {
         targetLuminance = sourceLuminance < mean * 0.85 ? 0 : 255;
       } else {
-        const red = input.pixels[offset] ?? 0;
-        const green = input.pixels[offset + 1] ?? 0;
-        const blue = input.pixels[offset + 2] ?? 0;
-        const chroma = Math.max(red, green, blue) - Math.min(red, green, blue);
-        const neutralWeight = 1 - clamp((chroma - 16) / 56, 0, 1);
-        const illuminationStrength = 0.28 + neutralWeight * 0.57;
-        const positiveCorrectionLimit = 20 + neutralWeight * 76;
-        const illuminationCorrection = clamp(
-          (238 - mean) * illuminationStrength,
-          -12,
-          positiveCorrectionLimit,
+        const adjustment = enhancementAdjustment(
+          sourceLuminance,
+          mean,
+          edgeDetail(gray, width, height, x, y, sourceLuminance),
         );
-        const localContrast = (sourceLuminance - mean) * 0.28;
-        const sharpening = clamp(
-          edgeDetail(gray, width, height, x, y, sourceLuminance) * 0.55,
-          -18,
-          18,
-        );
-        targetLuminance = clampByte(
-          highlightProtected(sourceLuminance + illuminationCorrection + localContrast + sharpening),
-        );
+        targetLuminance = clampByte(sourceLuminance + adjustment);
       }
 
       if (mode === 'ocr-color') {

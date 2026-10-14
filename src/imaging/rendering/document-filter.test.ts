@@ -22,6 +22,13 @@ function rgbaAt(input: RgbaBackendInput, x: number, y: number) {
   return Array.from(input.pixels.slice(offset, offset + 4));
 }
 
+function averageRed(input: RgbaBackendInput): number {
+  let total = 0;
+  const pixels = input.dimensions.width * input.dimensions.height;
+  for (let index = 0; index < pixels; index += 1) total += input.pixels[index * 4] ?? 0;
+  return total / pixels;
+}
+
 describe('document post-capture filters', () => {
   it('keeps the owned perspective output unchanged for the original preset', () => {
     const input = image(2, 1, (x) => (x === 0 ? [10, 20, 30, 40] : [50, 60, 70, 80]));
@@ -45,20 +52,33 @@ describe('document post-capture filters', () => {
     expect(output).toBe(input);
   });
 
-  it('normalizes uneven paper lighting while keeping dark text darker', () => {
-    const input = image(9, 9, (x, y) => {
-      const paper = 80 + x * 12;
-      return x === 2 && y === 4 ? [20, 20, 20, 255] : [paper, paper, paper, 255];
+  it('keeps the original exposure while making dark text easier to distinguish', () => {
+    const input = image(33, 33, (x, y) => {
+      const paper = 110 + Math.round((x / 32) * 80);
+      return x >= 14 && x <= 16 && y >= 6 && y <= 26
+        ? [45, 45, 45, 255]
+        : [paper, paper, paper, 255];
     });
 
-    const darkPaperBefore = rgbaAt(input, 0, 0)[0] ?? -1;
-    const lightPaperBefore = rgbaAt(input, 8, 0)[0] ?? -1;
+    const exposureBefore = averageRed(input);
+    const paperBefore = rgbaAt(input, 13, 16)[0] ?? 0;
+    const textBefore = rgbaAt(input, 15, 16)[0] ?? 0;
     const output = applyDocumentFilter(input, 'ocr-color');
+    const exposureAfter = averageRed(output);
+    const paperAfter = rgbaAt(output, 13, 16)[0] ?? 0;
+    const textAfter = rgbaAt(output, 15, 16)[0] ?? 0;
 
     expect(output).toBe(input);
-    expect(rgbaAt(output, 0, 0)[0]).toBeGreaterThan(darkPaperBefore);
-    expect(rgbaAt(output, 8, 0)[0]).toBeGreaterThanOrEqual(lightPaperBefore);
-    expect(rgbaAt(output, 2, 4)[0]).toBeLessThan(rgbaAt(output, 2, 3)[0] ?? -1);
+    expect(Math.abs(exposureAfter - exposureBefore)).toBeLessThanOrEqual(3);
+    expect(paperAfter - textAfter).toBeGreaterThan(paperBefore - textBefore);
+  });
+
+  it('does not turn a uniform midtone page into a bright page', () => {
+    const input = image(17, 17, () => [168, 168, 168, 255]);
+
+    const output = applyDocumentFilter(input, 'ocr-color');
+
+    expect(rgbaAt(output, 8, 8)).toEqual([168, 168, 168, 255]);
   });
 
   it('protects bright paper from clipping while increasing text edge contrast', () => {
