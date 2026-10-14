@@ -5,12 +5,6 @@ import type { ImageImporter } from '../camera/image-import';
 import { createBackgroundPageProcessor } from './background-page-processor';
 import type { ImageAssetFrameSource } from './image-asset-frame-source';
 
-const FULL_FRAME_DETECTION = {
-  kind: 'full-frame' as const,
-  dimensions: { width: 600, height: 800 },
-  reason: 'no-document' as const,
-};
-
 function deferred<T>() {
   let resolve: ((value: T) => void) | undefined;
   const promise = new Promise<T>((done) => {
@@ -93,18 +87,8 @@ describe('background page processor', () => {
     const firstStarted = vi.fn();
     const secondStarted = vi.fn();
 
-    const firstResult = processor.enqueue(
-      first,
-      FULL_FRAME_DETECTION,
-      new AbortController().signal,
-      firstStarted,
-    );
-    const secondResult = processor.enqueue(
-      second,
-      FULL_FRAME_DETECTION,
-      new AbortController().signal,
-      secondStarted,
-    );
+    const firstResult = processor.enqueue(first, new AbortController().signal, firstStarted);
+    const secondResult = processor.enqueue(second, new AbortController().signal, secondStarted);
 
     await vi.waitFor(() => {
       expect(firstStarted).toHaveBeenCalledOnce();
@@ -130,21 +114,7 @@ describe('background page processor', () => {
       frameSource: fakeFrameSource(),
     });
 
-    const result = await processor.enqueue(
-      source,
-      {
-        kind: 'document',
-        dimensions: { width: 600, height: 800 },
-        confidence: 0.95,
-        corners: [
-          { x: 0, y: 0 },
-          { x: 600, y: 0 },
-          { x: 600, y: 800 },
-          { x: 0, y: 800 },
-        ],
-      },
-      new AbortController().signal,
-    );
+    const result = await processor.enqueue(source, new AbortController().signal);
 
     expect(result.crop).toEqual({
       kind: 'document',
@@ -186,17 +156,9 @@ describe('background page processor', () => {
     });
     const cancelledController = new AbortController();
 
-    const firstResult = processor.enqueue(
-      first,
-      FULL_FRAME_DETECTION,
-      new AbortController().signal,
-    );
-    const cancelledResult = processor.enqueue(
-      cancelled,
-      FULL_FRAME_DETECTION,
-      cancelledController.signal,
-    );
-    const lastResult = processor.enqueue(last, FULL_FRAME_DETECTION, new AbortController().signal);
+    const firstResult = processor.enqueue(first, new AbortController().signal);
+    const cancelledResult = processor.enqueue(cancelled, cancelledController.signal);
+    const lastResult = processor.enqueue(last, new AbortController().signal);
     cancelledController.abort();
     gate.resolve(imported(first));
 

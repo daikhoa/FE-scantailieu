@@ -158,11 +158,7 @@ export function App({
     setView(nextView);
   };
 
-  const processPage = (
-    id: string,
-    source: Blob,
-    captureDetection: Parameters<BackgroundPageProcessor['enqueue']>[1],
-  ) => {
+  const processPage = (id: string, source: Blob) => {
     const processor = pageProcessor.current;
     if (processor === null) {
       dispatchBatch({ type: 'failed', id });
@@ -172,7 +168,7 @@ export function App({
     pageOperations.current.get(id)?.abort();
     pageOperations.current.set(id, controller);
     void processor
-      .enqueue(source, captureDetection, controller.signal, () => {
+      .enqueue(source, controller.signal, () => {
         dispatchBatch({ type: 'started', id });
       })
       .then((page) => {
@@ -274,10 +270,10 @@ export function App({
             ? {}
             : { frameSourceFactory: cameraFrameSourceFactory })}
           batchStatus={scanBatchStatus(batch)}
-          onPhotoCaptured={(source, captureDetection) => {
+          onPhotoCaptured={(source) => {
             const id = `page-${String(++pageSequence.current)}`;
-            dispatchBatch({ type: 'captured', id, source, captureDetection });
-            processPage(id, source, captureDetection);
+            dispatchBatch({ type: 'captured', id, source });
+            processPage(id, source);
           }}
           onFinishCapture={() => {
             navigateTo('batch-review');
@@ -312,7 +308,7 @@ export function App({
             const selected = batch.pages.find((page) => page.id === id);
             if (selected?.kind !== 'failed') return;
             dispatchBatch({ type: 'retry', id });
-            processPage(id, selected.source, selected.captureDetection);
+            processPage(id, selected.source);
           }}
           onRemovePage={(id) => {
             pageOperations.current.get(id)?.abort();

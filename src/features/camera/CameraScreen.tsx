@@ -66,7 +66,7 @@ interface CameraScreenProps {
   readonly onBack: () => void;
   readonly importer?: ImageImporter;
   readonly onImageImported?: (image: ImportedImage) => void;
-  readonly onPhotoCaptured?: (source: Blob, detection: LiveDetectionResult | null) => void;
+  readonly onPhotoCaptured?: (source: Blob) => void;
   readonly onFinishCapture?: () => void;
   readonly batchStatus?: {
     readonly total: number;
@@ -271,7 +271,7 @@ export function CameraScreen({
 
   const capturePhoto = async () => {
     if (state.kind !== 'active' || video.current === null || capturing) return;
-    const captureDetection = liveDetection;
+    const captureDetection = onPhotoCaptured === undefined ? liveDetection : undefined;
     request.current?.abort();
     const controller = new AbortController();
     request.current = controller;
@@ -283,7 +283,7 @@ export function CameraScreen({
       if (onPhotoCaptured === undefined) {
         await selectImage(photo, captureDetection);
       } else {
-        onPhotoCaptured(photo, captureDetection);
+        onPhotoCaptured(photo);
       }
     } catch (error) {
       if (!mounted.current || request.current !== controller) return;

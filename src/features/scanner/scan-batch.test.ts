@@ -43,13 +43,11 @@ describe('scan batch reducer', () => {
       type: 'captured',
       id: 'page-1',
       source: firstSource,
-      captureDetection: null,
     });
     state = scanBatchReducer(state, {
       type: 'captured',
       id: 'page-2',
       source: secondSource,
-      captureDetection: null,
     });
     state = scanBatchReducer(state, { type: 'started', id: 'page-1' });
     state = scanBatchReducer(state, {
@@ -74,13 +72,11 @@ describe('scan batch reducer', () => {
       type: 'captured',
       id: 'page-1',
       source: firstSource,
-      captureDetection: null,
     });
     state = scanBatchReducer(state, {
       type: 'captured',
       id: 'page-2',
       source: secondSource,
-      captureDetection: null,
     });
     state = scanBatchReducer(state, { type: 'failed', id: 'page-1' });
 
@@ -97,7 +93,6 @@ describe('scan batch reducer', () => {
       type: 'captured',
       id: 'page-1',
       source: firstSource,
-      captureDetection: null,
     });
     state = scanBatchReducer(state, { type: 'removed', id: 'page-1' });
     state = scanBatchReducer(state, {

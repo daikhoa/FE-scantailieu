@@ -1,10 +1,8 @@
 import type { ProcessedScanPage } from './background-page-processor';
-import type { LiveDetectionResult } from './detection-scheduler';
 
 interface ScanPageIdentity {
   readonly id: string;
   readonly source: Blob;
-  readonly captureDetection: LiveDetectionResult | null;
 }
 
 export type ScanBatchPage = ScanPageIdentity &
@@ -24,7 +22,6 @@ export type ScanBatchEvent =
       readonly type: 'captured';
       readonly id: string;
       readonly source: Blob;
-      readonly captureDetection: LiveDetectionResult | null;
     }
   | { readonly type: 'started'; readonly id: string }
   | { readonly type: 'ready'; readonly id: string; readonly page: ProcessedScanPage }
@@ -55,7 +52,6 @@ export function scanBatchReducer(state: ScanBatchState, event: ScanBatchEvent): 
           {
             id: event.id,
             source: event.source,
-            captureDetection: event.captureDetection,
             kind: 'queued',
           },
         ],
@@ -66,7 +62,6 @@ export function scanBatchReducer(state: ScanBatchState, event: ScanBatchEvent): 
           ? {
               id: page.id,
               source: page.source,
-              captureDetection: page.captureDetection,
               kind: 'processing',
             }
           : page,
@@ -77,7 +72,6 @@ export function scanBatchReducer(state: ScanBatchState, event: ScanBatchEvent): 
           ? {
               id: page.id,
               source: page.source,
-              captureDetection: page.captureDetection,
               kind: 'ready',
               page: event.page,
             }
@@ -93,7 +87,6 @@ export function scanBatchReducer(state: ScanBatchState, event: ScanBatchEvent): 
           ? {
               id: page.id,
               source: page.source,
-              captureDetection: page.captureDetection,
               kind: 'failed',
             }
           : page,
@@ -104,7 +97,6 @@ export function scanBatchReducer(state: ScanBatchState, event: ScanBatchEvent): 
           ? {
               id: page.id,
               source: page.source,
-              captureDetection: page.captureDetection,
               kind: 'queued',
             }
           : page,

@@ -25,7 +25,6 @@ function readyPage(id: string, label: string): ReadyScanBatchPage {
   return {
     id,
     source,
-    captureDetection: null,
     kind: 'ready',
     page: {
       original,
@@ -66,13 +65,11 @@ describe('ScanBatchReview', () => {
       {
         id: 'page-2',
         source: new Blob(['two'], { type: 'image/jpeg' }),
-        captureDetection: null,
         kind: 'processing',
       },
       {
         id: 'page-3',
         source: new Blob(['three'], { type: 'image/jpeg' }),
-        captureDetection: null,
         kind: 'failed',
       },
     ];

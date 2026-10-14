@@ -3,7 +3,6 @@ import type { ScannerEngine } from '../../imaging/contracts/scanner-engine';
 import { createScanicEngine } from '../../imaging/engines/scanic-classical-engine';
 import { detectDocumentCrop } from '../editor/detect-document-crop';
 import { importImage, type ImageImporter } from '../camera/image-import';
-import type { LiveDetectionResult } from './detection-scheduler';
 import {
   createImageAssetFrameSource,
   type ImageAssetFrameSource,
@@ -17,12 +16,7 @@ export interface ProcessedScanPage {
 }
 
 export interface BackgroundPageProcessor {
-  enqueue(
-    source: Blob,
-    captureDetection: LiveDetectionResult | null,
-    signal: AbortSignal,
-    onStart?: () => void,
-  ): Promise<ProcessedScanPage>;
+  enqueue(source: Blob, signal: AbortSignal, onStart?: () => void): Promise<ProcessedScanPage>;
   dispose(): Promise<void>;
 }
 
@@ -108,22 +102,13 @@ export function createBackgroundPageProcessor(
     }
   };
 
-  const process = async (
-    source: Blob,
-    _captureDetection: LiveDetectionResult | null,
-    signal: AbortSignal,
-  ): Promise<ProcessedScanPage> => {
+  const process = async (source: Blob, signal: AbortSignal): Promise<ProcessedScanPage> => {
     checkAbort(signal, disposal.signal);
     const imported = await importer(source, signal);
     checkAbort(signal, disposal.signal);
     const currentEngine = await readyEngine(signal);
     try {
-      const crop = await detectDocumentCrop(
-        currentEngine,
-        frameSource,
-        imported.original,
-        signal,
-      );
+      const crop = await detectDocumentCrop(currentEngine, frameSource, imported.original, signal);
       const recipe = createDefaultPageRecipe(crop);
       const variant = await currentEngine.render(
         { original: imported.original, orientation: 0, recipe },
@@ -140,14 +125,14 @@ export function createBackgroundPageProcessor(
   };
 
   return {
-    enqueue(source, captureDetection, signal, onStart) {
+    enqueue(source, signal, onStart) {
       if (disposePromise !== null || disposal.signal.aborted) return Promise.reject(abortError());
       const result = tail.then(async () => {
         checkAbort(signal, disposal.signal);
         onStart?.();
         const linked = linkedSignal(signal, disposal.signal);
         try {
-          return await process(source, captureDetection, linked.signal);
+          return await process(source, linked.signal);
         } finally {
           linked.release();
         }

@@ -145,40 +145,38 @@ describe('App shell', () => {
       .mockResolvedValueOnce(first)
       .mockResolvedValueOnce(second);
     let nextPage = 0;
-    const enqueue = vi.fn<BackgroundPageProcessor['enqueue']>(
-      (source, _captureDetection, _signal, onStart) => {
-        onStart?.();
-        nextPage++;
-        const original = { blob: source, dimensions: { width: 1200, height: 1600 } };
-        const crop = { kind: 'full-frame' as const };
-        const recipe = {
-          version: 1,
-          crop,
-          rotation: 0 as const,
-          dewarp: { mode: 'perspective-only' as const },
-          filter: {
-            mode: 'ocr-color' as const,
-            presetVersion: 'ocr-color-v3',
-            parameters: {},
+    const enqueue = vi.fn<BackgroundPageProcessor['enqueue']>((source, _signal, onStart) => {
+      onStart?.();
+      nextPage++;
+      const original = { blob: source, dimensions: { width: 1200, height: 1600 } };
+      const crop = { kind: 'full-frame' as const };
+      const recipe = {
+        version: 1,
+        crop,
+        rotation: 0 as const,
+        dewarp: { mode: 'perspective-only' as const },
+        filter: {
+          mode: 'ocr-color' as const,
+          presetVersion: 'ocr-color-v3',
+          parameters: {},
+        },
+      };
+      const page: ProcessedScanPage = {
+        original,
+        crop,
+        recipe,
+        variant: {
+          recipeKey: `page-${String(nextPage)}`,
+          engineVersion: 'test',
+          image: {
+            blob: new Blob([`processed-${String(nextPage)}`], { type: 'image/png' }),
+            dimensions: original.dimensions,
           },
-        };
-        const page: ProcessedScanPage = {
-          original,
-          crop,
-          recipe,
-          variant: {
-            recipeKey: `page-${String(nextPage)}`,
-            engineVersion: 'test',
-            image: {
-              blob: new Blob([`processed-${String(nextPage)}`], { type: 'image/png' }),
-              dimensions: original.dimensions,
-            },
-            dewarp: { kind: 'not-requested' },
-          },
-        };
-        return Promise.resolve(page);
-      },
-    );
+          dewarp: { kind: 'not-requested' },
+        },
+      };
+      return Promise.resolve(page);
+    });
     const pageProcessor: BackgroundPageProcessor = {
       enqueue,
       dispose: vi.fn(() => Promise.resolve()),
