@@ -16,10 +16,12 @@ function deferred<T>() {
   };
 }
 
-function fakeStream(trackCount = 2) {
-  const tracks = Array.from({ length: trackCount }, () => ({ stop: vi.fn() }));
+function fakeStream(trackCount = 2, videoTrack: Partial<MediaStreamTrack> = {}) {
+  const tracks = Array.from({ length: trackCount }, (_, index) =>
+    index === 0 ? { stop: vi.fn(), ...videoTrack } : { stop: vi.fn() },
+  );
   return {
-    stream: { getTracks: () => tracks },
+    stream: { getTracks: () => tracks, getVideoTracks: () => tracks.slice(0, 1) },
     tracks,
   };
 }
@@ -73,8 +75,9 @@ describe('camera service', () => {
       audio: false,
       video: {
         facingMode: { ideal: 'environment' },
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
+        width: { ideal: 3840 },
+        height: { ideal: 2160 },
+        frameRate: { ideal: 30 },
       },
     });
     expect(session.stream).toBe(captured.stream);
@@ -91,6 +94,58 @@ describe('camera service', () => {
       expect.any(Function),
     );
     expect(fixture.page.removeEventListener).toHaveBeenCalledWith('pagehide', expect.any(Function));
+  });
+
+  it('uses the highest safe rear-camera resolution and continuous focus when supported', async () => {
+    const applyConstraints = vi.fn(() => Promise.resolve());
+    const captured = fakeStream(1, {
+      getCapabilities: () =>
+        ({
+          width: { min: 640, max: 4032 },
+          height: { min: 480, max: 3024 },
+          frameRate: { min: 1, max: 60 },
+          focusMode: ['manual', 'continuous'],
+          resizeMode: ['none', 'crop-and-scale'],
+        }) as MediaTrackCapabilities,
+      applyConstraints,
+    });
+    const camera = createCameraService(
+      environment(() => Promise.resolve(captured.stream as unknown as MediaStream)).options,
+    );
+
+    await camera.start(new AbortController().signal);
+
+    expect(applyConstraints).toHaveBeenCalledWith({
+      width: { ideal: 3325 },
+      height: { ideal: 2494 },
+      frameRate: { ideal: 30 },
+      advanced: [{ focusMode: 'continuous', resizeMode: 'none' }],
+    });
+    camera.stop();
+  });
+
+  it('keeps the initial high-resolution stream when optional camera tuning is rejected', async () => {
+    const applyConstraints = vi.fn(() =>
+      Promise.reject(new DOMException('', 'OverconstrainedError')),
+    );
+    const captured = fakeStream(1, {
+      getCapabilities: () =>
+        ({
+          width: { min: 640, max: 3840 },
+          height: { min: 480, max: 2160 },
+          focusMode: ['continuous'],
+        }) as MediaTrackCapabilities,
+      applyConstraints,
+    });
+    const camera = createCameraService(
+      environment(() => Promise.resolve(captured.stream as unknown as MediaStream)).options,
+    );
+
+    const session = await camera.start(new AbortController().signal);
+
+    expect(session.stream).toBe(captured.stream);
+    expect(camera.lifecycle).toEqual({ kind: 'active' });
+    camera.stop();
   });
 
   it('does not request permission for a pre-cancelled operation', async () => {

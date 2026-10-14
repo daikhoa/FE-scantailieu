@@ -67,6 +67,8 @@ Progress bộ lọc làm nét v3 (2026-10-14): bỏ cơ chế kéo nền về kh
 
 Progress nhiều trang/PDF (2026-10-14): camera nay chụp liên tiếp và giữ mở trong khi một hàng đợi tuần tự import, khóa đúng khung nhận diện tại thời điểm bấm chụp, perspective-warp và áp bộ lọc OCR màu ở nền. Màn hình xem lại giữ thứ tự chụp, báo rõ trang đang xử lý/lỗi, cho xử lý lại, xóa hoặc chỉnh từng trang, và chỉ cho xuất một `clonecamscanner.pdf` khi mọi trang đã sẵn sàng; PDF giữ tỷ lệ riêng của từng trang. Không thêm dependency. Focused tests 30/30; full suite 351/351 khi giới hạn 4 worker để tránh synthetic fixture tranh CPU; typecheck, lint, format-check và production build qua. Chưa đánh dấu Task 15–18 hoàn tất vì IndexedDB/autosave/reload, reorder, kiểm thử 20 trang và kiểm thử thiết bị thật vẫn còn.
 
+Progress camera HD (2026-10-14): để giữ thao tác chụp tức thời nhưng tăng chi tiết đầu vào, camera nay xin luồng 4K/30 fps ở mức `ideal`, sau khi có quyền sẽ dùng `getCapabilities()` và `applyConstraints()` để chọn độ phân giải cao nhất giữ trong ngân sách 4K (8.294.400 pixel), ưu tiên `focusMode: continuous` và `resizeMode: none` khi trình duyệt báo hỗ trợ. Tối ưu là best-effort: lỗi `OverconstrainedError` hoặc API thiếu không làm mất luồng camera đã mở. Frame tại lúc bấm vẫn được chốt đồng bộ trước `await`; không quay lại đường chụp trễ. Focused camera tests 15/15 và typecheck qua. Chất lượng/độ phân giải thực trên Safari iOS và Chrome Android chưa được đo vì chủ dự án sẽ test thiết bị thật; 4K liên tục được giới hạn để tránh vượt ngân sách xử lý ảnh hiện tại.
+
 ## Phase F — Hardening và test deployment
 
 - [ ] Task 19 — E2E, privacy và security headers

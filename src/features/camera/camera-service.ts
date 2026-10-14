@@ -55,14 +55,109 @@ export interface CameraService {
   stop(): void;
 }
 
+const INITIAL_IDEAL_WIDTH = 3840;
+const INITIAL_IDEAL_HEIGHT = 2160;
+const INITIAL_IDEAL_FRAME_RATE = 30;
+const MAX_CAPTURE_SIDE = 4096;
+const MAX_CAPTURE_PIXELS = INITIAL_IDEAL_WIDTH * INITIAL_IDEAL_HEIGHT;
+
 const CAMERA_CONSTRAINTS: MediaStreamConstraints = {
   audio: false,
   video: {
     facingMode: { ideal: 'environment' },
-    width: { ideal: 1920 },
-    height: { ideal: 1080 },
+    width: { ideal: INITIAL_IDEAL_WIDTH },
+    height: { ideal: INITIAL_IDEAL_HEIGHT },
+    frameRate: { ideal: INITIAL_IDEAL_FRAME_RATE },
   },
 };
+
+type ExtendedVideoCapabilities = MediaTrackCapabilities & {
+  readonly focusMode?: readonly string[];
+  readonly resizeMode?: readonly string[];
+};
+
+type ExtendedVideoConstraintSet = MediaTrackConstraintSet & {
+  focusMode?: string;
+  resizeMode?: string;
+};
+
+type ExtendedVideoConstraints = MediaTrackConstraints & {
+  readonly advanced?: readonly ExtendedVideoConstraintSet[];
+};
+
+function positiveMaximum(range: ULongRange | DoubleRange | undefined): number | null {
+  const maximum = range?.max;
+  if (typeof maximum !== 'number' || !Number.isFinite(maximum) || maximum <= 0) return null;
+  return maximum;
+}
+
+function boundedCaptureDimensions(
+  capabilities: ExtendedVideoCapabilities,
+): { readonly width: number; readonly height: number } | null {
+  const maximumWidth = positiveMaximum(capabilities.width);
+  const maximumHeight = positiveMaximum(capabilities.height);
+  if (maximumWidth === null || maximumHeight === null) return null;
+  const scale = Math.min(
+    1,
+    MAX_CAPTURE_SIDE / Math.max(maximumWidth, maximumHeight),
+    Math.sqrt(MAX_CAPTURE_PIXELS / (maximumWidth * maximumHeight)),
+  );
+  const width = Math.floor(maximumWidth * scale);
+  const height = Math.floor(maximumHeight * scale);
+  return width > 0 && height > 0 ? { width, height } : null;
+}
+
+async function optimizeVideoTrack(stream: MediaStream): Promise<void> {
+  let track: MediaStreamTrack | undefined;
+  try {
+    track = stream.getVideoTracks()[0];
+  } catch {
+    return;
+  }
+  if (
+    track === undefined ||
+    typeof track.getCapabilities !== 'function' ||
+    typeof track.applyConstraints !== 'function'
+  ) {
+    return;
+  }
+
+  let capabilities: ExtendedVideoCapabilities;
+  try {
+    capabilities = track.getCapabilities();
+  } catch {
+    return;
+  }
+  const dimensions = boundedCaptureDimensions(capabilities);
+  const frameRateMaximum = positiveMaximum(capabilities.frameRate);
+  const advanced: ExtendedVideoConstraintSet = {};
+  if (capabilities.focusMode?.includes('continuous') === true) {
+    advanced.focusMode = 'continuous';
+  }
+  if (capabilities.resizeMode?.includes('none') === true) {
+    advanced.resizeMode = 'none';
+  }
+  if (dimensions === null && frameRateMaximum === null && Object.keys(advanced).length === 0)
+    return;
+
+  const constraints: ExtendedVideoConstraints = {
+    ...(dimensions === null
+      ? {}
+      : {
+          width: { ideal: dimensions.width },
+          height: { ideal: dimensions.height },
+        }),
+    ...(frameRateMaximum === null
+      ? {}
+      : { frameRate: { ideal: Math.min(INITIAL_IDEAL_FRAME_RATE, frameRateMaximum) } }),
+    ...(Object.keys(advanced).length === 0 ? {} : { advanced: [advanced] }),
+  };
+  try {
+    await track.applyConstraints(constraints);
+  } catch {
+    // Resolution and focus tuning are optional; retain the already working stream.
+  }
+}
 
 function abortError(): Error {
   const error = new Error('Camera operation cancelled.');
@@ -233,6 +328,11 @@ class BrowserCameraService implements CameraService {
         );
       });
       if (this.pendingCancellation?.operation === operation) this.pendingCancellation = null;
+      if (this.operationCancelled(operation, signal)) {
+        stopStream(acquired);
+        throw abortError();
+      }
+      await optimizeVideoTrack(acquired);
       if (this.operationCancelled(operation, signal)) {
         stopStream(acquired);
         throw abortError();
