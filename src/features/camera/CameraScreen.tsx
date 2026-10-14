@@ -3,9 +3,9 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import type { ScannerEngine } from '../../imaging/contracts/scanner-engine';
 import { createScanicEngine } from '../../imaging/engines/scanic-classical-engine';
 import type { LiveDetectionResult } from '../scanner/detection-scheduler';
-import { DocumentOverlay } from '../scanner/DocumentOverlay';
 import { startLiveDetectionSession } from '../scanner/live-detection-session';
 import { createVideoFrameSource, type VideoFrameSource } from '../scanner/video-frame-source';
+import { ActiveCameraView } from './ActiveCameraView';
 import { createCameraCapture, type CameraCapture } from './camera-capture';
 import { CameraServiceError, type CameraFailureCode, type CameraService } from './camera-service';
 import {
@@ -305,11 +305,41 @@ export function CameraScreen({
 
   const cameraActive = state.kind === 'active';
   const imported = state.kind === 'imported';
-  const heading = cameraActive
-    ? 'Camera đã sẵn sàng'
-    : imported
-      ? 'Ảnh đã sẵn sàng'
-      : 'Sẵn sàng mở camera';
+
+  useEffect(() => {
+    if (!cameraActive) return;
+    document.documentElement.classList.add('camera-active');
+    return () => {
+      document.documentElement.classList.remove('camera-active');
+    };
+  }, [cameraActive]);
+
+  if (state.kind === 'active') {
+    return (
+      <ActiveCameraView
+        videoRef={video}
+        headingRef={headingRef}
+        liveDetection={liveDetection}
+        detectionFailed={detectionFailed}
+        captureFailed={captureFailed}
+        capturing={capturing}
+        {...(batchStatus === undefined ? {} : { batchStatus })}
+        canFinish={onFinishCapture !== undefined && batchStatus !== undefined}
+        onCapture={() => void capturePhoto()}
+        onClose={closeCamera}
+        onExit={() => {
+          closeCamera();
+          onBack();
+        }}
+        onFinish={() => {
+          closeCamera();
+          onFinishCapture?.();
+        }}
+      />
+    );
+  }
+
+  const heading = imported ? 'Ảnh đã sẵn sàng' : 'Sẵn sàng mở camera';
 
   return (
     <main id="main-content" className="app-main scan-intro" aria-label="clonecamscanner">
@@ -327,21 +357,7 @@ export function CameraScreen({
       </button>
 
       <section className="scan-intro__content" aria-labelledby="scan-intro-title">
-        {cameraActive ? (
-          <div className="camera-frame camera-frame--active">
-            <video
-              ref={video}
-              className="camera-preview"
-              aria-label="Hình ảnh trực tiếp từ camera"
-              data-frame-fit="contain"
-              autoPlay
-              muted
-              playsInline
-            />
-            <DocumentOverlay result={liveDetection} />
-            <span className="camera-live-badge">Trực tiếp</span>
-          </div>
-        ) : imported ? (
+        {imported ? (
           <div className="import-summary" role="status">
             <span className="import-summary__mark" aria-hidden="true">
               ✓
@@ -357,69 +373,12 @@ export function CameraScreen({
           {heading}
         </h1>
         <p className="scan-intro__description">
-          {cameraActive
-            ? 'Bạn sẽ tự bấm chụp từng trang.'
-            : imported
-              ? 'Ảnh gốc vẫn được giữ nguyên để xử lý ở bước tiếp theo.'
-              : 'Camera chỉ được yêu cầu sau khi bạn chủ động cho phép.'}
+          {imported
+            ? 'Ảnh gốc vẫn được giữ nguyên để xử lý ở bước tiếp theo.'
+            : 'Camera chỉ được yêu cầu sau khi bạn chủ động cho phép.'}
         </p>
 
-        {cameraActive ? (
-          <div className="camera-actions">
-            {batchStatus === undefined ? null : (
-              <div className="capture-progress" role="status" aria-label="Tiến độ chụp">
-                <strong>{batchStatus.total} trang</strong>
-                {batchStatus.processing > 0 ? (
-                  <span> · {batchStatus.processing} đang xử lý</span>
-                ) : batchStatus.failed > 0 ? (
-                  <span> · {batchStatus.failed} cần kiểm tra</span>
-                ) : batchStatus.total > 0 ? (
-                  <span> · đã xử lý xong</span>
-                ) : (
-                  <span> · hãy chụp trang đầu tiên</span>
-                )}
-              </div>
-            )}
-            {detectionFailed ? (
-              <p className="camera-error" role="alert">
-                Scanic tạm thời không nhận diện được; ảnh chụp vẫn được giữ toàn khung.
-              </p>
-            ) : null}
-            {captureFailed ? (
-              <p className="camera-error" role="alert">
-                Không thể chụp ảnh. Hãy giữ máy ổn định rồi thử lại.
-              </p>
-            ) : null}
-            <button
-              className="camera-shutter"
-              type="button"
-              aria-label="Chụp tài liệu"
-              aria-busy={capturing}
-              disabled={capturing}
-              onClick={() => void capturePhoto()}
-            >
-              <span aria-hidden="true" />
-              {capturing ? 'Đang chụp…' : 'Chụp tài liệu'}
-            </button>
-            {onFinishCapture === undefined || batchStatus === undefined ? null : (
-              <button
-                className="primary-button camera-finish"
-                type="button"
-                aria-label={`Hoàn tất chụp ${String(batchStatus.total)} trang`}
-                disabled={batchStatus.total === 0}
-                onClick={() => {
-                  closeCamera();
-                  onFinishCapture();
-                }}
-              >
-                Xong ({batchStatus.total})
-              </button>
-            )}
-            <button className="secondary-button" type="button" onClick={closeCamera}>
-              Đóng camera
-            </button>
-          </div>
-        ) : imported ? (
+        {imported ? (
           <div className="camera-actions">
             <label className="image-import-button">
               Chọn ảnh khác

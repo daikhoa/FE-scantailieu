@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createRef, type ComponentProps } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -69,7 +69,7 @@ describe('CameraScreen', () => {
     expect(await screen.findByRole('heading', { name: 'Camera đã sẵn sàng' })).toBeInTheDocument();
     expect(start).toHaveBeenCalledOnce();
     expect(start.mock.calls[0]?.[0]).toBeInstanceOf(AbortSignal);
-    expect(screen.getByText('Bạn sẽ tự bấm chụp từng trang.')).toBeInTheDocument();
+    expect(screen.getByRole('main', { name: 'Camera quét tài liệu' })).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByLabelText('Hình ảnh trực tiếp từ camera')).toHaveProperty(
         'srcObject',
@@ -80,6 +80,37 @@ describe('CameraScreen', () => {
       'data-frame-fit',
       'contain',
     );
+  });
+
+  it('keeps the camera preview and capture controls together in a fullscreen scanner surface', async () => {
+    const stream = { getTracks: () => [] } as unknown as MediaStream;
+    const service = fakeService(() => Promise.resolve({ stream, stop: vi.fn() }));
+    const view = renderCamera(service, vi.fn(), {
+      onPhotoCaptured: vi.fn(),
+      onFinishCapture: vi.fn(),
+      batchStatus: { total: 2, processing: 1, failed: 0 },
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cho phép camera' }));
+
+    const scanner = await screen.findByRole('main', { name: 'Camera quét tài liệu' });
+    const viewport = within(scanner).getByRole('region', { name: 'Khung ngắm camera' });
+    const controls = within(scanner).getByRole('group', { name: 'Điều khiển chụp' });
+
+    expect(scanner).toHaveClass('camera-capture-screen');
+    expect(viewport).toContainElement(
+      within(scanner).getByLabelText('Hình ảnh trực tiếp từ camera'),
+    );
+    expect(controls).toContainElement(
+      within(scanner).getByRole('button', { name: 'Chụp tài liệu' }),
+    );
+    expect(controls).toContainElement(
+      within(scanner).getByRole('button', { name: 'Hoàn tất chụp 2 trang' }),
+    );
+    expect(document.documentElement).toHaveClass('camera-active');
+
+    view.unmount();
+    expect(document.documentElement).not.toHaveClass('camera-active');
   });
 
   it('shows a busy state and prevents duplicate permission requests', () => {
