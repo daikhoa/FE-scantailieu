@@ -1,9 +1,13 @@
 import type { CropRegion, EditRecipe, ImageAsset, RenderedVariant } from '../../domain/document';
 import type { ScannerEngine } from '../../imaging/contracts/scanner-engine';
 import { createScanicEngine } from '../../imaging/engines/scanic-classical-engine';
+import { detectDocumentCrop } from '../editor/detect-document-crop';
 import { importImage, type ImageImporter } from '../camera/image-import';
-import { mapLiveDetectionToCrop } from '../camera/live-capture-crop';
 import type { LiveDetectionResult } from './detection-scheduler';
+import {
+  createImageAssetFrameSource,
+  type ImageAssetFrameSource,
+} from './image-asset-frame-source';
 
 export interface ProcessedScanPage {
   readonly original: ImageAsset;
@@ -25,6 +29,7 @@ export interface BackgroundPageProcessor {
 interface BackgroundPageProcessorOptions {
   readonly importer?: ImageImporter;
   readonly engineFactory?: () => ScannerEngine;
+  readonly frameSource?: ImageAssetFrameSource;
 }
 
 export function createDefaultPageRecipe(crop: CropRegion): EditRecipe {
@@ -75,6 +80,7 @@ export function createBackgroundPageProcessor(
 ): BackgroundPageProcessor {
   const importer = options.importer ?? importImage;
   const engineFactory = options.engineFactory ?? createScanicEngine;
+  const frameSource = options.frameSource ?? createImageAssetFrameSource();
   const disposal = new AbortController();
   let engine: ScannerEngine | null = null;
   let tail: Promise<unknown> = Promise.resolve();
@@ -104,7 +110,7 @@ export function createBackgroundPageProcessor(
 
   const process = async (
     source: Blob,
-    captureDetection: LiveDetectionResult | null,
+    _captureDetection: LiveDetectionResult | null,
     signal: AbortSignal,
   ): Promise<ProcessedScanPage> => {
     checkAbort(signal, disposal.signal);
@@ -112,7 +118,12 @@ export function createBackgroundPageProcessor(
     checkAbort(signal, disposal.signal);
     const currentEngine = await readyEngine(signal);
     try {
-      const crop = mapLiveDetectionToCrop(captureDetection, imported.original.dimensions);
+      const crop = await detectDocumentCrop(
+        currentEngine,
+        frameSource,
+        imported.original,
+        signal,
+      );
       const recipe = createDefaultPageRecipe(crop);
       const variant = await currentEngine.render(
         { original: imported.original, orientation: 0, recipe },
