@@ -293,6 +293,7 @@ describe('CameraScreen', () => {
       'Scanic tạm thời không nhận diện được',
     );
     expect(screen.queryByText('Đã định khung tài liệu.')).not.toBeInTheDocument();
+    expect(screen.getByText('Giữ máy ổn định để định khung tài liệu.')).toBeInTheDocument();
   });
 
   it('captures a high-resolution photo and sends the validated original to the editor', async () => {

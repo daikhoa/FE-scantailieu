@@ -57,7 +57,7 @@ describe('live Scanic detection session', () => {
     const fixture = frames();
     const onResult = vi.fn();
     const session = startLiveDetectionSession({
-      engine: engine.scanner,
+      engineFactory: () => engine.scanner,
       source: fixture.source,
       video: {} as HTMLVideoElement,
       onResult,
@@ -83,7 +83,7 @@ describe('live Scanic detection session', () => {
     const fixture = frames();
     const onError = vi.fn();
     const session = startLiveDetectionSession({
-      engine: engine.scanner,
+      engineFactory: () => engine.scanner,
       source: fixture.source,
       video: {} as HTMLVideoElement,
       onResult: vi.fn(),
@@ -94,7 +94,49 @@ describe('live Scanic detection session', () => {
 
     expect(onError).toHaveBeenCalledWith({ code: 'failed' });
     await session.stop();
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(engine.initialize).toHaveBeenCalledOnce();
     expect(fixture.dispose).toHaveBeenCalledOnce();
     expect(engine.dispose).toHaveBeenCalledOnce();
+  });
+
+  it('replaces a failed engine and resumes live detection after a bounded delay', async () => {
+    const failed = engineFixture();
+    failed.detect.mockRejectedValueOnce(new Error('transient worker failure'));
+    const recovered = engineFixture();
+    const engineFactory = vi
+      .fn<() => ScannerEngine>()
+      .mockReturnValueOnce(failed.scanner)
+      .mockReturnValueOnce(recovered.scanner);
+    const fixture = frames();
+    const onResult = vi.fn();
+    const onError = vi.fn();
+    const session = startLiveDetectionSession({
+      engineFactory,
+      source: fixture.source,
+      video: {} as HTMLVideoElement,
+      onResult,
+      onError,
+      stableFrames: 1,
+      intervalMs: 10,
+      retryDelayMs: 20,
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(onError).toHaveBeenCalledWith({ code: 'failed' });
+    expect(failed.dispose).toHaveBeenCalledOnce();
+    expect(engineFactory).toHaveBeenCalledOnce();
+
+    await vi.advanceTimersByTimeAsync(19);
+    expect(engineFactory).toHaveBeenCalledOnce();
+
+    await vi.advanceTimersByTimeAsync(11);
+    expect(engineFactory).toHaveBeenCalledTimes(2);
+    expect(recovered.initialize).toHaveBeenCalledOnce();
+    expect(onResult).toHaveBeenCalledWith(expect.objectContaining({ kind: 'document' }));
+
+    await session.stop();
+    expect(recovered.dispose).toHaveBeenCalledOnce();
+    expect(fixture.dispose).toHaveBeenCalledOnce();
   });
 });

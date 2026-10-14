@@ -180,7 +180,7 @@ export function CameraScreen({
     setLiveDetection(null);
     setDetectionFailed(false);
     const session = startLiveDetectionSession({
-      engine: engineFactory(),
+      engineFactory,
       source: frameSourceFactory(),
       video: video.current,
       onResult: (result) => {
@@ -190,7 +190,15 @@ export function CameraScreen({
       },
       onError: () => {
         if (!mounted.current) return;
-        setLiveDetection(null);
+        setLiveDetection((current) =>
+          current === null
+            ? null
+            : {
+                kind: 'full-frame',
+                dimensions: current.dimensions,
+                reason: 'unstable-document',
+              },
+        );
         setDetectionFailed(true);
       },
     });
