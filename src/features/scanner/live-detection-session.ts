@@ -4,6 +4,7 @@ import {
   createDetectionScheduler,
   type DetectionSmootherOptions,
   type LiveDetectionResult,
+  validateDetectionSchedulerConfiguration,
 } from './detection-scheduler';
 import { PreviewFrameError, type VideoFrameSource } from './video-frame-source';
 
@@ -14,6 +15,7 @@ const FAILURE_CODES = new Set<ProcessingFailure['code']>([
   'invalid-input',
   'failed',
 ]);
+const MINIMUM_RETRY_DELAY_MS = 50;
 
 interface LiveDetectionSessionOptions extends DetectionSmootherOptions {
   readonly engineFactory: () => ScannerEngine;
@@ -64,9 +66,10 @@ export function startLiveDetectionSession(
 ): LiveDetectionSession {
   const intervalMs = options.intervalMs ?? 125;
   const initialRetryDelayMs = options.retryDelayMs ?? 250;
+  validateDetectionSchedulerConfiguration(options);
   if (
     !Number.isFinite(initialRetryDelayMs) ||
-    initialRetryDelayMs < 0 ||
+    initialRetryDelayMs < MINIMUM_RETRY_DELAY_MS ||
     initialRetryDelayMs > 60_000
   ) {
     throw new RangeError('Invalid live detection retry delay.');
@@ -75,9 +78,25 @@ export function startLiveDetectionSession(
   let stopped = false;
   let timer: ReturnType<typeof setInterval> | null = null;
   let scheduler: ReturnType<typeof createDetectionScheduler> | null = null;
+  let activeEngine: ScannerEngine | null = null;
+  let activeEngineDisposal: Promise<void> | null = null;
   let endCycle: (() => void) | null = null;
   let stopping: Promise<void> | null = null;
+  let cleanupFailure = false;
   const aborted = () => controller.signal.aborted;
+  const notifyFailure = (failure: ProcessingFailure) => {
+    try {
+      options.onError?.(failure);
+    } catch {
+      // A UI callback must not strand the engine or its worker resources.
+    }
+  };
+  const disposeEngine = (engine: ScannerEngine): Promise<void> => {
+    if (activeEngine === engine && activeEngineDisposal !== null) return activeEngineDisposal;
+    const disposal = Promise.resolve().then(() => engine.dispose());
+    if (activeEngine === engine) activeEngineDisposal = disposal;
+    return disposal;
+  };
 
   const sample = () => {
     if (stopped || scheduler === null) return;
@@ -88,7 +107,7 @@ export function startLiveDetectionSession(
         !isAbort(error) &&
         !(error instanceof PreviewFrameError && error.code === 'unavailable')
       ) {
-        options.onError?.(safeFailure(error));
+        notifyFailure(safeFailure(error));
       }
     }
   };
@@ -96,11 +115,13 @@ export function startLiveDetectionSession(
   const manager = (async () => {
     let retryDelayMs = initialRetryDelayMs;
     while (!aborted()) {
-      let engine: ScannerEngine | null = null;
+      let cycleEngine: ScannerEngine | null = null;
       let activeScheduler: ReturnType<typeof createDetectionScheduler> | null = null;
+      let cycleCleanupFailed = false;
       try {
-        const cycleEngine = options.engineFactory();
-        engine = cycleEngine;
+        cycleEngine = options.engineFactory();
+        activeEngine = cycleEngine;
+        activeEngineDisposal = null;
         await cycleEngine.initialize(controller.signal);
         if (aborted()) break;
         let resolveCycle: () => void = () => undefined;
@@ -119,10 +140,15 @@ export function startLiveDetectionSession(
           engine: cycleEngine,
           onResult: (result) => {
             retryDelayMs = initialRetryDelayMs;
-            options.onResult(result);
+            try {
+              options.onResult(result);
+            } catch {
+              notifyFailure({ code: 'failed' });
+              finishCycle();
+            }
           },
           onError: (failure) => {
-            options.onError?.(failure);
+            notifyFailure(failure);
             finishCycle();
           },
           ...(options.stableFrames === undefined ? {} : { stableFrames: options.stableFrames }),
@@ -141,25 +167,30 @@ export function startLiveDetectionSession(
         sample();
         await cycleEnded;
       } catch (error) {
-        if (!aborted() && !isAbort(error)) options.onError?.(safeFailure(error));
+        if (!aborted() && !isAbort(error)) notifyFailure(safeFailure(error));
       } finally {
         scheduler = null;
         endCycle = null;
-        try {
-          await activeScheduler?.dispose();
-        } catch (error) {
-          if (!aborted()) options.onError?.(safeFailure(error));
+        const cleanup = await Promise.allSettled([
+          activeScheduler?.dispose() ?? Promise.resolve(),
+          cycleEngine === null ? Promise.resolve() : disposeEngine(cycleEngine),
+        ]);
+        if (activeEngine === cycleEngine) {
+          activeEngine = null;
+          activeEngineDisposal = null;
         }
-        try {
-          await engine?.dispose();
-        } catch (error) {
-          if (!aborted()) options.onError?.(safeFailure(error));
+        for (const result of cleanup) {
+          if (result.status === 'rejected') {
+            cycleCleanupFailed = true;
+            cleanupFailure = true;
+            if (!aborted()) notifyFailure(safeFailure(result.reason));
+          }
         }
       }
 
-      if (aborted()) break;
+      if (aborted() || cycleCleanupFailed) break;
       await waitForRetry(retryDelayMs, controller.signal);
-      retryDelayMs = Math.min(Math.max(initialRetryDelayMs, 1) * 8, retryDelayMs * 2 || 1);
+      retryDelayMs = Math.min(initialRetryDelayMs * 8, retryDelayMs * 2);
     }
   })();
 
@@ -171,13 +202,21 @@ export function startLiveDetectionSession(
       stopped = true;
       controller.abort();
       endCycle?.();
+      const engineDisposal =
+        activeEngine === null ? Promise.resolve() : disposeEngine(activeEngine);
       if (timer !== null) {
         clearInterval(timer);
         timer = null;
       }
       stopping = (async () => {
-        await manager;
-        options.source.dispose();
+        const completion = await Promise.allSettled([manager, engineDisposal]);
+        let failed = cleanupFailure || completion.some((result) => result.status === 'rejected');
+        try {
+          options.source.dispose();
+        } catch {
+          failed = true;
+        }
+        if (failed) throw new Error('Live detection cleanup failed.');
       })();
       return stopping;
     },

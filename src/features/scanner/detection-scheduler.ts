@@ -47,6 +47,10 @@ export interface DetectionSchedulerOptions extends DetectionSmootherOptions {
   readonly intervalMs?: number;
 }
 
+export type DetectionSchedulerConfiguration = DetectionSmootherOptions & {
+  readonly intervalMs?: number;
+};
+
 const DEFAULT_STABLE_FRAMES = 3;
 const DEFAULT_MAX_CORNER_DRIFT_RATIO = 0.03;
 const DEFAULT_SMOOTHING_ALPHA = 0.5;
@@ -179,6 +183,16 @@ export function createDetectionSmoother(partial: DetectionSmootherOptions = {}):
   };
 }
 
+export function validateDetectionSchedulerConfiguration(
+  options: DetectionSchedulerConfiguration,
+): void {
+  createDetectionSmoother(options);
+  const intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
+  if (!Number.isFinite(intervalMs) || intervalMs <= 0 || intervalMs > 60_000) {
+    throw new RangeError('Invalid detection interval.');
+  }
+}
+
 function abortError(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
@@ -197,10 +211,8 @@ function safeFailure(error: unknown): ProcessingFailure {
 }
 
 export function createDetectionScheduler(options: DetectionSchedulerOptions): DetectionScheduler {
+  validateDetectionSchedulerConfiguration(options);
   const intervalMs = options.intervalMs ?? DEFAULT_INTERVAL_MS;
-  if (!Number.isFinite(intervalMs) || intervalMs < 0 || intervalMs > 60_000) {
-    throw new RangeError('Invalid detection interval.');
-  }
   const smoother = createDetectionSmoother(options);
   const lifecycle = { disposed: false };
   let pending: ScannerFrame | null = null;

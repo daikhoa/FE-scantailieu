@@ -119,7 +119,7 @@ describe('live Scanic detection session', () => {
       onError,
       stableFrames: 1,
       intervalMs: 10,
-      retryDelayMs: 20,
+      retryDelayMs: 50,
     });
 
     await vi.advanceTimersByTimeAsync(0);
@@ -127,7 +127,7 @@ describe('live Scanic detection session', () => {
     expect(failed.dispose).toHaveBeenCalledOnce();
     expect(engineFactory).toHaveBeenCalledOnce();
 
-    await vi.advanceTimersByTimeAsync(19);
+    await vi.advanceTimersByTimeAsync(49);
     expect(engineFactory).toHaveBeenCalledOnce();
 
     await vi.advanceTimersByTimeAsync(11);
@@ -138,5 +138,128 @@ describe('live Scanic detection session', () => {
     await session.stop();
     expect(recovered.dispose).toHaveBeenCalledOnce();
     expect(fixture.dispose).toHaveBeenCalledOnce();
+  });
+
+  it('force-disposes an engine when stopped during initialization', async () => {
+    const engine = engineFixture();
+    let rejectInitialization: ((error: Error) => void) | undefined;
+    engine.initialize.mockImplementation(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectInitialization = reject;
+        }),
+    );
+    engine.dispose.mockImplementation(() => {
+      const error = new Error('cancelled');
+      error.name = 'AbortError';
+      rejectInitialization?.(error);
+      return Promise.resolve();
+    });
+    const fixture = frames();
+    const session = startLiveDetectionSession({
+      engineFactory: () => engine.scanner,
+      source: fixture.source,
+      video: {} as HTMLVideoElement,
+      onResult: vi.fn(),
+    });
+
+    await vi.advanceTimersByTimeAsync(0);
+    const stopping = session.stop();
+    await vi.advanceTimersByTimeAsync(0);
+    const disposedBeforeManualRelease = engine.dispose.mock.calls.length === 1;
+    if (!disposedBeforeManualRelease) {
+      const error = new Error('test cleanup');
+      error.name = 'AbortError';
+      rejectInitialization?.(error);
+    }
+    await stopping;
+
+    expect(disposedBeforeManualRelease).toBe(true);
+    expect(engine.dispose).toHaveBeenCalledOnce();
+    expect(fixture.dispose).toHaveBeenCalledOnce();
+  });
+
+  it('does not create a replacement when failed-engine cleanup is unsuccessful', async () => {
+    const failed = engineFixture();
+    failed.detect.mockRejectedValueOnce(new Error('transient worker failure'));
+    failed.dispose.mockRejectedValueOnce(new Error('worker did not terminate'));
+    const replacement = engineFixture();
+    const engineFactory = vi
+      .fn<() => ScannerEngine>()
+      .mockReturnValueOnce(failed.scanner)
+      .mockReturnValue(replacement.scanner);
+    const fixture = frames();
+    const session = startLiveDetectionSession({
+      engineFactory,
+      source: fixture.source,
+      video: {} as HTMLVideoElement,
+      onResult: vi.fn(),
+      onError: vi.fn(),
+      stableFrames: 1,
+      intervalMs: 10,
+      retryDelayMs: 50,
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+    const factoryCallsBeforeStop = engineFactory.mock.calls.length;
+    const stopped = session.stop();
+
+    expect(factoryCallsBeforeStop).toBe(1);
+    expect(replacement.initialize).not.toHaveBeenCalled();
+    await expect(stopped).rejects.toThrow('Live detection cleanup failed.');
+    expect(fixture.dispose).toHaveBeenCalledOnce();
+  });
+
+  it('rejects invalid scheduler configuration before creating an engine', async () => {
+    const engineFactory = vi.fn(() => engineFixture().scanner);
+    const fixture = frames();
+    let session: ReturnType<typeof startLiveDetectionSession> | undefined;
+    let failure: unknown;
+    try {
+      session = startLiveDetectionSession({
+        engineFactory,
+        source: fixture.source,
+        video: {} as HTMLVideoElement,
+        onResult: vi.fn(),
+        intervalMs: -1,
+      });
+    } catch (error) {
+      failure = error;
+    }
+    await vi.advanceTimersByTimeAsync(0);
+    await session?.stop();
+
+    expect(failure).toBeInstanceOf(RangeError);
+    expect(engineFactory).not.toHaveBeenCalled();
+  });
+
+  it('still recovers when an error observer throws', async () => {
+    const failed = engineFixture();
+    failed.detect.mockRejectedValueOnce(new Error('transient worker failure'));
+    const recovered = engineFixture();
+    const engineFactory = vi
+      .fn<() => ScannerEngine>()
+      .mockReturnValueOnce(failed.scanner)
+      .mockReturnValueOnce(recovered.scanner);
+    const fixture = frames();
+    const onResult = vi.fn();
+    const session = startLiveDetectionSession({
+      engineFactory,
+      source: fixture.source,
+      video: {} as HTMLVideoElement,
+      onResult,
+      onError: () => {
+        throw new Error('observer failure');
+      },
+      stableFrames: 1,
+      intervalMs: 10,
+      retryDelayMs: 50,
+    });
+
+    await vi.advanceTimersByTimeAsync(60);
+
+    expect(engineFactory).toHaveBeenCalledTimes(2);
+    expect(onResult).toHaveBeenCalledWith(expect.objectContaining({ kind: 'document' }));
+    await session.stop();
   });
 });

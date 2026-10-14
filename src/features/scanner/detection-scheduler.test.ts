@@ -75,6 +75,16 @@ afterEach(() => {
 });
 
 describe('detection scheduler', () => {
+  it('rejects a zero-delay interval that could create a hot capture loop', () => {
+    expect(() =>
+      createDetectionScheduler({
+        engine: { detect: vi.fn() },
+        onResult: vi.fn(),
+        intervalMs: 0,
+      }),
+    ).toThrow(RangeError);
+  });
+
   it('runs one detection at a time, replaces stale pending frames and rate limits starts', async () => {
     const first = deferred<DetectionResult>();
     const second = deferred<DetectionResult>();
