@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ScannerEngine } from '../imaging/contracts/scanner-engine';
 import type { CameraCapture } from '../features/camera/camera-capture';
 import type { CameraService } from '../features/camera/camera-service';
+import { ImageImportError } from '../features/camera/image-import';
 import type {
   BackgroundPageProcessor,
   ProcessedScanPage,
@@ -24,17 +25,29 @@ afterEach(() => {
 });
 
 describe('App shell', () => {
-  it('opens the scan preparation view and returns to the library', () => {
-    render(<App />);
+  it('offers camera and image entry points on the library and opens the camera directly', async () => {
+    const stream = { getTracks: () => [] } as unknown as MediaStream;
+    const start = vi.fn<CameraService['start']>(() => Promise.resolve({ stream, stop: vi.fn() }));
+    render(
+      <App
+        cameraService={{
+          lifecycle: { kind: 'idle' },
+          start,
+          stop: vi.fn(),
+        }}
+      />,
+    );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu quét' }));
+    expect(screen.getByRole('button', { name: 'Quét bằng camera' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Dùng ảnh có sẵn')).toBeInTheDocument();
 
-    expect(screen.getByRole('heading', { name: 'Sẵn sàng mở camera' })).toBeInTheDocument();
-    expect(
-      screen.getByText('Camera chỉ được yêu cầu sau khi bạn chủ động cho phép.'),
-    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Quét bằng camera' }));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Quay lại thư viện' }));
+    expect(await screen.findByRole('heading', { name: 'Camera đã sẵn sàng' })).toBeInTheDocument();
+    expect(start).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('button', { name: 'Cho phép camera' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Thoát camera' }));
 
     expect(
       screen.getByRole('heading', { name: 'Scan rõ từng nét. PDF sẵn sàng cho OCR.' }),
@@ -115,8 +128,7 @@ describe('App shell', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu quét' }));
-    fireEvent.change(screen.getByLabelText('Chọn ảnh từ thư viện'), {
+    fireEvent.change(screen.getByLabelText('Dùng ảnh có sẵn'), {
       target: { files: [new File(['image'], 'page.png', { type: 'image/png' })] },
     });
 
@@ -128,14 +140,30 @@ describe('App shell', () => {
     ).toBeInTheDocument();
   });
 
+  it('keeps image import failures on the library with safe recovery guidance', async () => {
+    render(<App imageImporter={() => Promise.reject(new ImageImportError('unsupported-type'))} />);
+
+    fireEvent.change(screen.getByLabelText('Dùng ảnh có sẵn'), {
+      target: { files: [new File(['not-an-image'], 'page.txt', { type: 'text/plain' })] },
+    });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Chỉ hỗ trợ ảnh JPEG, PNG hoặc WebP.',
+    );
+    expect(
+      screen.getByRole('heading', { name: 'Scan rõ từng nét. PDF sẵn sàng cho OCR.' }),
+    ).toBeInTheDocument();
+  });
+
   it('captures multiple pages while background processing continues and opens one batch', async () => {
     const stream = {
       getTracks: () => [],
       getVideoTracks: () => [{} as MediaStreamTrack],
     } as unknown as MediaStream;
+    const startCamera = vi.fn(() => Promise.resolve({ stream, stop: vi.fn() }));
     const cameraService: CameraService = {
       lifecycle: { kind: 'idle' },
-      start: vi.fn(() => Promise.resolve({ stream, stop: vi.fn() })),
+      start: startCamera,
       stop: vi.fn(),
     };
     const first = new Blob(['first'], { type: 'image/jpeg' });
@@ -207,8 +235,7 @@ describe('App shell', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu quét' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Cho phép camera' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Quét bằng camera' }));
     await screen.findByRole('heading', { name: 'Camera đã sẵn sàng' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Chụp tài liệu' }));
@@ -223,5 +250,14 @@ describe('App shell', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Hoàn tất chụp 2 trang' }));
     expect(await screen.findByRole('heading', { name: 'Kiểm tra 2 trang' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Tải PDF 2 trang' })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Chụp thêm trang' }));
+
+    expect(await screen.findByRole('heading', { name: 'Camera đã sẵn sàng' })).toBeInTheDocument();
+    expect(startCamera).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole('button', { name: 'Cho phép camera' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Thoát camera' }));
+    expect(await screen.findByRole('heading', { name: 'Kiểm tra 2 trang' })).toBeInTheDocument();
   });
 });

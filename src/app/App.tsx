@@ -3,7 +3,13 @@ import { useEffect, useReducer, useRef, useState } from 'react';
 import { CameraScreen } from '../features/camera/CameraScreen';
 import type { CameraCapture } from '../features/camera/camera-capture';
 import { createCameraService, type CameraService } from '../features/camera/camera-service';
-import type { ImageImporter, ImportedImage } from '../features/camera/image-import';
+import {
+  ImageImportError,
+  importImage,
+  type ImageImporter,
+  type ImageImportFailureCode,
+  type ImportedImage,
+} from '../features/camera/image-import';
 import { DocumentEditor } from '../features/editor/DocumentEditor';
 import {
   createBackgroundPageProcessor,
@@ -33,9 +39,22 @@ interface AppProps {
   readonly pageProcessorFactory?: () => BackgroundPageProcessor;
 }
 
-type AppView = 'library' | 'scan-intro' | 'batch-review' | 'editor';
+type AppView = 'library' | 'camera' | 'batch-review' | 'editor';
+type CameraReturnView = Extract<AppView, 'library' | 'batch-review'>;
+type HomeImportState =
+  | { readonly kind: 'idle' }
+  | { readonly kind: 'importing' }
+  | { readonly kind: 'error'; readonly code: ImageImportFailureCode };
 
 const EMPTY_LIBRARY: LibraryState = { kind: 'empty' };
+const HOME_IMPORT_ERROR_GUIDANCE: Readonly<Record<ImageImportFailureCode, string>> = {
+  'unsupported-type': 'Chỉ hỗ trợ ảnh JPEG, PNG hoặc WebP.',
+  'too-large': 'Tệp ảnh vượt quá giới hạn 64 MiB.',
+  'invalid-file': 'Tệp không phải là ảnh JPEG, PNG hoặc WebP hợp lệ.',
+  'image-too-large': 'Ảnh có kích thước quá lớn để xử lý an toàn trên thiết bị này.',
+  'decode-failed': 'Trình duyệt không thể đọc ảnh này. Hãy chọn ảnh khác.',
+  unavailable: 'Trình duyệt này chưa hỗ trợ đọc ảnh từ thư viện.',
+};
 
 function PrivacyNotice() {
   return (
@@ -119,6 +138,8 @@ export function App({
   pageProcessorFactory,
 }: AppProps) {
   const [view, setView] = useState<AppView>('library');
+  const [cameraReturnView, setCameraReturnView] = useState<CameraReturnView>('library');
+  const [homeImportState, setHomeImportState] = useState<HomeImportState>({ kind: 'idle' });
   const [editorImage, setEditorImage] = useState<ImportedImage | null>(null);
   const [selectedBatchPageId, setSelectedBatchPageId] = useState<string | null>(null);
   const [batch, dispatchBatch] = useReducer(scanBatchReducer, { pages: [] });
@@ -127,6 +148,7 @@ export function App({
   const shouldMoveFocus = useRef(false);
   const pageProcessor = useRef<BackgroundPageProcessor | null>(null);
   const pageOperations = useRef(new Map<string, AbortController>());
+  const homeImportRequest = useRef<AbortController | null>(null);
   const pageSequence = useRef(0);
 
   useEffect(() => {
@@ -142,6 +164,8 @@ export function App({
       if (pageProcessor.current === processor) pageProcessor.current = null;
       for (const operation of operations.values()) operation.abort();
       operations.clear();
+      homeImportRequest.current?.abort();
+      homeImportRequest.current = null;
       void processor.dispose().catch(() => undefined);
     };
   }, [editorEngineFactory, imageImporter, pageProcessorFactory]);
@@ -184,13 +208,48 @@ export function App({
       });
   };
 
-  const startNewBatch = () => {
+  const resetBatch = () => {
     for (const operation of pageOperations.current.values()) operation.abort();
     pageOperations.current.clear();
     dispatchBatch({ type: 'reset' });
     setSelectedBatchPageId(null);
     setEditorImage(null);
-    navigateTo('scan-intro');
+  };
+
+  const startNewCameraBatch = () => {
+    homeImportRequest.current?.abort();
+    homeImportRequest.current = null;
+    setHomeImportState({ kind: 'idle' });
+    resetBatch();
+    setCameraReturnView('library');
+    navigateTo('camera');
+  };
+
+  const openHomeImage = async (source: Blob) => {
+    homeImportRequest.current?.abort();
+    const controller = new AbortController();
+    homeImportRequest.current = controller;
+    setHomeImportState({ kind: 'importing' });
+    try {
+      const image = await (imageImporter ?? importImage)(source, controller.signal);
+      if (homeImportRequest.current !== controller) return;
+      resetBatch();
+      setEditorImage(image);
+      setHomeImportState({ kind: 'idle' });
+      navigateTo('editor');
+    } catch (error) {
+      if (homeImportRequest.current !== controller) return;
+      if (error instanceof Error && error.name === 'AbortError') {
+        setHomeImportState({ kind: 'idle' });
+      } else {
+        setHomeImportState({
+          kind: 'error',
+          code: error instanceof ImageImportError ? error.code : 'decode-failed',
+        });
+      }
+    } finally {
+      if (homeImportRequest.current === controller) homeImportRequest.current = null;
+    }
   };
 
   const isLibrary = view === 'library';
@@ -225,23 +284,61 @@ export function App({
             <p className="hero__description">
               Căn thẳng tài liệu, giữ nguyên tỷ lệ và tăng độ rõ mà không làm thay đổi nội dung gốc.
             </p>
-            <button
-              className="primary-action"
-              type="button"
-              onClick={startNewBatch}
-              aria-label="Bắt đầu quét"
-            >
-              <span className="primary-action__icon" aria-hidden="true">
-                <i />
-              </span>
-              <span>
-                <strong>Bắt đầu quét</strong>
-                <small>Bạn tự bấm chụp từng trang</small>
-              </span>
-              <span className="primary-action__arrow" aria-hidden="true">
-                →
-              </span>
-            </button>
+            <div className="home-scan-actions" role="group" aria-label="Chọn cách quét tài liệu">
+              <button
+                className="primary-action"
+                type="button"
+                onClick={startNewCameraBatch}
+                aria-label="Quét bằng camera"
+              >
+                <span className="primary-action__icon" aria-hidden="true">
+                  <i />
+                </span>
+                <span>
+                  <strong>Quét bằng camera</strong>
+                  <small>Chụp liên tục nhiều trang</small>
+                </span>
+                <span className="primary-action__arrow" aria-hidden="true">
+                  →
+                </span>
+              </button>
+              <label
+                className={`home-import-action${homeImportState.kind === 'importing' ? ' home-import-action--disabled' : ''}`}
+                aria-busy={homeImportState.kind === 'importing'}
+              >
+                <span className="home-import-action__icon" aria-hidden="true">
+                  ▧
+                </span>
+                <span>
+                  <strong>
+                    {homeImportState.kind === 'importing'
+                      ? 'Đang kiểm tra ảnh…'
+                      : 'Dùng ảnh có sẵn'}
+                  </strong>
+                  <small>Chọn JPEG, PNG hoặc WebP trên thiết bị</small>
+                </span>
+                <span className="primary-action__arrow" aria-hidden="true">
+                  →
+                </span>
+                <input
+                  className="visually-hidden"
+                  aria-label="Dùng ảnh có sẵn"
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  disabled={homeImportState.kind === 'importing'}
+                  onChange={(event) => {
+                    const source = event.currentTarget.files?.[0];
+                    event.currentTarget.value = '';
+                    if (source !== undefined) void openHomeImage(source);
+                  }}
+                />
+              </label>
+            </div>
+            {homeImportState.kind === 'error' ? (
+              <p className="home-import-error" role="alert">
+                {HOME_IMPORT_ERROR_GUIDANCE[homeImportState.code]}
+              </p>
+            ) : null}
           </section>
 
           <PrivacyNotice />
@@ -259,11 +356,10 @@ export function App({
             <LibraryContent state={libraryState} onRetry={onRetryLibrary} />
           </section>
         </main>
-      ) : view === 'scan-intro' ? (
+      ) : view === 'camera' ? (
         <CameraScreen
           service={resolvedCameraService}
           headingRef={viewHeadingRef}
-          {...(imageImporter === undefined ? {} : { importer: imageImporter })}
           {...(cameraCapture === undefined ? {} : { cameraCapture })}
           {...(cameraEngineFactory === undefined ? {} : { engineFactory: cameraEngineFactory })}
           {...(cameraFrameSourceFactory === undefined
@@ -278,13 +374,8 @@ export function App({
           onFinishCapture={() => {
             navigateTo('batch-review');
           }}
-          onImageImported={(image) => {
-            setEditorImage(image);
-            setSelectedBatchPageId(null);
-            navigateTo('editor');
-          }}
           onBack={() => {
-            navigateTo('library');
+            navigateTo(cameraReturnView);
           }}
         />
       ) : view === 'batch-review' ? (
@@ -292,7 +383,8 @@ export function App({
           pages={batch.pages}
           headingRef={viewHeadingRef}
           onCaptureMore={() => {
-            navigateTo('scan-intro');
+            setCameraReturnView('batch-review');
+            navigateTo('camera');
           }}
           onEditPage={(id) => {
             const selected = batch.pages.find((page) => page.id === id);
@@ -325,7 +417,7 @@ export function App({
           onBack={() => {
             setEditorImage(null);
             if (selectedBatchPageId === null) {
-              navigateTo('scan-intro');
+              navigateTo('library');
             } else {
               setSelectedBatchPageId(null);
               navigateTo('batch-review');

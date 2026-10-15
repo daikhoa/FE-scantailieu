@@ -5,10 +5,8 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ScannerEngine } from '../../imaging/contracts/scanner-engine';
 import type { VideoFrameSource } from '../scanner/video-frame-source';
 import type { CameraCapture } from './camera-capture';
-import type { CameraService } from './camera-service';
-import { CameraServiceError } from './camera-service';
+import { CameraServiceError, type CameraService } from './camera-service';
 import { CameraScreen } from './CameraScreen';
-import { ImageImportError, type ImageImporter, type ImportedImage } from './image-import';
 
 function deferred<T>() {
   let resolve: ((value: T) => void) | undefined;
@@ -36,8 +34,11 @@ function renderCamera(
   service: CameraService,
   onBack = vi.fn(),
   props: Partial<
-    Omit<ComponentProps<typeof CameraScreen>, 'service' | 'headingRef' | 'onBack'>
-  > = {},
+    Omit<
+      ComponentProps<typeof CameraScreen>,
+      'service' | 'headingRef' | 'onBack' | 'onPhotoCaptured'
+    >
+  > & { readonly onPhotoCaptured?: (source: Blob) => void } = {},
 ) {
   return {
     onBack,
@@ -46,30 +47,41 @@ function renderCamera(
         service={service}
         headingRef={createRef<HTMLHeadingElement>()}
         onBack={onBack}
+        onPhotoCaptured={vi.fn()}
         {...props}
       />,
     ),
   };
 }
 
-function importedImage(blob: Blob): ImportedImage {
-  return { original: { blob, dimensions: { width: 1200, height: 800 } } };
+function detectionEngine(detect: ScannerEngine['detect']): ScannerEngine {
+  return {
+    lifecycle: { kind: 'uninitialized' },
+    initialize: vi.fn(() => Promise.resolve()),
+    detect,
+    render: vi.fn(() => Promise.reject(new Error('not used'))),
+    dispose: vi.fn(() => Promise.resolve()),
+  };
+}
+
+function videoFrameSource(): VideoFrameSource {
+  return {
+    capture: vi.fn(() => ({ dimensions: { width: 100, height: 100 }, close: vi.fn() })),
+    dispose: vi.fn(),
+  };
 }
 
 describe('CameraScreen', () => {
-  it('requests camera only after the user presses the permission button', async () => {
+  it('opens the camera immediately and connects its stream to the preview', async () => {
     const stream = { getTracks: () => [] } as unknown as MediaStream;
     const start = vi.fn<CameraService['start']>(() => Promise.resolve({ stream, stop: vi.fn() }));
-    const service = fakeService(start);
-    renderCamera(service);
 
-    expect(start).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Cho phép camera' }));
+    renderCamera(fakeService(start));
 
     expect(await screen.findByRole('heading', { name: 'Camera đã sẵn sàng' })).toBeInTheDocument();
     expect(start).toHaveBeenCalledOnce();
     expect(start.mock.calls[0]?.[0]).toBeInstanceOf(AbortSignal);
-    expect(screen.getByRole('main', { name: 'Camera quét tài liệu' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cho phép camera' })).not.toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByLabelText('Hình ảnh trực tiếp từ camera')).toHaveProperty(
         'srcObject',
@@ -84,14 +96,15 @@ describe('CameraScreen', () => {
 
   it('keeps the camera preview and capture controls together in a fullscreen scanner surface', async () => {
     const stream = { getTracks: () => [] } as unknown as MediaStream;
-    const service = fakeService(() => Promise.resolve({ stream, stop: vi.fn() }));
-    const view = renderCamera(service, vi.fn(), {
-      onPhotoCaptured: vi.fn(),
-      onFinishCapture: vi.fn(),
-      batchStatus: { total: 2, processing: 1, failed: 0 },
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Cho phép camera' }));
+    const view = renderCamera(
+      fakeService(() => Promise.resolve({ stream, stop: vi.fn() })),
+      vi.fn(),
+      {
+        onPhotoCaptured: vi.fn(),
+        onFinishCapture: vi.fn(),
+        batchStatus: { total: 2, processing: 1, failed: 0 },
+      },
+    );
 
     const scanner = await screen.findByRole('main', { name: 'Camera quét tài liệu' });
     const viewport = within(scanner).getByRole('region', { name: 'Khung ngắm camera' });
@@ -107,23 +120,24 @@ describe('CameraScreen', () => {
     expect(controls).toContainElement(
       within(scanner).getByRole('button', { name: 'Hoàn tất chụp 2 trang' }),
     );
-    expect(document.documentElement).toHaveClass('camera-active');
+    await waitFor(() => {
+      expect(document.documentElement).toHaveClass('camera-active');
+    });
 
     view.unmount();
     expect(document.documentElement).not.toHaveClass('camera-active');
   });
 
-  it('shows a busy state and prevents duplicate permission requests', () => {
+  it('shows one launch state while the camera request is pending', async () => {
     const pending = deferred<Awaited<ReturnType<CameraService['start']>>>();
     const start = vi.fn(() => pending.promise);
     renderCamera(fakeService(start));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cho phép camera' }));
-
-    const button = screen.getByRole('button', { name: 'Đang mở camera…' });
-    expect(button).toBeDisabled();
-    fireEvent.click(button);
-    expect(start).toHaveBeenCalledOnce();
+    expect(screen.getByRole('heading', { name: 'Đang mở camera…' })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(start).toHaveBeenCalledOnce();
+    });
+    expect(screen.queryByRole('button', { name: 'Cho phép camera' })).not.toBeInTheDocument();
   });
 
   it('gives specific recovery guidance and permits retry after denial', async () => {
@@ -133,7 +147,6 @@ describe('CameraScreen', () => {
       .mockRejectedValueOnce(new CameraServiceError('busy'));
     renderCamera(fakeService(start));
 
-    fireEvent.click(screen.getByRole('button', { name: 'Cho phép camera' }));
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Hãy cho phép camera trong cài đặt trình duyệt rồi thử lại.',
     );
@@ -145,24 +158,19 @@ describe('CameraScreen', () => {
     expect(start).toHaveBeenCalledTimes(2);
   });
 
-  it('stops camera on explicit close, back navigation and unmount', async () => {
+  it('stops camera when leaving and again during final cleanup', async () => {
     const stream = { getTracks: () => [] } as unknown as MediaStream;
     const service = fakeService(() => Promise.resolve({ stream, stop: vi.fn() }));
     const stop = vi.spyOn(service, 'stop');
     const view = renderCamera(service);
-    fireEvent.click(screen.getByRole('button', { name: 'Cho phép camera' }));
     await screen.findByRole('heading', { name: 'Camera đã sẵn sàng' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Đóng camera' }));
     expect(stop).toHaveBeenCalledOnce();
-    expect(screen.getByRole('button', { name: 'Cho phép camera' })).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Quay lại thư viện' }));
-    expect(stop).toHaveBeenCalledTimes(2);
     expect(view.onBack).toHaveBeenCalledOnce();
 
     view.unmount();
-    expect(stop).toHaveBeenCalledTimes(3);
+    expect(stop).toHaveBeenCalledTimes(2);
   });
 
   it('cancels a pending request on unmount without updating the removed screen', async () => {
@@ -174,62 +182,14 @@ describe('CameraScreen', () => {
     });
     const stop = vi.spyOn(service, 'stop');
     const view = renderCamera(service);
-    fireEvent.click(screen.getByRole('button', { name: 'Cho phép camera' }));
-
-    view.unmount();
 
     await waitFor(() => {
-      expect(operationSignal?.aborted).toBe(true);
+      expect(operationSignal).toBeInstanceOf(AbortSignal);
     });
+    view.unmount();
+
+    expect(operationSignal?.aborted).toBe(true);
     expect(stop).toHaveBeenCalledOnce();
-  });
-
-  it('imports a library image after explicit selection and reports validated dimensions', async () => {
-    const source = new File(['image'], 'receipt.png', { type: 'image/png' });
-    const result = importedImage(source);
-    const importer = vi.fn<ImageImporter>(() => Promise.resolve(result));
-    const onImageImported = vi.fn();
-    render(
-      <CameraScreen
-        service={fakeService(() => Promise.reject(new Error('camera not used')))}
-        headingRef={createRef<HTMLHeadingElement>()}
-        importer={importer}
-        onImageImported={onImageImported}
-        onBack={vi.fn()}
-      />,
-    );
-
-    fireEvent.change(screen.getByLabelText('Chọn ảnh từ thư viện'), {
-      target: { files: [source] },
-    });
-
-    expect(await screen.findByRole('heading', { name: 'Ảnh đã sẵn sàng' })).toBeInTheDocument();
-    expect(screen.getByText('1.200 × 800 px')).toBeInTheDocument();
-    expect(importer).toHaveBeenCalledWith(source, expect.any(AbortSignal));
-    expect(onImageImported).toHaveBeenCalledWith(result);
-  });
-
-  it('shows a safe import error and allows choosing another image', async () => {
-    const importer = vi.fn<ImageImporter>(() =>
-      Promise.reject(new ImageImportError('unsupported-type')),
-    );
-    render(
-      <CameraScreen
-        service={fakeService(() => Promise.reject(new Error('camera not used')))}
-        headingRef={createRef<HTMLHeadingElement>()}
-        importer={importer}
-        onBack={vi.fn()}
-      />,
-    );
-
-    fireEvent.change(screen.getByLabelText('Chọn ảnh từ thư viện'), {
-      target: { files: [new File(['heic'], 'photo.heic', { type: 'image/heic' })] },
-    });
-
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Chỉ hỗ trợ ảnh JPEG, PNG hoặc WebP.',
-    );
-    expect(screen.getByLabelText('Chọn ảnh khác')).toBeInTheDocument();
   });
 
   it('connects Scanic preview detection to the live green document overlay', async () => {
@@ -250,27 +210,15 @@ describe('CameraScreen', () => {
         ],
       }),
     );
-    const engine: ScannerEngine = {
-      lifecycle: { kind: 'uninitialized' },
-      initialize: vi.fn(() => Promise.resolve()),
-      detect,
-      render: vi.fn(() => Promise.reject(new Error('not used'))),
-      dispose: vi.fn(() => Promise.resolve()),
-    };
-    const source: VideoFrameSource = {
-      capture: vi.fn(() => ({ dimensions: { width: 100, height: 100 }, close: vi.fn() })),
-      dispose: vi.fn(),
-    };
+
     renderCamera(
       fakeService(() => Promise.resolve({ stream, stop: vi.fn() })),
       vi.fn(),
       {
-        engineFactory: () => engine,
-        frameSourceFactory: () => source,
+        engineFactory: () => detectionEngine(detect),
+        frameSourceFactory: videoFrameSource,
       },
     );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Cho phép camera' }));
 
     expect(await screen.findByText('Đã định khung tài liệu.')).toBeInTheDocument();
     expect(detect).toHaveBeenCalled();
@@ -297,27 +245,15 @@ describe('CameraScreen', () => {
         ],
       });
     });
-    const engine: ScannerEngine = {
-      lifecycle: { kind: 'uninitialized' },
-      initialize: vi.fn(() => Promise.resolve()),
-      detect,
-      render: vi.fn(() => Promise.reject(new Error('not used'))),
-      dispose: vi.fn(() => Promise.resolve()),
-    };
-    const source: VideoFrameSource = {
-      capture: vi.fn(() => ({ dimensions: { width: 100, height: 100 }, close: vi.fn() })),
-      dispose: vi.fn(),
-    };
+
     renderCamera(
       fakeService(() => Promise.resolve({ stream, stop: vi.fn() })),
       vi.fn(),
       {
-        engineFactory: () => engine,
-        frameSourceFactory: () => source,
+        engineFactory: () => detectionEngine(detect),
+        frameSourceFactory: videoFrameSource,
       },
     );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Cho phép camera' }));
 
     expect(await screen.findByText('Đã định khung tài liệu.')).toBeInTheDocument();
     expect(await screen.findByRole('alert')).toHaveTextContent(
@@ -327,46 +263,42 @@ describe('CameraScreen', () => {
     expect(screen.getByText('Giữ máy ổn định để định khung tài liệu.')).toBeInTheDocument();
   });
 
-  it('captures a high-resolution photo and sends the validated original to the editor', async () => {
+  it('captures a high-resolution photo and queues the original without closing the camera', async () => {
     const stream = {
       getTracks: () => [],
       getVideoTracks: () => [{} as MediaStreamTrack],
     } as unknown as MediaStream;
     const photo = new Blob(['captured'], { type: 'image/jpeg' });
-    const image = importedImage(photo);
     const capture = vi.fn<CameraCapture['capture']>(() => Promise.resolve(photo));
-    const cameraCapture: CameraCapture = { capture };
-    const importer = vi.fn<ImageImporter>(() => Promise.resolve(image));
-    const onImageImported = vi.fn();
-    renderCamera(
-      fakeService(() => Promise.resolve({ stream, stop: vi.fn() })),
-      vi.fn(),
-      {
-        cameraCapture,
-        importer,
-        onImageImported,
-      },
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Cho phép camera' }));
+    const onPhotoCaptured = vi.fn<(source: Blob) => void>();
+    const stop = vi.fn();
+    const service: CameraService = {
+      lifecycle: { kind: 'idle' },
+      start: () => Promise.resolve({ stream, stop: vi.fn() }),
+      stop,
+    };
+
+    renderCamera(service, vi.fn(), {
+      cameraCapture: { capture },
+      onPhotoCaptured,
+    });
     await screen.findByRole('heading', { name: 'Camera đã sẵn sàng' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Chụp tài liệu' }));
 
     await waitFor(() => {
-      expect(onImageImported).toHaveBeenCalledWith({
-        ...image,
-        captureCrop: { kind: 'full-frame' },
-      });
+      expect(onPhotoCaptured).toHaveBeenCalledWith(photo);
     });
     expect(capture).toHaveBeenCalledWith(
       stream,
       expect.any(HTMLVideoElement),
       expect.any(AbortSignal),
     );
-    expect(importer).toHaveBeenCalledWith(photo, expect.any(AbortSignal));
+    expect(screen.getByRole('heading', { name: 'Camera đã sẵn sàng' })).toBeInTheDocument();
+    expect(stop).not.toHaveBeenCalled();
   });
 
-  it('keeps the camera open while captured pages are queued in the background', async () => {
+  it('keeps the camera open for multiple pages and finishes the batch once', async () => {
     const stream = {
       getTracks: () => [],
       getVideoTracks: () => [{} as MediaStreamTrack],
@@ -387,25 +319,21 @@ describe('CameraScreen', () => {
     const onFinishCapture = vi.fn();
     const view = renderCamera(service, vi.fn(), {
       cameraCapture: { capture },
-      importer: vi.fn(() => Promise.reject(new Error('background processor owns import'))),
       onPhotoCaptured,
       onFinishCapture,
       batchStatus: { total: 0, processing: 0, failed: 0 },
     });
-    fireEvent.click(screen.getByRole('button', { name: 'Cho phép camera' }));
     await screen.findByRole('heading', { name: 'Camera đã sẵn sàng' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Chụp tài liệu' }));
     await waitFor(() => {
       expect(onPhotoCaptured).toHaveBeenCalledWith(first);
     });
-    expect(screen.getByRole('heading', { name: 'Camera đã sẵn sàng' })).toBeInTheDocument();
-    expect(stopCamera).not.toHaveBeenCalled();
-
     fireEvent.click(screen.getByRole('button', { name: 'Chụp tài liệu' }));
     await waitFor(() => {
       expect(onPhotoCaptured).toHaveBeenCalledWith(second);
     });
+
     view.rerender(
       <CameraScreen
         service={service}
@@ -424,71 +352,5 @@ describe('CameraScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Hoàn tất chụp 2 trang' }));
     expect(onFinishCapture).toHaveBeenCalledOnce();
     expect(stopCamera).toHaveBeenCalledOnce();
-  });
-
-  it('sends the live document frame as the final crop when the shutter is pressed', async () => {
-    const stream = {
-      getTracks: () => [],
-      getVideoTracks: () => [{} as MediaStreamTrack],
-    } as unknown as MediaStream;
-    const detect = vi.fn<ScannerEngine['detect']>((frame) =>
-      Promise.resolve({
-        kind: 'document',
-        dimensions: frame.dimensions,
-        confidence: 0.92,
-        corners: [
-          { x: 10, y: 10 },
-          { x: 90, y: 10 },
-          { x: 90, y: 90 },
-          { x: 10, y: 90 },
-        ],
-      }),
-    );
-    const engine: ScannerEngine = {
-      lifecycle: { kind: 'uninitialized' },
-      initialize: vi.fn(() => Promise.resolve()),
-      detect,
-      render: vi.fn(() => Promise.reject(new Error('not used'))),
-      dispose: vi.fn(() => Promise.resolve()),
-    };
-    const source: VideoFrameSource = {
-      capture: vi.fn(() => ({ dimensions: { width: 100, height: 100 }, close: vi.fn() })),
-      dispose: vi.fn(),
-    };
-    const photo = new Blob(['captured'], { type: 'image/jpeg' });
-    const image = {
-      original: { blob: photo, dimensions: { width: 200, height: 100 } },
-    };
-    const onImageImported = vi.fn();
-    renderCamera(
-      fakeService(() => Promise.resolve({ stream, stop: vi.fn() })),
-      vi.fn(),
-      {
-        engineFactory: () => engine,
-        frameSourceFactory: () => source,
-        cameraCapture: { capture: vi.fn(() => Promise.resolve(photo)) },
-        importer: vi.fn(() => Promise.resolve(image)),
-        onImageImported,
-      },
-    );
-
-    fireEvent.click(screen.getByRole('button', { name: 'Cho phép camera' }));
-    await screen.findByText('Đã định khung tài liệu.');
-    fireEvent.click(screen.getByRole('button', { name: 'Chụp tài liệu' }));
-
-    await waitFor(() => {
-      expect(onImageImported).toHaveBeenCalledWith({
-        ...image,
-        captureCrop: {
-          kind: 'document',
-          corners: [
-            { x: 60, y: 10 },
-            { x: 140, y: 10 },
-            { x: 140, y: 90 },
-            { x: 60, y: 90 },
-          ],
-        },
-      });
-    });
   });
 });

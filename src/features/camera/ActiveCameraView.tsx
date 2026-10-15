@@ -68,7 +68,7 @@ export function ActiveCameraView({
         <button
           className="camera-icon-button"
           type="button"
-          aria-label="Quay lại thư viện"
+          aria-label="Thoát camera"
           onClick={onExit}
         >
           <span aria-hidden="true">×</span>
@@ -89,7 +89,7 @@ export function ActiveCameraView({
         role="region"
         aria-label="Khung ngắm camera"
       >
-        <div className="camera-frame camera-frame--active camera-frame--fullscreen">
+        <div className="camera-frame camera-frame--fullscreen">
           <video
             ref={videoRef}
             className="camera-preview"

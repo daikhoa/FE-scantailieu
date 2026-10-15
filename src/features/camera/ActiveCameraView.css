@@ -4,6 +4,65 @@ html.camera-active body {
   overscroll-behavior: none;
 }
 
+.camera-launch-screen {
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: max(var(--space-6), env(safe-area-inset-top))
+    max(var(--space-4), env(safe-area-inset-right)) max(var(--space-6), env(safe-area-inset-bottom))
+    max(var(--space-4), env(safe-area-inset-left));
+  background: #050706;
+  color: var(--color-text);
+}
+
+.camera-launch-screen__close {
+  position: absolute;
+  top: max(var(--space-3), env(safe-area-inset-top));
+  left: max(var(--space-3), env(safe-area-inset-left));
+}
+
+.camera-launch-screen__status {
+  width: min(100%, 24rem);
+  display: grid;
+  place-items: center;
+  gap: var(--space-4);
+  text-align: center;
+}
+
+.camera-launch-screen__status h1 {
+  font-size: 1.5rem;
+  letter-spacing: -0.025em;
+}
+
+.camera-launch-screen__status > p:not(.camera-error) {
+  color: var(--color-text-muted);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+.camera-launch-screen__status .camera-error {
+  margin: 0;
+}
+
+.camera-launch-screen__indicator {
+  width: 3rem;
+  height: 3rem;
+  border: 0.1875rem solid rgb(106 235 200 / 25%);
+  border-top-color: var(--color-accent-strong);
+  border-radius: 50%;
+  animation: camera-launch-spin 800ms linear infinite;
+}
+
+@keyframes camera-launch-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+
 .camera-capture-screen {
   position: fixed;
   z-index: 50;
