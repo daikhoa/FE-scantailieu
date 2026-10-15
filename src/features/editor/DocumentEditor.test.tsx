@@ -137,7 +137,7 @@ describe('DocumentEditor', () => {
       },
       rotation: 0,
       dewarp: { mode: 'perspective-only' },
-      filter: { mode: 'ocr-color', presetVersion: 'ocr-color-v4', parameters: {} },
+      filter: { mode: 'ocr-color', presetVersion: 'ocr-color-v5', parameters: {} },
     });
     expect(screen.getByRole('button', { name: 'Tự động' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('Làm nét chữ, giữ màu')).toBeInTheDocument();
@@ -146,6 +146,33 @@ describe('DocumentEditor', () => {
       'blob:preview-2',
     );
     expect(screen.getByRole('status')).toHaveTextContent('Đã áp dụng Tự động');
+  });
+
+  it('uses the shadow-normalized preset version for black-and-white rendering', async () => {
+    const fixture = fakeEngine();
+    render(
+      <DocumentEditor
+        image={image}
+        engineFactory={() => fixture.engine}
+        frameSource={fakeFrameSource()}
+        onBack={vi.fn()}
+        headingRef={null}
+      />,
+    );
+    await waitFor(() => {
+      expect(fixture.renderPage).toHaveBeenCalledOnce();
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Đen trắng' }));
+
+    await waitFor(() => {
+      expect(fixture.renderPage).toHaveBeenCalledTimes(2);
+    });
+    expect(fixture.renderPage.mock.calls[1]?.[0].recipe.filter).toEqual({
+      mode: 'black-and-white',
+      presetVersion: 'black-and-white-v2',
+      parameters: {},
+    });
   });
 
   it('reports processing failure safely and releases the engine and object URLs', async () => {

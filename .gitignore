@@ -6,6 +6,7 @@ playwright-report/
 test-results/
 tests/datasets/
 .benchmark-tmp/
+.rea-analysis/
 
 # Local configuration and secrets
 .env

@@ -52,7 +52,7 @@ describe('document post-capture filters', () => {
     expect(output).toBe(input);
   });
 
-  it('keeps the original exposure while making dark text easier to distinguish', () => {
+  it('normalizes uneven exposure while making dark text easier to distinguish', () => {
     const input = image(33, 33, (x, y) => {
       const paper = 110 + Math.round((x / 32) * 80);
       return x >= 14 && x <= 16 && y >= 6 && y <= 26
@@ -60,17 +60,33 @@ describe('document post-capture filters', () => {
         : [paper, paper, paper, 255];
     });
 
-    const exposureBefore = averageRed(input);
     const paperBefore = rgbaAt(input, 13, 16)[0] ?? 0;
     const textBefore = rgbaAt(input, 15, 16)[0] ?? 0;
     const output = applyDocumentFilter(input, 'ocr-color');
-    const exposureAfter = averageRed(output);
     const paperAfter = rgbaAt(output, 13, 16)[0] ?? 0;
     const textAfter = rgbaAt(output, 15, 16)[0] ?? 0;
 
     expect(output).toBe(input);
-    expect(Math.abs(exposureAfter - exposureBefore)).toBeLessThanOrEqual(3);
+    expect(paperAfter).toBeGreaterThan(paperBefore);
     expect(paperAfter - textAfter).toBeGreaterThan(paperBefore - textBefore);
+  });
+
+  it('flattens smooth page shadows while retaining dark text contrast', () => {
+    const input = image(65, 65, (x, y) => {
+      const paper = 100 + Math.round((x / 64) * 120);
+      return x >= 31 && x <= 33 && y >= 10 && y <= 54
+        ? [45, 45, 45, 255]
+        : [paper, paper, paper, 255];
+    });
+    const shadowDifferenceBefore = (rgbaAt(input, 56, 8)[0] ?? 0) - (rgbaAt(input, 8, 8)[0] ?? 0);
+    const textContrastBefore = (rgbaAt(input, 30, 32)[0] ?? 0) - (rgbaAt(input, 32, 32)[0] ?? 0);
+
+    const output = applyDocumentFilter(input, 'ocr-color');
+    const shadowDifferenceAfter = (rgbaAt(output, 56, 8)[0] ?? 0) - (rgbaAt(output, 8, 8)[0] ?? 0);
+    const textContrastAfter = (rgbaAt(output, 30, 32)[0] ?? 0) - (rgbaAt(output, 32, 32)[0] ?? 0);
+
+    expect(shadowDifferenceAfter).toBeLessThan(shadowDifferenceBefore * 0.6);
+    expect(textContrastAfter).toBeGreaterThan(textContrastBefore);
   });
 
   it('does not turn a uniform midtone page into a bright page', () => {

@@ -70,6 +70,10 @@ function localRadius(width: number, height: number): number {
   return Math.max(2, Math.min(48, Math.round(Math.min(width, height) / 32)));
 }
 
+function illuminationRadius(width: number, height: number): number {
+  return Math.max(6, Math.min(96, Math.round(Math.min(width, height) / 10)));
+}
+
 function createLuminance(input: RgbaBackendInput): Uint8Array<ArrayBuffer> {
   const output = new Uint8Array(input.dimensions.width * input.dimensions.height);
   for (let index = 0, offset = 0; index < output.length; index += 1, offset += 4) {
@@ -83,12 +87,100 @@ function createLuminance(input: RgbaBackendInput): Uint8Array<ArrayBuffer> {
   return output;
 }
 
+function createBoxMean(
+  gray: Uint8Array<ArrayBuffer>,
+  width: number,
+  height: number,
+  radius: number,
+): Uint8Array<ArrayBuffer> {
+  const mean = new Uint8Array(gray.length);
+  const columns = new Uint32Array(width);
+  let firstRow = 0;
+  let lastRow = -1;
+
+  for (let y = 0; y < height; y += 1) {
+    const wantedFirstRow = Math.max(0, y - radius);
+    const wantedLastRow = Math.min(height - 1, y + radius);
+    while (lastRow < wantedLastRow) {
+      lastRow += 1;
+      const rowOffset = lastRow * width;
+      for (let x = 0; x < width; x += 1) {
+        columns[x] = (columns[x] ?? 0) + (gray[rowOffset + x] ?? 0);
+      }
+    }
+    while (firstRow < wantedFirstRow) {
+      const rowOffset = firstRow * width;
+      for (let x = 0; x < width; x += 1) {
+        columns[x] = (columns[x] ?? 0) - (gray[rowOffset + x] ?? 0);
+      }
+      firstRow += 1;
+    }
+
+    const rowCount = lastRow - firstRow + 1;
+    let windowSum = 0;
+    for (let x = 0; x <= Math.min(width - 1, radius); x += 1) windowSum += columns[x] ?? 0;
+    for (let x = 0; x < width; x += 1) {
+      const firstColumn = Math.max(0, x - radius);
+      const lastColumn = Math.min(width - 1, x + radius);
+      mean[y * width + x] = Math.round(windowSum / (rowCount * (lastColumn - firstColumn + 1)));
+      const leavingColumn = x - radius;
+      const enteringColumn = x + radius + 1;
+      if (leavingColumn >= 0) windowSum -= columns[leavingColumn] ?? 0;
+      if (enteringColumn < width) windowSum += columns[enteringColumn] ?? 0;
+    }
+  }
+  return mean;
+}
+
+function histogramPercentile(
+  histogram: Uint32Array<ArrayBuffer>,
+  count: number,
+  ratio: number,
+): number {
+  const target = Math.ceil(count * ratio);
+  let seen = 0;
+  for (let value = 0; value < histogram.length; value += 1) {
+    seen += histogram[value] ?? 0;
+    if (seen >= target) return value;
+  }
+  return 255;
+}
+
+function normalizeIllumination(input: RgbaBackendInput, gray: Uint8Array<ArrayBuffer>): void {
+  const { width, height } = input.dimensions;
+  const background = createBoxMean(gray, width, height, illuminationRadius(width, height));
+  const histogram = new Uint32Array(256);
+  for (const value of background) histogram[value] = (histogram[value] ?? 0) + 1;
+  const darkBackground = histogramPercentile(histogram, background.length, 0.1);
+  const paperLevel = histogramPercentile(histogram, background.length, 0.9);
+
+  // Only correct a measurable illumination gradient. This leaves intentionally tinted or
+  // uniformly exposed pages unchanged and avoids amplifying sensor noise in very dark regions.
+  if (paperLevel - darkBackground < 18) return;
+  for (let index = 0, offset = 0; index < gray.length; index += 1, offset += 4) {
+    const estimatedLight = Math.max(background[index] ?? 0, 32);
+    const requestedGain = clamp(paperLevel / estimatedLight, 1, 2.25);
+    const maximumChannel = Math.max(
+      input.pixels[offset] ?? 0,
+      input.pixels[offset + 1] ?? 0,
+      input.pixels[offset + 2] ?? 0,
+    );
+    const gain = maximumChannel === 0 ? 1 : Math.min(requestedGain, 248 / maximumChannel);
+    if (gain <= 1) continue;
+    input.pixels[offset] = clampByte((input.pixels[offset] ?? 0) * gain);
+    input.pixels[offset + 1] = clampByte((input.pixels[offset + 1] ?? 0) * gain);
+    input.pixels[offset + 2] = clampByte((input.pixels[offset + 2] ?? 0) * gain);
+    gray[index] = clampByte((gray[index] ?? 0) * gain);
+  }
+}
+
 function filterPixels(
   input: RgbaBackendInput,
   mode: Exclude<FilterMode, 'original'>,
 ): Uint8ClampedArray<ArrayBuffer> {
   const { width, height } = input.dimensions;
   const gray = createLuminance(input);
+  normalizeIllumination(input, gray);
   const output = input.pixels;
   const columns = new Uint32Array(width);
   const radius = localRadius(width, height);
