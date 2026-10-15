@@ -2,57 +2,12 @@ import type { DocumentCorners, ImageDimensions } from '../../domain/document';
 import type { RgbaBackendInput } from '../engines/scanic-backend-contract';
 import { ScannerEngineError } from '../engines/scanner-engine-error';
 import { isValidImageDimensions } from '../geometry/coordinates';
-import { getOutputDimensions, validateQuad } from '../geometry/quad';
+import { getOutputDimensions, getProjectiveTransform, validateQuad } from '../geometry/quad';
 import { MAX_WORKING_IMAGE_PIXELS, MAX_WORKING_IMAGE_SIDE } from '../working-image-limits';
 
 export interface RgbaImage {
   readonly dimensions: ImageDimensions;
   readonly pixels: Uint8ClampedArray<ArrayBuffer>;
-}
-
-interface ProjectiveTransform {
-  readonly a: number;
-  readonly b: number;
-  readonly c: number;
-  readonly d: number;
-  readonly e: number;
-  readonly f: number;
-  readonly g: number;
-  readonly h: number;
-}
-
-function projectiveTransform([topLeft, topRight, bottomRight, bottomLeft]: DocumentCorners) {
-  const deltaX1 = topRight.x - bottomRight.x;
-  const deltaX2 = bottomLeft.x - bottomRight.x;
-  const deltaY1 = topRight.y - bottomRight.y;
-  const deltaY2 = bottomLeft.y - bottomRight.y;
-  const sumX = topLeft.x - topRight.x + bottomRight.x - bottomLeft.x;
-  const sumY = topLeft.y - topRight.y + bottomRight.y - bottomLeft.y;
-  let g = 0;
-  let h = 0;
-  if (sumX !== 0 || sumY !== 0) {
-    const determinant = deltaX1 * deltaY2 - deltaX2 * deltaY1;
-    const scale = Math.max(Math.abs(deltaX1 * deltaY2), Math.abs(deltaX2 * deltaY1), 1);
-    if (Math.abs(determinant) <= scale * Number.EPSILON * 16) {
-      throw new ScannerEngineError('invalid-input');
-    }
-    g = (sumX * deltaY2 - deltaX2 * sumY) / determinant;
-    h = (deltaX1 * sumY - sumX * deltaY1) / determinant;
-  }
-  const transform: ProjectiveTransform = {
-    a: topRight.x - topLeft.x + g * topRight.x,
-    b: bottomLeft.x - topLeft.x + h * bottomLeft.x,
-    c: topLeft.x,
-    d: topRight.y - topLeft.y + g * topRight.y,
-    e: bottomLeft.y - topLeft.y + h * bottomLeft.y,
-    f: topLeft.y,
-    g,
-    h,
-  };
-  if (Object.values(transform).some((value) => !Number.isFinite(value))) {
-    throw new ScannerEngineError('invalid-input');
-  }
-  return transform;
 }
 
 function pixelOffset(width: number, x: number, y: number): number {
@@ -123,7 +78,7 @@ function validateInput(input: RgbaBackendInput, corners: DocumentCorners): Image
   ) {
     throw new ScannerEngineError('invalid-input');
   }
-  const output = getOutputDimensions(corners);
+  const output = getOutputDimensions(corners, input.dimensions);
   if (
     Math.max(output.width, output.height) > MAX_WORKING_IMAGE_SIDE ||
     output.width * output.height > MAX_WORKING_IMAGE_PIXELS
@@ -136,7 +91,8 @@ function validateInput(input: RgbaBackendInput, corners: DocumentCorners): Image
 /** Worker-safe inverse projective warp with bilinear, premultiplied-alpha sampling. */
 export function warpPerspectiveRgba(input: RgbaBackendInput, corners: DocumentCorners): RgbaImage {
   const dimensions = validateInput(input, corners);
-  const transform = projectiveTransform(corners);
+  const transform = getProjectiveTransform(corners);
+  if (transform === null) throw new ScannerEngineError('invalid-input');
   const pixels = new Uint8ClampedArray(dimensions.width * dimensions.height * 4);
   for (let y = 0; y < dimensions.height; y += 1) {
     const v = (y + 0.5) / dimensions.height;

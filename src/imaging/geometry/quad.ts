@@ -15,6 +15,17 @@ export type QuadValidation =
         | 'area-too-small';
     };
 
+export interface ProjectiveTransform {
+  readonly a: number;
+  readonly b: number;
+  readonly c: number;
+  readonly d: number;
+  readonly e: number;
+  readonly f: number;
+  readonly g: number;
+  readonly h: number;
+}
+
 type QuadFailure = Extract<QuadValidation, { valid: false }>['reason'];
 
 /** A local relative error bound preserves thin quads in very long images. */
@@ -151,15 +162,126 @@ export function validateQuad(
   return area < minimumArea ? { valid: false, reason: 'area-too-small' } : { valid: true, area };
 }
 
-/** Sampling size from opposite document edges; this does not infer physical paper dimensions. */
-export function getOutputDimensions(corners: DocumentCorners): ImageDimensions {
+// Browser camera capture does not expose reliable intrinsics across iOS and Android. The centered
+// main-camera prior handles one-point perspective; two-axis evidence is blended in continuously.
+const FALLBACK_FOCAL_LENGTH_RATIO = 0.75;
+const MIN_PLAUSIBLE_FOCAL_LENGTH_RATIO = 0.45;
+const MAX_PLAUSIBLE_FOCAL_LENGTH_RATIO = 1.8;
+const FOCAL_INFERENCE_PROJECTIVE_SCALE = 1e-6;
+const FOCAL_OUTLIER_DECAY = 4;
+
+function edgeLength(a: Point, b: Point): number {
+  return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
+export function getProjectiveTransform([
+  topLeft,
+  topRight,
+  bottomRight,
+  bottomLeft,
+]: DocumentCorners): ProjectiveTransform | null {
+  const deltaX1 = topRight.x - bottomRight.x;
+  const deltaX2 = bottomLeft.x - bottomRight.x;
+  const deltaY1 = topRight.y - bottomRight.y;
+  const deltaY2 = bottomLeft.y - bottomRight.y;
+  const sumX = topLeft.x - topRight.x + bottomRight.x - bottomLeft.x;
+  const sumY = topLeft.y - topRight.y + bottomRight.y - bottomLeft.y;
+  let g = 0;
+  let h = 0;
+  if (sumX !== 0 || sumY !== 0) {
+    const determinant = deltaX1 * deltaY2 - deltaX2 * deltaY1;
+    const scale = Math.max(Math.abs(deltaX1 * deltaY2), Math.abs(deltaX2 * deltaY1), 1);
+    if (Math.abs(determinant) <= scale * Number.EPSILON * 16) return null;
+    g = (sumX * deltaY2 - deltaX2 * sumY) / determinant;
+    h = (deltaX1 * sumY - sumX * deltaY1) / determinant;
+  }
+  const transform = {
+    a: topRight.x - topLeft.x + g * topRight.x,
+    b: bottomLeft.x - topLeft.x + h * bottomLeft.x,
+    c: topLeft.x,
+    d: topRight.y - topLeft.y + g * topRight.y,
+    e: bottomLeft.y - topLeft.y + h * bottomLeft.y,
+    f: topLeft.y,
+    g,
+    h,
+  };
+  return Object.values(transform).every(Number.isFinite) ? transform : null;
+}
+
+function perspectiveAspectRatio(corners: DocumentCorners, source: ImageDimensions): number | null {
+  const transform = getProjectiveTransform(corners);
+  if (transform === null) return null;
+  // Web capture does not provide the principal point, so use the image center as the optical center.
+  const centerX = source.width / 2;
+  const centerY = source.height / 2;
+  const centeredFirstX = transform.a - centerX * transform.g;
+  const centeredFirstY = transform.d - centerY * transform.g;
+  const centeredSecondX = transform.b - centerX * transform.h;
+  const centeredSecondY = transform.e - centerY * transform.h;
+  const shortSide = Math.min(source.width, source.height);
+  let focalLength = shortSide * FALLBACK_FOCAL_LENGTH_RATIO;
+  const projectiveProduct = transform.g * transform.h;
+  if (projectiveProduct !== 0) {
+    const focalLengthSquared =
+      -(centeredFirstX * centeredSecondX + centeredFirstY * centeredSecondY) / projectiveProduct;
+    if (focalLengthSquared > 0 && Number.isFinite(focalLengthSquared)) {
+      const candidate = Math.sqrt(focalLengthSquared);
+      const minimum = shortSide * MIN_PLAUSIBLE_FOCAL_LENGTH_RATIO;
+      const maximum = shortSide * MAX_PLAUSIBLE_FOCAL_LENGTH_RATIO;
+      const boundedCandidate = Math.min(maximum, Math.max(minimum, candidate));
+      // Detector noise can move a nearly one-axis quad across an arbitrary threshold. A smooth
+      // confidence keeps the output ratio continuous while still trusting strong two-axis evidence.
+      const projectiveStrength = Math.abs(projectiveProduct);
+      const projectiveConfidence =
+        projectiveStrength ** 2 / (projectiveStrength ** 2 + FOCAL_INFERENCE_PROJECTIVE_SCALE ** 2);
+      const outlierDistance = Math.abs(Math.log(candidate / boundedCandidate));
+      const plausibilityConfidence = Math.exp(-FOCAL_OUTLIER_DECAY * outlierDistance);
+      const confidence = projectiveConfidence * plausibilityConfidence;
+      focalLength += (boundedCandidate - focalLength) * confidence;
+    }
+  }
+
+  const firstLength = Math.hypot(
+    centeredFirstX / focalLength,
+    centeredFirstY / focalLength,
+    transform.g,
+  );
+  const secondLength = Math.hypot(
+    centeredSecondX / focalLength,
+    centeredSecondY / focalLength,
+    transform.h,
+  );
+  const ratio = firstLength / secondLength;
+  return ratio > 0 && Number.isFinite(ratio) ? ratio : null;
+}
+
+/** Uses camera perspective when source dimensions are known; otherwise preserves legacy edge sizing. */
+export function getOutputDimensions(
+  corners: DocumentCorners,
+  source?: ImageDimensions,
+): ImageDimensions {
   if (geometryFailure(corners) !== null)
     throw new RangeError('Output requires a nondegenerate convex quad.');
   const [a, b, c, d] = corners;
-  const dimensions = {
-    width: Math.ceil(Math.max(Math.hypot(b.x - a.x, b.y - a.y), Math.hypot(c.x - d.x, c.y - d.y))),
-    height: Math.ceil(Math.max(Math.hypot(d.x - a.x, d.y - a.y), Math.hypot(c.x - b.x, c.y - b.y))),
+  const edgeWidth = Math.max(edgeLength(a, b), edgeLength(d, c));
+  const edgeHeight = Math.max(edgeLength(a, d), edgeLength(b, c));
+  let dimensions: ImageDimensions = {
+    width: Math.ceil(edgeWidth),
+    height: Math.ceil(edgeHeight),
   };
+  if (source !== undefined) {
+    if (!isValidImageDimensions(source) || !validateQuad(corners, source, 0).valid) {
+      throw new RangeError('Output source dimensions must contain the document quad.');
+    }
+    const ratio = perspectiveAspectRatio(corners, source);
+    if (ratio !== null) {
+      const pixelBudget = edgeWidth * edgeHeight;
+      dimensions = {
+        width: Math.ceil(Math.sqrt(pixelBudget * ratio)),
+        height: Math.ceil(Math.sqrt(pixelBudget / ratio)),
+      };
+    }
+  }
   if (!isValidImageDimensions(dimensions))
     throw new RangeError('Output dimensions exceed numeric precision.');
   return dimensions;

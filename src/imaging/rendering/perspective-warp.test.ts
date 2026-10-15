@@ -49,7 +49,7 @@ describe('warpPerspectiveRgba', () => {
     ]);
   });
 
-  it('uses opposite edge lengths instead of forcing a paper ratio', () => {
+  it('uses a perspective-derived ratio instead of forcing a paper preset', () => {
     const result = warpPerspectiveRgba(
       { dimensions: { width: 8, height: 6 }, pixels: opaqueGrid(8, 6) },
       [
@@ -60,8 +60,8 @@ describe('warpPerspectiveRgba', () => {
       ],
     );
 
-    expect(result.dimensions).toEqual({ width: 7, height: 6 });
-    expect(result.pixels).toHaveLength(7 * 6 * 4);
+    expect(result.dimensions).toEqual({ width: 7, height: 5 });
+    expect(result.pixels).toHaveLength(7 * 5 * 4);
   });
 
   it('rejects invalid geometry and mismatched pixel buffers', () => {

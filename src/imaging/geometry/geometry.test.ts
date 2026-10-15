@@ -367,6 +367,109 @@ describe('geometry clockwise rotation', () => {
 });
 
 describe('geometry output dimensions and numeric stability', () => {
+  it.each([
+    [
+      'two-axis perspective',
+      [
+        { x: 454.51188840589055, y: 616.188712342546 },
+        { x: 820.3308854530028, y: 696.7431982945684 },
+        { x: 766.9729117295013, y: 1010.9554215298283 },
+        { x: 447.7622384255749, y: 871.3453510008347 },
+      ],
+    ],
+    [
+      'one-axis perspective',
+      [
+        { x: 361.94494241422393, y: 679.7640389181026 },
+        { x: 838.055057585776, y: 679.7640389181026 },
+        { x: 787.8604353719704, y: 894.883848405841 },
+        { x: 412.1395646280296, y: 894.883848405841 },
+      ],
+    ],
+  ] as const)('recovers a 1.4 document ratio under %s', (_name, corners) => {
+    const dimensions = getOutputDimensions(corners, { width: 1200, height: 1600 });
+
+    expect(dimensions.width / dimensions.height).toBeCloseTo(1.4, 2);
+  });
+
+  it('keeps the recovered physical ratio when the source rotates', () => {
+    const corners: DocumentCorners = [
+      { x: 454.51188840589055, y: 616.188712342546 },
+      { x: 820.3308854530028, y: 696.7431982945684 },
+      { x: 766.9729117295013, y: 1010.9554215298283 },
+      { x: 447.7622384255749, y: 871.3453510008347 },
+    ];
+    const source = { width: 1200, height: 1600 };
+
+    const dimensions = getOutputDimensions(
+      rotateCorners(corners, source, 90),
+      rotateDimensions(source, 90),
+    );
+
+    expect(dimensions.height / dimensions.width).toBeCloseTo(1.4, 2);
+  });
+
+  it('keeps the focal-bound estimate stable across source rotation', () => {
+    const source = { width: 1200, height: 1600 };
+    const corners: DocumentCorners = [
+      { x: 500.73640943268913, y: 766.6457768778296 },
+      { x: 549.8976492729107, y: 674.6221773955273 },
+      { x: 734.1023535746443, y: 845.0606289453515 },
+      { x: 635.5454911156584, y: 888.9502431485373 },
+    ];
+
+    const original = getOutputDimensions(corners, source);
+    const rotated = getOutputDimensions(
+      rotateCorners(corners, source, 90),
+      rotateDimensions(source, 90),
+    );
+
+    expect(rotated).toEqual({ width: original.height, height: original.width });
+  });
+
+  it('does not jump between focal inference and the camera prior under subpixel noise', () => {
+    const source = { width: 1200, height: 1600 };
+    const almostOneAxis: readonly [DocumentCorners, DocumentCorners] = [
+      [
+        { x: 520.701668852238, y: 725.9433393820376 },
+        { x: 702.0097904766981, y: 704.7330991495138 },
+        { x: 702.0098100705087, y: 895.2668962227923 },
+        { x: 520.701690930074, y: 874.0566578215012 },
+      ],
+      [
+        { x: 520.7016522938598, y: 725.9433372846993 },
+        { x: 702.0097757813388, y: 704.7330956787531 },
+        { x: 702.0098247658655, y: 895.266892752012 },
+        { x: 520.70170748845, y: 874.0566557241475 },
+      ],
+    ];
+
+    const [first, second] = almostOneAxis.map((quad) => getOutputDimensions(quad, source));
+    if (first === undefined || second === undefined) throw new Error('Missing output dimensions');
+
+    expect(Math.abs(first.width - second.width)).toBeLessThanOrEqual(1);
+    expect(Math.abs(first.height - second.height)).toBeLessThanOrEqual(1);
+  });
+
+  it('uses a rotation-stable camera prior when one-axis perspective cannot reveal focal length', () => {
+    const source = { width: 1200, height: 1600 };
+    const corners: DocumentCorners = [
+      { x: 528.6315119020405, y: 733.3490067022401 },
+      { x: 691.8088202462433, y: 714.259791317023 },
+      { x: 691.8088202462433, y: 885.740208682977 },
+      { x: 528.6315119020405, y: 866.6509932977599 },
+    ];
+
+    const original = getOutputDimensions(corners, source);
+    const rotated = getOutputDimensions(
+      rotateCorners(corners, source, 90),
+      rotateDimensions(source, 90),
+    );
+
+    expect(original).toEqual({ width: 229, height: 124 });
+    expect(rotated).toEqual({ width: original.height, height: original.width });
+  });
+
   it('uses the longest opposite edges and rounds up fractional edge lengths', () => {
     const trapezoid: DocumentCorners = [
       { x: 0, y: 0 },
