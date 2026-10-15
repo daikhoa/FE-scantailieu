@@ -2,6 +2,7 @@ import type { RefObject } from 'react';
 
 import type { LiveDetectionResult } from '../scanner/detection-scheduler';
 import { DocumentOverlay } from '../scanner/DocumentOverlay';
+import './ActiveCameraView.css';
 
 interface CaptureBatchStatus {
   readonly total: number;
