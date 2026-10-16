@@ -51,7 +51,8 @@ Tên dự án và bản test là **clonecamscanner**. Đây là tên nội bộ/
 
 ### 3.3. Chụp và quyết định cắt
 
-- Ưu tiên API chụp ảnh độ phân giải cao khi được hỗ trợ; có fallback lấy frame chất lượng cao từ video.
+- Chế độ zero-lag ưu tiên luồng preview độ phân giải cao để không phụ thuộc độ trễ của still-photo API.
+- Với chế độ chụp tức thời, pixel của frame preview độ phân giải cao phải được sao chép đồng bộ ngay trong lượt bấm và trước lần `await` đầu tiên; mã hóa được phép hoàn tất bất đồng bộ nhưng chuyển động sau khi bấm không được làm thay đổi ảnh đã chốt.
 - Sau khi chụp, chạy lại phát hiện trên ảnh gốc hoặc ảnh được downscale có ánh xạ tọa độ chính xác về ảnh gốc.
 - Không dùng trực tiếp bốn góc từ preview để cắt ảnh cuối.
 - Nếu độ tin cậy không đạt ngưỡng, giữ nguyên toàn khung ảnh và không âm thầm crop sai.
