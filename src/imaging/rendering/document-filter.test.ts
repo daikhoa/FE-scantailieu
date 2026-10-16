@@ -85,8 +85,32 @@ describe('document post-capture filters', () => {
     const shadowDifferenceAfter = (rgbaAt(output, 56, 8)[0] ?? 0) - (rgbaAt(output, 8, 8)[0] ?? 0);
     const textContrastAfter = (rgbaAt(output, 30, 32)[0] ?? 0) - (rgbaAt(output, 32, 32)[0] ?? 0);
 
-    expect(shadowDifferenceAfter).toBeLessThan(shadowDifferenceBefore * 0.6);
+    expect(shadowDifferenceAfter).toBeLessThan(shadowDifferenceBefore * 0.4);
     expect(textContrastAfter).toBeGreaterThan(textContrastBefore);
+  });
+
+  it('does not oversharpen an already high-detail document pattern', () => {
+    const input = image(65, 65, (x) => (x % 2 === 0 ? [20, 20, 20, 255] : [240, 240, 240, 255]));
+
+    const output = applyDocumentFilter(input, 'ocr-color');
+
+    expect(rgbaAt(output, 30, 32)).toEqual([20, 20, 20, 255]);
+    expect(rgbaAt(output, 31, 32)).toEqual([240, 240, 240, 255]);
+  });
+
+  it('does not over-whiten shadowed paper beside dense dark text', () => {
+    const input = image(129, 65, (x) => {
+      const paper = 160 + Math.round((x / 128) * 60);
+      return x < 64 && x % 2 === 0 ? [20, 20, 20, 255] : [paper, paper, paper, 255];
+    });
+    const paperBefore = rgbaAt(input, 25, 32)[0] ?? 0;
+
+    const output = applyDocumentFilter(input, 'ocr-color');
+    const correctedPaper = rgbaAt(output, 25, 32)[0] ?? 0;
+
+    expect(correctedPaper).toBeGreaterThan(paperBefore);
+    expect(correctedPaper).toBeLessThanOrEqual(230);
+    expect(rgbaAt(output, 24, 32)[0]).toBeLessThan(80);
   });
 
   it('does not turn a uniform midtone page into a bright page', () => {
@@ -146,6 +170,20 @@ describe('document post-capture filters', () => {
     expect(rgbaAt(output, 4, 4)).toEqual([0, 0, 0, 200]);
     expect(rgbaAt(output, 4, 3)).toEqual([255, 255, 255, 200]);
     expect(new Set(output.pixels.filter((_, index) => index % 4 !== 3))).toEqual(new Set([0, 255]));
+  });
+
+  it('retains faint text inside a locally high-contrast form region', () => {
+    const input = image(65, 65, (x, y) => {
+      const formTone = (x + y) % 2 === 0 ? 100 : 250;
+      return x === 32 && y >= 30 && y <= 34
+        ? [155, 155, 155, 255]
+        : [formTone, formTone, formTone, 255];
+    });
+
+    const output = applyDocumentFilter(input, 'black-and-white');
+
+    expect(rgbaAt(output, 32, 32)).toEqual([0, 0, 0, 255]);
+    expect(rgbaAt(output, 33, 32)).toEqual([255, 255, 255, 255]);
   });
 
   it('rejects malformed buffers and unknown runtime filter values', () => {

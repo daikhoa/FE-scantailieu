@@ -83,6 +83,27 @@ This is the most important quality difference from a simple contrast filter: Cam
 
 `ImageEnhance::deblur_process` in `libimageprocessor.so` uses OpenCV color conversion, split/resize/merge and an inference network. Local decompile: `../.rea-analysis/libimageprocessor-deblur_process.c`.
 
+### 6. Model inventory and storage evidence
+
+The enhancement path uses several specialist models rather than one universal model. Targeted static strings and decompilation identify the following roles:
+
+- `document_radar` and `classifyShadowTypeBitmap`: classify document/content or shadow type before choosing an enhancement branch;
+- `dewarp_net_2` and `curve_line_model`: estimate curved-page geometry;
+- `deshadow` and `EvaluationIllumination`: estimate the illumination field and remove it;
+- `deblur_net`: restore blurred text/edges;
+- `init_moire_model`, `moire_extract`, `init_finger_model`, and `remove_finger`: optional artifact-specific cleanup;
+- `scan`, `scan_old`, `enhance_color`, and `sharpEnhance`: produce the final scan appearance after model inference.
+
+The model/data payloads are embedded in native ELF libraries, not shipped as browser-ready ONNX files:
+
+| Library | `.rodata` size | REA evidence |
+| --- | ---: | --- |
+| `libmagicenhancer.so` | `0x4cf89e` (~4.81 MiB) | `ev_e636c08e834ea5748904e40bfc568050507562acd5034d9f3467c4be9d2c072d` |
+| `libpagescanner.so` | `0x861f75` (~8.38 MiB) | `ev_7d1dd77ee5534ffcaefd1823fa554c08b58135ffd0b8ffad40f03f490f68b9f2` |
+| `libimageprocessor.so` | `0x6e5d` | `ev_662f0905abf23e5994ea56ca09bf6e7be45cef448b4f136d3529e301a1ae63d1` |
+
+`libmagicenhancer.so` also contains MNN/ncnn inference paths and `model_cipher::decrypt`/AES-related strings. This does not prove every model blob is encrypted, but it does prove that treating `.rodata` as a normal ONNX file would be incorrect. The binaries are Android ARM64 ELF libraries with JNI, OpenCV, MNN and ncnn dependencies, so a browser cannot load or execute them directly.
+
 ## Independent web implementation
 
 The web app already uses Scanic/Scanic ML for corners and has a sound inverse-homography warp with premultiplied-alpha bilinear sampling. Its geometry goes beyond a naive max-edge rule by estimating the perspective aspect ratio from a camera prior.
@@ -97,6 +118,10 @@ The first clean-room enhancement implemented from the observed principle is an i
 
 It intentionally does not use CamScanner's model, weights, constants, or recovered implementation. Uniform pages bypass normalization. A regression test verifies that a synthetic smooth shadow is reduced by at least 40% while dark-text contrast increases.
 
+The black-and-white path now uses a Sauvola threshold derived from the local mean and standard deviation instead of the previous fixed `localMean * 0.85` rule. The implementation reuses the existing sliding window, adds only a width-sized squared-sum buffer in black-and-white mode, and has a regression test for retaining faint glyphs in a locally high-contrast form region.
+
+The OCR-color path now has an on-device quality router. It samples at most 65,536 pixels to classify illumination range, highlight clipping, color content and edge detail. Uneven pages use a 4×4 to 16×16 percentile illumination grid with bilinear interpolation, which is resistant to dense dark text; already high-detail pages skip the local sharpen pass. This mirrors the APK's route-first architecture without claiming to reproduce its learned classifier.
+
 ## Recommended next increments
 
 1. Build a licensed evaluation set containing shadows, folds, colored receipts, glossy pages, handwriting and low light. Report background-uniformity, OCR character/word error rate, clipping and runtime separately.
@@ -105,8 +130,55 @@ It intentionally does not use CamScanner's model, weights, constants, or recover
 4. Add curved-page dewarp as a separate optional model. The current `auto` dewarp contract honestly falls back to perspective-only; CamScanner contains dedicated `dewarp_net`/curve-line functionality that the web app does not yet reproduce.
 5. Preserve the original full-resolution capture, perform detection on a smaller frame, and render from the original. Treat 3000 pixels as an export-quality target only when memory limits and source resolution permit it; upscaling cannot recreate missing detail.
 
+## Replacement plan for production-quality web restoration
+
+The web application can reproduce the same _architecture_ without importing the Android `.so` files. The highest-quality practical design is a hybrid: the browser handles capture and interactive corners; a GPU-capable restoration service handles the expensive neural stages; the current browser filter remains the offline fallback.
+
+| Stage | APK behavior observed | Current web behavior | Recommended independent component |
+| --- | --- | --- | --- |
+| Capture and corners | native detector and tracked crop state | Scanic ML plus classical fallback | Keep Scanic; always render from the original full-resolution frame |
+| Route by content/defect | `document_radar`, shadow classification and mode router | one user-selected filter path | Add a bounded quality analyzer first; later replace/augment it with a small owned classifier |
+| Flat perspective | `transformCrop`/`transformCut` | inverse-homography warp | Keep the current implementation |
+| Curved-page dewarp | `dewarp_net_2`, curve-line model | unavailable; perspective-only fallback | UVDoc or PaddleOCR's UVDoc module |
+| Shadow/lighting | learned light field, then per-channel division | large-radius box-mean light field | DocRes `deshadowing`, or a small owned low-resolution illumination-map U-Net |
+| Blur restoration | `deblur_net` | no learned deblur | DocRes `deblurring`, only when blur score warrants it |
+| Document appearance | `scan`/`scan_old`/`enhance_color`, then sharpen | fixed OCR-color/grayscale adjustment | DocRes `appearance` or `end2end`, followed by conservative high-resolution finishing |
+| Binarization | integral/adaptive threshold paths | Sauvola local mean/standard-deviation threshold | Keep the new Sauvola implementation; tune it only against paired document/OCR benchmarks |
+| Moiré/finger cleanup | separate specialist models | unavailable | Add later as opt-in specialist stages; do not block the core restoration pipeline |
+
+### Recommended execution order
+
+1. Capture the largest real camera frame available and retain it unchanged.
+2. Detect corners on a downscaled preview and map the points back to original-image coordinates.
+3. Perspective-correct from the original pixels. If curvature is detected, run UVDoc before appearance enhancement.
+4. Calculate blur, shadow-gradient, clipping, noise, color-content and photo-likelihood scores. These scores decide which expensive stages run.
+5. Run restoration at a model-safe resolution. For illumination models, upscale the predicted smooth light field and apply it to the full-resolution image; do not blindly upscale a small restored bitmap.
+6. Apply a final edge-aware text enhancement at full resolution, preserving highlights and color ratios.
+7. Produce separate OCR-color, grayscale and adaptive black-and-white outputs. Preserve the original and transformation metadata so the user can change mode without recapturing.
+
+### Candidate open implementations
+
+- [DocRes](https://github.com/ZZZHANG-jx/DocRes) is the official CVPR 2024 implementation for dewarping, deshadowing, appearance enhancement, deblurring, binarization and end-to-end document restoration. The repository code is MIT-licensed. Its PyTorch/Restormer implementation is better suited to a GPU service first; checkpoint redistribution terms must still be verified separately from the code license.
+- [UVDoc](https://github.com/tanguymagne/UVDoc) predicts a 3D document grid and a 2D unwarping grid for curved documents. Its repository is MIT-licensed. [PaddleOCR's UVDoc module](https://github.com/PaddlePaddle/PaddleOCR/blob/main/docs/version3.x/module_usage/text_image_unwarping.md) is another maintained integration route.
+- [ONNX Runtime Web](https://onnxruntime.ai/docs/tutorials/web/) can run a converted compact model with WebGPU where supported and WASM as fallback. The official [WebGPU support page](https://onnxruntime.ai/docs/tutorials/web/ep-webgpu.html) shows why a pure-client deployment still needs device/browser fallbacks and benchmarking.
+
+For this project, the recommended first neural prototype is server-side DocRes plus UVDoc. The official DocRes inference builds a six-channel Restormer (`dim=48`) and uses a 1024×1024 deshadow prompt plus separately downloaded checkpoints. PaddleOCR currently lists UVDoc at about 30.3 MB. Those facts make a lazy GPU service the lower-risk first integration than adding both raw models to the mobile initial bundle. A pure-browser model should be considered only after the quality benchmark is green, then distilled/quantized to an ONNX model small enough for mobile.
+
+### Acceptance gate
+
+“As good as the APK” must be measured on the same captured originals. The comparison set should include flat pages, curved book pages, hard shadows, folds, glossy paper, colored receipts, low light, blur and photo-heavy documents. At minimum record:
+
+- OCR character and word error rates;
+- background uniformity without erasing faint text;
+- highlight/shadow clipping percentages;
+- line straightness after dewarp;
+- color error on photo/colored-document regions;
+- output resolution and runtime separately from image quality.
+
+Without paired outputs from the APK and web for the same inputs, static analysis can establish the pipeline and model roles, but cannot honestly establish visual parity.
+
 ## Limits
 
 - The Java application layer is protected and was not dynamically unpacked because execution was explicitly out of scope.
 - Native decompilation recovers control/data flow but not original names for every internal helper, comments, training data or exact high-level intent.
-- The embedded neural model weights are proprietary application assets. This project should train or license its own models rather than extract or redistribute them.
+- The embedded model blobs are technically not browser-ready assets: they are inside ARM64 ELF libraries, use native inference runtimes, and may pass through application-specific cipher/loader code. Exact extraction and conversion were not established. If those exact weights are ever recovered, their provenance and redistribution rights should be verified separately; the recovered processing behavior is already sufficient to guide an independent implementation.

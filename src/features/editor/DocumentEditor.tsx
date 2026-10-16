@@ -49,8 +49,8 @@ function recipe(crop: CropRegion, mode: FilterMode): EditRecipe {
     mode === 'original'
       ? 'original-v1'
       : mode === 'black-and-white'
-        ? 'black-and-white-v2'
-        : `${mode}-v5`;
+        ? 'black-and-white-v4'
+        : `${mode}-v6`;
   return {
     version: 1,
     crop,

@@ -3,6 +3,15 @@
 Nguồn yêu cầu: [đặc tả đã duyệt](../docs/specs/mobile-document-scanner.md)  
 Kế hoạch chi tiết: [tasks/plan.md](./plan.md)
 
+## Document restoration v2
+
+- [x] R1 — Quality analyzer và router on-device
+- [x] R2 — Robust illumination map và filter integration
+- [ ] R3 — Neural restoration provider + DocRes/UVDoc spike
+- [ ] R4 — Paired quality/PDF/device qualification
+
+Progress R1–R2 (2026-10-16): analyzer lấy mẫu tối đa 65.536 pixel để phân loại gradient ánh sáng, highlight clipping, nội dung màu và độ chi tiết; OCR-color bỏ local sharpen khi ảnh đã sắc. Trường sáng dùng lưới percentile 4×4 đến 16×16 nội suy bilinear nên không còn bị vùng chữ đậm kéo thấp như box mean. Regression synthetic khóa giảm bóng >60%, giữ/tăng tương phản chữ, không đẩy nền cạnh chữ đậm lên 248, bảo vệ vùng màu và Sauvola B/W. Preset tăng `ocr-color/grayscale-v6`, `black-and-white-v4`; engine tăng `filter-v6`. Neural chưa được tích hợp: nguồn chính thức cho thấy DocRes dùng Restormer PyTorch + checkpoint riêng và UVDoc khoảng 30,3 MB, nên R3 sẽ spike backend GPU trước client ONNX.
+
 ## Phase A — Nền tảng
 
 - [x] Task 1A — Bootstrap dependency manifest có khóa phiên bản

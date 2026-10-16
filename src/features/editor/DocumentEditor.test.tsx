@@ -137,7 +137,7 @@ describe('DocumentEditor', () => {
       },
       rotation: 0,
       dewarp: { mode: 'perspective-only' },
-      filter: { mode: 'ocr-color', presetVersion: 'ocr-color-v5', parameters: {} },
+      filter: { mode: 'ocr-color', presetVersion: 'ocr-color-v6', parameters: {} },
     });
     expect(screen.getByRole('button', { name: 'Tự động' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('Làm nét chữ, giữ màu')).toBeInTheDocument();
@@ -170,7 +170,7 @@ describe('DocumentEditor', () => {
     });
     expect(fixture.renderPage.mock.calls[1]?.[0].recipe.filter).toEqual({
       mode: 'black-and-white',
-      presetVersion: 'black-and-white-v2',
+      presetVersion: 'black-and-white-v4',
       parameters: {},
     });
   });

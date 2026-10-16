@@ -688,3 +688,35 @@ Không còn câu hỏi chặn việc bootstrap sau khi kế hoạch được duy
 - Cung cấp hoặc phê duyệt bộ ảnh công ty đã ẩn danh/có quyền dùng để quality gate; không mặc định dùng ảnh cá nhân đã gửi làm fixture repo.
 - Cho phép kiểm thử trên ma trận thiết bị thật và cấp cách triển khai HTTPS tạm thời khi tới Task 22.
 
+## Bổ sung 2026-10-16 — Document restoration v2
+
+Nguồn: `docs/specs/document-restoration-v2.md`.
+
+### R1: Quality analyzer và router on-device
+
+**Mô tả:** thêm phân tích bounded-sample cho shadow gradient, clipping, detail và color-content; quyết định stage nào cần chạy mà không cấp phát full-frame buffer mới.
+
+**Nghiệm thu:** kết quả deterministic, validated input, không làm thay đổi ảnh; test khóa trang đều, bóng mượt, highlight cháy và vùng màu.
+
+**File:** `src/imaging/analysis/document-quality.ts`, test cùng module.
+
+### R2: Robust illumination map
+
+**Mô tả:** thay box mean dễ nhiễm chữ bằng estimator nền theo percentile/downsample có nội suy; router chỉ bật correction khi gradient đủ lớn.
+
+**Nghiệm thu:** bóng tổng hợp giảm ít nhất 60%, tương phản chữ không giảm, trang đều và màu bão hòa an toàn; worker/main-thread dùng cùng implementation.
+
+**File:** `src/imaging/rendering/document-filter.ts`, test cùng module, preset/engine version.
+
+### R3: Neural restoration provider
+
+**Mô tả:** contract-first cho DocRes/UVDoc với timeout/cancel/fallback, sau đó spike backend GPU và ONNX/WebGPU riêng biệt.
+
+**Nghiệm thu:** không upload khi chưa cấu hình/cho phép; model identity/version trong recipe outcome; candidate vượt paired quality gate trước default-on.
+
+### R4: Paired quality/PDF qualification
+
+**Mô tả:** benchmark cùng input/output, xác nhận PDF nhúng final variant và chạy device matrix.
+
+**Nghiệm thu:** CER/WER, background uniformity, clipping, color error, dewarp line error và latency được ghi; không tuyên bố parity nếu thiếu dữ liệu.
+

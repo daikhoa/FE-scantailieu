@@ -1,4 +1,5 @@
 import type { FilterMode } from '../../domain/document';
+import { analyzeDocumentQuality, type DocumentQualityProfile } from '../analysis/document-quality';
 import type { RgbaBackendInput } from '../engines/scanic-backend-contract';
 import { ScannerEngineError } from '../engines/scanner-engine-error';
 import { isValidImageDimensions } from '../geometry/coordinates';
@@ -55,7 +56,13 @@ function edgeDetail(
   return source - (left + right + top + bottom) / 4;
 }
 
-function enhancementAdjustment(source: number, localMean: number, edge: number): number {
+function enhancementAdjustment(
+  source: number,
+  localMean: number,
+  edge: number,
+  strength: number,
+): number {
+  if (strength === 0) return 0;
   const localDeviation = source - localMean;
   const darkDetailContrast = localDeviation < -5 ? (localDeviation + 5) * 0.34 : 0;
   const darkEdgeMagnitude = Math.max(0, -edge - 3);
@@ -63,15 +70,17 @@ function enhancementAdjustment(source: number, localMean: number, edge: number):
 
   // OCR benefits most from darker glyph edges. Keeping the adjustment non-positive avoids
   // the bright halos and clipped paper highlights produced by symmetric unsharp masking.
-  return clamp(darkDetailContrast + sharpenedDarkEdge, -46, 0);
+  return clamp((darkDetailContrast + sharpenedDarkEdge) * strength, -46, 0);
 }
 
 function localRadius(width: number, height: number): number {
   return Math.max(2, Math.min(48, Math.round(Math.min(width, height) / 32)));
 }
 
-function illuminationRadius(width: number, height: number): number {
-  return Math.max(6, Math.min(96, Math.round(Math.min(width, height) / 10)));
+function sauvolaThreshold(localMean: number, localStandardDeviation: number): number {
+  const sensitivity = 0.18;
+  const standardDeviationRange = 128;
+  return localMean * (1 + sensitivity * (localStandardDeviation / standardDeviationRange - 1));
 }
 
 function createLuminance(input: RgbaBackendInput): Uint8Array<ArrayBuffer> {
@@ -87,49 +96,10 @@ function createLuminance(input: RgbaBackendInput): Uint8Array<ArrayBuffer> {
   return output;
 }
 
-function createBoxMean(
-  gray: Uint8Array<ArrayBuffer>,
-  width: number,
-  height: number,
-  radius: number,
-): Uint8Array<ArrayBuffer> {
-  const mean = new Uint8Array(gray.length);
-  const columns = new Uint32Array(width);
-  let firstRow = 0;
-  let lastRow = -1;
-
-  for (let y = 0; y < height; y += 1) {
-    const wantedFirstRow = Math.max(0, y - radius);
-    const wantedLastRow = Math.min(height - 1, y + radius);
-    while (lastRow < wantedLastRow) {
-      lastRow += 1;
-      const rowOffset = lastRow * width;
-      for (let x = 0; x < width; x += 1) {
-        columns[x] = (columns[x] ?? 0) + (gray[rowOffset + x] ?? 0);
-      }
-    }
-    while (firstRow < wantedFirstRow) {
-      const rowOffset = firstRow * width;
-      for (let x = 0; x < width; x += 1) {
-        columns[x] = (columns[x] ?? 0) - (gray[rowOffset + x] ?? 0);
-      }
-      firstRow += 1;
-    }
-
-    const rowCount = lastRow - firstRow + 1;
-    let windowSum = 0;
-    for (let x = 0; x <= Math.min(width - 1, radius); x += 1) windowSum += columns[x] ?? 0;
-    for (let x = 0; x < width; x += 1) {
-      const firstColumn = Math.max(0, x - radius);
-      const lastColumn = Math.min(width - 1, x + radius);
-      mean[y * width + x] = Math.round(windowSum / (rowCount * (lastColumn - firstColumn + 1)));
-      const leavingColumn = x - radius;
-      const enteringColumn = x + radius + 1;
-      if (leavingColumn >= 0) windowSum -= columns[leavingColumn] ?? 0;
-      if (enteringColumn < width) windowSum += columns[enteringColumn] ?? 0;
-    }
-  }
-  return mean;
+interface IlluminationGrid {
+  readonly columns: number;
+  readonly rows: number;
+  readonly levels: Uint8Array<ArrayBuffer>;
 }
 
 function histogramPercentile(
@@ -146,31 +116,93 @@ function histogramPercentile(
   return 255;
 }
 
-function normalizeIllumination(input: RgbaBackendInput, gray: Uint8Array<ArrayBuffer>): void {
-  const { width, height } = input.dimensions;
-  const background = createBoxMean(gray, width, height, illuminationRadius(width, height));
-  const histogram = new Uint32Array(256);
-  for (const value of background) histogram[value] = (histogram[value] ?? 0) + 1;
-  const darkBackground = histogramPercentile(histogram, background.length, 0.1);
-  const paperLevel = histogramPercentile(histogram, background.length, 0.9);
+function createIlluminationGrid(
+  gray: Uint8Array<ArrayBuffer>,
+  width: number,
+  height: number,
+): IlluminationGrid {
+  const columns = Math.max(1, Math.min(16, width, Math.max(4, Math.round(width / 64))));
+  const rows = Math.max(1, Math.min(16, height, Math.max(4, Math.round(height / 64))));
+  const cellCount = columns * rows;
+  const histograms = new Uint32Array(cellCount * 256);
+  const counts = new Uint32Array(cellCount);
+  const levels = new Uint8Array(cellCount);
 
-  // Only correct a measurable illumination gradient. This leaves intentionally tinted or
-  // uniformly exposed pages unchanged and avoids amplifying sensor noise in very dark regions.
-  if (paperLevel - darkBackground < 18) return;
-  for (let index = 0, offset = 0; index < gray.length; index += 1, offset += 4) {
-    const estimatedLight = Math.max(background[index] ?? 0, 32);
-    const requestedGain = clamp(paperLevel / estimatedLight, 1, 2.25);
-    const maximumChannel = Math.max(
-      input.pixels[offset] ?? 0,
-      input.pixels[offset + 1] ?? 0,
-      input.pixels[offset + 2] ?? 0,
+  for (let y = 0; y < height; y += 1) {
+    const gridY = Math.min(rows - 1, Math.floor((y * rows) / height));
+    for (let x = 0; x < width; x += 1) {
+      const gridX = Math.min(columns - 1, Math.floor((x * columns) / width));
+      const cell = gridY * columns + gridX;
+      const value = gray[y * width + x] ?? 0;
+      histograms[cell * 256 + value] = (histograms[cell * 256 + value] ?? 0) + 1;
+      counts[cell] = (counts[cell] ?? 0) + 1;
+    }
+  }
+
+  for (let cell = 0; cell < cellCount; cell += 1) {
+    const start = cell * 256;
+    levels[cell] = histogramPercentile(
+      histograms.subarray(start, start + 256),
+      counts[cell] ?? 0,
+      0.85,
     );
-    const gain = maximumChannel === 0 ? 1 : Math.min(requestedGain, 248 / maximumChannel);
-    if (gain <= 1) continue;
-    input.pixels[offset] = clampByte((input.pixels[offset] ?? 0) * gain);
-    input.pixels[offset + 1] = clampByte((input.pixels[offset + 1] ?? 0) * gain);
-    input.pixels[offset + 2] = clampByte((input.pixels[offset + 2] ?? 0) * gain);
-    gray[index] = clampByte((gray[index] ?? 0) * gain);
+  }
+  return { columns, rows, levels };
+}
+
+function interpolateIllumination(
+  grid: IlluminationGrid,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+): number {
+  const gridX = ((x + 0.5) * grid.columns) / width - 0.5;
+  const gridY = ((y + 0.5) * grid.rows) / height - 0.5;
+  const left = Math.max(0, Math.min(grid.columns - 1, Math.floor(gridX)));
+  const top = Math.max(0, Math.min(grid.rows - 1, Math.floor(gridY)));
+  const right = Math.min(grid.columns - 1, left + 1);
+  const bottom = Math.min(grid.rows - 1, top + 1);
+  const horizontal = clamp(gridX - left, 0, 1);
+  const vertical = clamp(gridY - top, 0, 1);
+  const topValue =
+    (grid.levels[top * grid.columns + left] ?? 0) * (1 - horizontal) +
+    (grid.levels[top * grid.columns + right] ?? 0) * horizontal;
+  const bottomValue =
+    (grid.levels[bottom * grid.columns + left] ?? 0) * (1 - horizontal) +
+    (grid.levels[bottom * grid.columns + right] ?? 0) * horizontal;
+  return topValue * (1 - vertical) + bottomValue * vertical;
+}
+
+function normalizeIllumination(
+  input: RgbaBackendInput,
+  gray: Uint8Array<ArrayBuffer>,
+  profile: DocumentQualityProfile,
+): void {
+  if (!profile.stages.normalizeIllumination) return;
+  const { width, height } = input.dimensions;
+  const illumination = createIlluminationGrid(gray, width, height);
+  const paperLevel = profile.illumination.brightLevel;
+  const maximumGain = profile.stages.protectColor ? 1.8 : 2.25;
+  for (let y = 0, index = 0, offset = 0; y < height; y += 1) {
+    for (let x = 0; x < width; x += 1, index += 1, offset += 4) {
+      const estimatedLight = Math.max(
+        interpolateIllumination(illumination, x, y, width, height),
+        32,
+      );
+      const requestedGain = clamp(paperLevel / estimatedLight, 1, maximumGain);
+      const maximumChannel = Math.max(
+        input.pixels[offset] ?? 0,
+        input.pixels[offset + 1] ?? 0,
+        input.pixels[offset + 2] ?? 0,
+      );
+      const gain = maximumChannel === 0 ? 1 : Math.min(requestedGain, 248 / maximumChannel);
+      if (gain <= 1) continue;
+      input.pixels[offset] = clampByte((input.pixels[offset] ?? 0) * gain);
+      input.pixels[offset + 1] = clampByte((input.pixels[offset + 1] ?? 0) * gain);
+      input.pixels[offset + 2] = clampByte((input.pixels[offset + 2] ?? 0) * gain);
+      gray[index] = clampByte((gray[index] ?? 0) * gain);
+    }
   }
 }
 
@@ -179,11 +211,16 @@ function filterPixels(
   mode: Exclude<FilterMode, 'original'>,
 ): Uint8ClampedArray<ArrayBuffer> {
   const { width, height } = input.dimensions;
+  const profile = analyzeDocumentQuality(input);
   const gray = createLuminance(input);
-  normalizeIllumination(input, gray);
+  normalizeIllumination(input, gray, profile);
   const output = input.pixels;
+  if (mode === 'ocr-color' && profile.stages.sharpen === 'none') return output;
   const columns = new Uint32Array(width);
+  const squaredColumns = mode === 'black-and-white' ? new Float64Array(width) : null;
   const radius = localRadius(width, height);
+  const sharpeningStrength =
+    profile.stages.sharpen === 'none' ? 0 : profile.stages.sharpen === 'gentle' ? 0.55 : 1;
   let firstRow = 0;
   let lastRow = -1;
 
@@ -194,36 +231,50 @@ function filterPixels(
       lastRow += 1;
       const rowOffset = lastRow * width;
       for (let x = 0; x < width; x += 1) {
-        columns[x] = (columns[x] ?? 0) + (gray[rowOffset + x] ?? 0);
+        const value = gray[rowOffset + x] ?? 0;
+        columns[x] = (columns[x] ?? 0) + value;
+        if (squaredColumns) squaredColumns[x] = (squaredColumns[x] ?? 0) + value * value;
       }
     }
     while (firstRow < wantedFirstRow) {
       const rowOffset = firstRow * width;
       for (let x = 0; x < width; x += 1) {
-        columns[x] = (columns[x] ?? 0) - (gray[rowOffset + x] ?? 0);
+        const value = gray[rowOffset + x] ?? 0;
+        columns[x] = (columns[x] ?? 0) - value;
+        if (squaredColumns) squaredColumns[x] = (squaredColumns[x] ?? 0) - value * value;
       }
       firstRow += 1;
     }
 
     const rowCount = lastRow - firstRow + 1;
     let windowSum = 0;
+    let squaredWindowSum = 0;
     for (let x = 0; x <= Math.min(width - 1, radius); x += 1) windowSum += columns[x] ?? 0;
+    if (squaredColumns) {
+      for (let x = 0; x <= Math.min(width - 1, radius); x += 1) {
+        squaredWindowSum += squaredColumns[x] ?? 0;
+      }
+    }
 
     for (let x = 0; x < width; x += 1) {
       const firstColumn = Math.max(0, x - radius);
       const lastColumn = Math.min(width - 1, x + radius);
-      const mean = windowSum / (rowCount * (lastColumn - firstColumn + 1));
+      const sampleCount = rowCount * (lastColumn - firstColumn + 1);
+      const mean = windowSum / sampleCount;
       const pixelIndex = y * width + x;
       const offset = pixelIndex * 4;
       const sourceLuminance = gray[pixelIndex] ?? 0;
       let targetLuminance: number;
-      if (mode === 'black-and-white') {
-        targetLuminance = sourceLuminance < mean * 0.85 ? 0 : 255;
+      if (squaredColumns) {
+        const variance = Math.max(0, squaredWindowSum / sampleCount - mean * mean);
+        const threshold = sauvolaThreshold(mean, Math.sqrt(variance));
+        targetLuminance = sourceLuminance <= threshold ? 0 : 255;
       } else {
         const adjustment = enhancementAdjustment(
           sourceLuminance,
           mean,
           edgeDetail(gray, width, height, x, y, sourceLuminance),
+          sharpeningStrength,
         );
         targetLuminance = clampByte(sourceLuminance + adjustment);
       }
@@ -251,6 +302,10 @@ function filterPixels(
       const enteringColumn = x + radius + 1;
       if (leavingColumn >= 0) windowSum -= columns[leavingColumn] ?? 0;
       if (enteringColumn < width) windowSum += columns[enteringColumn] ?? 0;
+      if (squaredColumns) {
+        if (leavingColumn >= 0) squaredWindowSum -= squaredColumns[leavingColumn] ?? 0;
+        if (enteringColumn < width) squaredWindowSum += squaredColumns[enteringColumn] ?? 0;
+      }
     }
   }
   return output;
