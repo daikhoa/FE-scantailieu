@@ -1,14 +1,22 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import random
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Sequence
 
 from app.classifier import LABELS
 from training.manifest import ManifestRecord, load_manifest
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as source:
+        for chunk in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def binary_metrics(
@@ -74,6 +82,20 @@ def _training_dependencies() -> tuple[Any, Any, Any, Any]:
             "Training dependencies are not installed. Install the server 'training' extra first."
         ) from error
     return torch, nn, (DataLoader, Dataset), (models, transforms)
+
+
+def export_onnx(torch: Any, model: Any, output_path: Path) -> None:
+    """Export through the stable legacy path without Unicode console output on Windows."""
+    torch.onnx.export(
+        model,
+        torch.zeros(1, 3, 224, 224),
+        output_path,
+        input_names=["image"],
+        output_names=["logits"],
+        dynamic_axes={"image": {0: "batch"}, "logits": {0: "batch"}},
+        opset_version=18,
+        dynamo=False,
+    )
 
 
 def train(args: argparse.Namespace) -> None:
@@ -183,6 +205,12 @@ def train(args: argparse.Namespace) -> None:
         validation_loss, metrics = evaluate(validation_loader)
         macro_f1 = float(metrics["macro"]["f1"])
         history.append({"epoch": epoch, "validation_loss": validation_loss, "metrics": metrics})
+        print(
+            json.dumps(
+                {"epoch": epoch, "validation_loss": validation_loss, "validation_macro_f1": macro_f1}
+            ),
+            flush=True,
+        )
         if macro_f1 > best_f1:
             best_f1 = macro_f1
             epochs_without_improvement = 0
@@ -204,15 +232,7 @@ def train(args: argparse.Namespace) -> None:
 
     model.eval().cpu()
     onnx_path = args.output_dir / "classifier.onnx"
-    torch.onnx.export(
-        model,
-        torch.zeros(1, 3, 224, 224),
-        onnx_path,
-        input_names=["image"],
-        output_names=["logits"],
-        dynamic_axes={"image": {0: "batch"}, "logits": {0: "batch"}},
-        opset_version=18,
-    )
+    export_onnx(torch, model, onnx_path)
     metadata = {
         "model_id": args.model_id,
         "model_version": args.model_version,
@@ -229,9 +249,7 @@ def train(args: argparse.Namespace) -> None:
         "best_validation_macro_f1": best_f1,
         "test_metrics": test_metrics,
         "history": history,
-        "manifest_records": [
-            {**asdict(record), "path": str(record.path)} for record in records
-        ],
+        "manifest": {"sha256": sha256_file(args.manifest), "record_count": len(records)},
     }
     (args.output_dir / "metadata.json").write_text(
         json.dumps(metadata, indent=2, ensure_ascii=False), encoding="utf-8"

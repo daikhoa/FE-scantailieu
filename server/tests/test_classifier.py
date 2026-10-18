@@ -1,10 +1,12 @@
 from pathlib import Path
+import sys
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 from PIL import Image
 
-from app.classifier import LABELS, ModelUnavailableError, OnnxDocumentClassifier
+from app.classifier import LABELS, ModelUnavailableError, OnnxDocumentClassifier, _default_session_factory
 
 
 class FakeInput:
@@ -69,4 +71,27 @@ def test_invalid_output_shape_is_rejected(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="output shape"):
         classifier.classify(Image.new("RGB", (32, 32), "white"))
+
+
+def test_default_session_preloads_cuda_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[object] = []
+    expected_session = object()
+    fake_runtime = SimpleNamespace(
+        preload_dlls=lambda: calls.append("preload"),
+        InferenceSession=lambda path, providers: (
+            calls.append((path, providers)),
+            expected_session,
+        )[1],
+    )
+    monkeypatch.setitem(sys.modules, "onnxruntime", fake_runtime)
+
+    session = _default_session_factory(
+        "classifier.onnx", ("CUDAExecutionProvider", "CPUExecutionProvider")
+    )
+
+    assert session is expected_session
+    assert calls == [
+        "preload",
+        ("classifier.onnx", ["CUDAExecutionProvider", "CPUExecutionProvider"]),
+    ]
 

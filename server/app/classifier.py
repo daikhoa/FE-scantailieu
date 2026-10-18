@@ -57,6 +57,8 @@ def _default_session_factory(path: str, providers: Sequence[str]) -> InferenceSe
     except ImportError as error:
         raise ModelUnavailableError("ONNX Runtime is not installed") from error
     try:
+        if "CUDAExecutionProvider" in providers:
+            ort.preload_dlls()
         return ort.InferenceSession(path, providers=list(providers))
     except Exception as error:
         raise ModelUnavailableError("The classifier model could not be loaded") from error

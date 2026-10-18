@@ -9,9 +9,12 @@ request bodies.
 
 - The API, routing policy, ONNX classifier adapter and browser fallback contract are implemented.
 - A provenance-checked multi-label fine-tuning/export pipeline is implemented in `training/`.
-- No validated classifier checkpoint or DocRes/UVDoc provider is committed. Without one, the API
-  intentionally returns `503 model_unavailable`/`restorer_unavailable` rather than pretending that
-  neural restoration ran.
+- A reproducible CORD-derived bootstrap dataset and training path are documented in
+  [`training/DATASET.md`](training/DATASET.md). Generated datasets and checkpoints remain local and
+  are not committed.
+- No production-validated classifier checkpoint or DocRes/UVDoc provider is committed. Without
+  one, the API intentionally returns `503 model_unavailable`/`restorer_unavailable` rather than
+  pretending that neural restoration ran.
 - The existing on-device pipeline remains the production-safe result until paired quality tests pass.
 
 ## Run the API
@@ -56,6 +59,18 @@ Install the optional training stack, then fine-tune MobileNetV3 Small and export
   --dataset-root C:\dataset `
   --output-dir .\models\document-defects-v1 `
   --model-version document-defects-v1
+```
+
+To reproduce the checked bootstrap corpus before running that command:
+
+```powershell
+.venv\Scripts\python -m training.download_classifier_sources `
+  --output-root .\datasets\sources\cord-v2
+.venv\Scripts\python -m training.build_classifier_dataset `
+  --source-manifest .\datasets\sources\cord-v2\sources.jsonl `
+  --source-root .\datasets\sources\cord-v2 `
+  --output-root .\datasets\classifier-v2 `
+  --seed 2026
 ```
 
 The command emits `classifier.pt`, `classifier.onnx`, and `metadata.json` containing split counts,
