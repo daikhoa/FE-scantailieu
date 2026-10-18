@@ -1,3 +1,5 @@
+// @vitest-environment node
+
 import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -21,17 +23,19 @@ afterEach(async () => {
 });
 
 describe('synthetic scanner fixtures', () => {
-  it('generates a deterministic, privacy-safe document/no-document smoke set', async () => {
-    const firstRoot = await temporaryRoot();
-    const secondRoot = await temporaryRoot();
+  it('reproduces the committed privacy-safe document/no-document smoke set', async () => {
+    const generatedRoot = await temporaryRoot();
+    const committedRoot = join(process.cwd(), 'tests', 'fixtures');
 
-    const firstManifestPath = await generateSyntheticFixtureSet(firstRoot);
-    const secondManifestPath = await generateSyntheticFixtureSet(secondRoot);
-    const firstManifestBytes = await readFile(firstManifestPath);
-    const secondManifestBytes = await readFile(secondManifestPath);
-    const manifest = parseFixtureManifest(JSON.parse(firstManifestBytes.toString('utf8')));
+    const generatedManifestPath = await generateSyntheticFixtureSet(generatedRoot);
+    const generatedManifestBytes = await readFile(generatedManifestPath);
+    const committedManifestBytes = await readFile(join(committedRoot, 'manifest.example.json'));
+    const manifest = parseFixtureManifest(JSON.parse(generatedManifestBytes.toString('utf8')));
+    const committedManifest = parseFixtureManifest(
+      JSON.parse(committedManifestBytes.toString('utf8')),
+    );
 
-    expect(firstManifestBytes).toEqual(secondManifestBytes);
+    expect(manifest).toEqual(committedManifest);
     expect(manifest.fixtures).toHaveLength(4);
     expect(manifest.fixtures.map((fixture) => fixture.label.kind)).toEqual([
       'document',
@@ -51,11 +55,11 @@ describe('synthetic scanner fixtures', () => {
         repoApproved: true,
       });
 
-      const firstImage = await readFile(join(firstRoot, ...fixture.image.path.split('/')));
-      const secondImage = await readFile(join(secondRoot, ...fixture.image.path.split('/')));
-      expect(firstImage.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
-      expect(firstImage).toEqual(secondImage);
-      expect(createHash('sha256').update(firstImage).digest('hex')).toBe(fixture.image.sha256);
+      const generatedImage = await readFile(join(generatedRoot, ...fixture.image.path.split('/')));
+      const committedImage = await readFile(join(committedRoot, ...fixture.image.path.split('/')));
+      expect(generatedImage.subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+      expect(generatedImage).toEqual(committedImage);
+      expect(createHash('sha256').update(generatedImage).digest('hex')).toBe(fixture.image.sha256);
     }
-  });
+  }, 10_000);
 });

@@ -39,7 +39,7 @@ function fakeEngine() {
     render: renderPage,
     dispose,
   };
-  return { engine, detect, renderPage, dispose };
+  return { engine, initialize, detect, renderPage, dispose };
 }
 
 const image = {
@@ -58,13 +58,15 @@ function fakeFrameSource(): ImageAssetFrameSource {
 }
 
 let revokeObjectUrl = vi.fn();
+let createObjectUrl = vi.fn<(blob: Blob) => string>();
 
 beforeEach(() => {
   let nextUrl = 0;
   revokeObjectUrl = vi.fn();
+  createObjectUrl = vi.fn(() => `blob:preview-${String(++nextUrl)}`);
   vi.stubGlobal('URL', {
     ...URL,
-    createObjectURL: vi.fn(() => `blob:preview-${String(++nextUrl)}`),
+    createObjectURL: createObjectUrl,
     revokeObjectURL: revokeObjectUrl,
   });
 });
@@ -74,6 +76,55 @@ afterEach(() => {
 });
 
 describe('DocumentEditor', () => {
+  it('shows an already processed batch page immediately without rendering it again', async () => {
+    const fixture = fakeEngine();
+    const initialRecipe = {
+      version: 1,
+      crop: { kind: 'full-frame' as const },
+      rotation: 0 as const,
+      dewarp: { mode: 'perspective-only' as const },
+      filter: {
+        mode: 'grayscale' as const,
+        presetVersion: 'grayscale-v7',
+        parameters: {},
+      },
+    };
+    const initialVariant = {
+      recipeKey: 'already-processed',
+      engineVersion: 'test-engine',
+      image: {
+        blob: new Blob(['processed'], { type: 'image/png' }),
+        dimensions: image.original.dimensions,
+      },
+      dewarp: { kind: 'not-requested' as const },
+    };
+
+    render(
+      <DocumentEditor
+        image={image}
+        initialPage={{ recipe: initialRecipe, variant: initialVariant }}
+        engineFactory={() => fixture.engine}
+        frameSource={fakeFrameSource()}
+        onBack={vi.fn()}
+        headingRef={null}
+      />,
+    );
+
+    expect(screen.getByRole('img', { name: 'Bản xem trước tài liệu' })).toHaveAttribute(
+      'src',
+      'blob:preview-1',
+    );
+    expect(screen.getByRole('button', { name: 'Xám' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('status')).toHaveTextContent('Đã áp dụng Xám');
+    const initialize = fixture.initialize;
+    await waitFor(() => {
+      expect(initialize.mock.calls).toHaveLength(1);
+    });
+    expect(fixture.detect).not.toHaveBeenCalled();
+    expect(fixture.renderPage).not.toHaveBeenCalled();
+    expect(createObjectUrl).toHaveBeenCalledOnce();
+  });
+
   it('keeps the crop frozen from the live guide at the moment of capture', async () => {
     const fixture = fakeEngine();
     const captureCrop = {
@@ -137,7 +188,7 @@ describe('DocumentEditor', () => {
       },
       rotation: 0,
       dewarp: { mode: 'perspective-only' },
-      filter: { mode: 'ocr-color', presetVersion: 'ocr-color-v6', parameters: {} },
+      filter: { mode: 'ocr-color', presetVersion: 'ocr-color-v7', parameters: {} },
     });
     expect(screen.getByRole('button', { name: 'Tự động' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByText('Làm nét chữ, giữ màu')).toBeInTheDocument();
@@ -170,7 +221,7 @@ describe('DocumentEditor', () => {
     });
     expect(fixture.renderPage.mock.calls[1]?.[0].recipe.filter).toEqual({
       mode: 'black-and-white',
-      presetVersion: 'black-and-white-v4',
+      presetVersion: 'black-and-white-v5',
       parameters: {},
     });
   });

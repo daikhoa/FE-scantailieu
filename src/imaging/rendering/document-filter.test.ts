@@ -109,16 +109,33 @@ describe('document post-capture filters', () => {
     const correctedPaper = rgbaAt(output, 25, 32)[0] ?? 0;
 
     expect(correctedPaper).toBeGreaterThan(paperBefore);
-    expect(correctedPaper).toBeLessThanOrEqual(230);
+    expect(correctedPaper).toBeLessThanOrEqual(238);
     expect(rgbaAt(output, 24, 32)[0]).toBeLessThan(80);
   });
 
-  it('does not turn a uniform midtone page into a bright page', () => {
-    const input = image(17, 17, () => [168, 168, 168, 255]);
+  it('whitens a uniformly underexposed neutral page without washing out dark text', () => {
+    const input = image(17, 17, (x) => (x === 8 ? [70, 70, 70, 255] : [168, 168, 168, 255]));
+    const contrastBefore = 168 - 70;
+
+    const output = applyDocumentFilter(input, 'ocr-color');
+    const paper = rgbaAt(output, 2, 8)[0] ?? 0;
+    const text = rgbaAt(output, 8, 8)[0] ?? 0;
+
+    expect(paper).toBeGreaterThanOrEqual(232);
+    expect(paper).toBeLessThanOrEqual(242);
+    expect(text).toBeLessThan(100);
+    expect(paper - text).toBeGreaterThan(contrastBefore);
+  });
+
+  it('never darkens an existing white highlight while restoring dim paper', () => {
+    const input = image(64, 64, (x, y) =>
+      x === 0 && y === 0 ? [255, 255, 255, 255] : [210, 210, 210, 255],
+    );
 
     const output = applyDocumentFilter(input, 'ocr-color');
 
-    expect(rgbaAt(output, 8, 8)).toEqual([168, 168, 168, 255]);
+    expect(rgbaAt(output, 0, 0)).toEqual([255, 255, 255, 255]);
+    expect(rgbaAt(output, 32, 32)[0]).toBeGreaterThan(210);
   });
 
   it('protects bright paper from clipping while increasing text edge contrast', () => {

@@ -1,0 +1,10 @@
+fastapi==0.142.2
+numpy==2.5.4
+onnxruntime-gpu==1.31.0
+Pillow==13.0.0
+python-multipart==0.0.32
+uvicorn[standard]==0.53.0
+
+[test]
+httpx==0.28.1
+pytest==9.1.1

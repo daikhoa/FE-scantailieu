@@ -23,6 +23,12 @@ export type ScanBatchEvent =
       readonly id: string;
       readonly source: Blob;
     }
+  | {
+      readonly type: 'replaced';
+      readonly id: string;
+      readonly replacementId: string;
+      readonly source: Blob;
+    }
   | { readonly type: 'started'; readonly id: string }
   | { readonly type: 'ready'; readonly id: string; readonly page: ProcessedScanPage }
   | { readonly type: 'updated'; readonly id: string; readonly page: ProcessedScanPage }
@@ -56,6 +62,18 @@ export function scanBatchReducer(state: ScanBatchState, event: ScanBatchEvent): 
           },
         ],
       };
+    case 'replaced':
+      if (
+        event.replacementId.length === 0 ||
+        state.pages.some((page) => page.id === event.replacementId)
+      ) {
+        return state;
+      }
+      return updatePage(state, event.id, () => ({
+        id: event.replacementId,
+        source: event.source,
+        kind: 'queued',
+      }));
     case 'started':
       return updatePage(state, event.id, (page) =>
         page.kind === 'queued'

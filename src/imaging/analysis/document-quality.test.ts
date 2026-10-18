@@ -16,12 +16,13 @@ function image(
 }
 
 describe('document quality analyzer', () => {
-  it('leaves a uniformly exposed neutral page on the cheap path', () => {
+  it('routes a dim uniformly exposed neutral page through paper-tone restoration', () => {
     const profile = analyzeDocumentQuality(image(64, 64, () => [210, 210, 210, 255]));
 
     expect(profile.illumination.kind).toBe('uniform');
     expect(profile.color.kind).toBe('mostly-neutral');
     expect(profile.stages.normalizeIllumination).toBe(false);
+    expect(profile.stages.normalizePaperTone).toBe(true);
     expect(profile.stages.protectColor).toBe(false);
   });
 
@@ -46,6 +47,7 @@ describe('document quality analyzer', () => {
     expect(profile.color.kind).toBe('color-rich');
     expect(profile.color.saturatedRatio).toBeGreaterThan(0.5);
     expect(profile.stages.protectColor).toBe(true);
+    expect(profile.stages.normalizePaperTone).toBe(false);
     expect(profile.stages.sharpen).not.toBe('strong');
   });
 

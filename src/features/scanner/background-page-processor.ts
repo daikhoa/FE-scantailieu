@@ -3,6 +3,8 @@ import type { ScannerEngine } from '../../imaging/contracts/scanner-engine';
 import { createScanicEngine } from '../../imaging/engines/scanic-classical-engine';
 import { detectDocumentCrop } from '../editor/detect-document-crop';
 import { importImage, type ImageImporter } from '../camera/image-import';
+import { mapLiveDetectionToCrop } from '../camera/live-capture-crop';
+import type { LiveDetectionResult } from './detection-scheduler';
 import {
   createImageAssetFrameSource,
   type ImageAssetFrameSource,
@@ -13,10 +15,34 @@ export interface ProcessedScanPage {
   readonly crop: CropRegion;
   readonly recipe: EditRecipe;
   readonly variant: RenderedVariant;
+  readonly restoration?: PageRestorationState;
 }
 
+export type PageRestorationState =
+  | { readonly kind: 'local' }
+  | { readonly kind: 'processing' }
+  | {
+      readonly kind: 'classified-local';
+      readonly classifierModel: string;
+    }
+  | {
+      readonly kind: 'applied';
+      readonly stages: readonly string[];
+      readonly classifierModel: string;
+      readonly provider: string;
+    }
+  | {
+      readonly kind: 'fallback';
+      readonly reason: 'unavailable' | 'timeout' | 'failed';
+    };
+
 export interface BackgroundPageProcessor {
-  enqueue(source: Blob, signal: AbortSignal, onStart?: () => void): Promise<ProcessedScanPage>;
+  enqueue(
+    source: Blob,
+    signal: AbortSignal,
+    onStart?: () => void,
+    liveDetection?: LiveDetectionResult | null,
+  ): Promise<ProcessedScanPage>;
   dispose(): Promise<void>;
 }
 
@@ -32,7 +58,7 @@ export function createDefaultPageRecipe(crop: CropRegion): EditRecipe {
     crop,
     rotation: 0,
     dewarp: { mode: 'perspective-only' },
-    filter: { mode: 'ocr-color', presetVersion: 'ocr-color-v6', parameters: {} },
+    filter: { mode: 'ocr-color', presetVersion: 'ocr-color-v7', parameters: {} },
   };
 }
 
@@ -102,20 +128,31 @@ export function createBackgroundPageProcessor(
     }
   };
 
-  const process = async (source: Blob, signal: AbortSignal): Promise<ProcessedScanPage> => {
+  const process = async (
+    source: Blob,
+    signal: AbortSignal,
+    liveDetection: LiveDetectionResult | null,
+  ): Promise<ProcessedScanPage> => {
     checkAbort(signal, disposal.signal);
     const imported = await importer(source, signal);
     checkAbort(signal, disposal.signal);
     const currentEngine = await readyEngine(signal);
     try {
-      const crop = await detectDocumentCrop(currentEngine, frameSource, imported.original, signal);
+      const liveCrop = mapLiveDetectionToCrop(liveDetection, imported.original.dimensions);
+      const crop = await detectDocumentCrop(
+        currentEngine,
+        frameSource,
+        imported.original,
+        signal,
+        liveCrop,
+      );
       const recipe = createDefaultPageRecipe(crop);
       const variant = await currentEngine.render(
         { original: imported.original, orientation: 0, recipe },
         signal,
       );
       checkAbort(signal, disposal.signal);
-      return { original: imported.original, crop, recipe, variant };
+      return { original: imported.original, crop, recipe, variant, restoration: { kind: 'local' } };
     } catch (error) {
       if (!(error instanceof Error && error.name === 'AbortError')) {
         await releaseEngine().catch(() => undefined);
@@ -125,14 +162,14 @@ export function createBackgroundPageProcessor(
   };
 
   return {
-    enqueue(source, signal, onStart) {
+    enqueue(source, signal, onStart, liveDetection = null) {
       if (disposePromise !== null || disposal.signal.aborted) return Promise.reject(abortError());
       const result = tail.then(async () => {
         checkAbort(signal, disposal.signal);
         onStart?.();
         const linked = linkedSignal(signal, disposal.signal);
         try {
-          return await process(source, linked.signal);
+          return await process(source, linked.signal, liveDetection);
         } finally {
           linked.release();
         }

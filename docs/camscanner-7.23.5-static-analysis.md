@@ -122,13 +122,19 @@ The black-and-white path now uses a Sauvola threshold derived from the local mea
 
 The OCR-color path now has an on-device quality router. It samples at most 65,536 pixels to classify illumination range, highlight clipping, color content and edge detail. Uneven pages use a 4×4 to 16×16 percentile illumination grid with bilinear interpolation, which is resistant to dense dark text; already high-detail pages skip the local sharpen pass. This mirrors the APK's route-first architecture without claiming to reproduce its learned classifier.
 
+The web capture and render path now also applies three concrete quality upgrades:
+
+1. The shutter freezes the current high-resolution preview synchronously before the first asynchronous operation. It deliberately does not call `ImageCapture.takePhoto()`: that API may capture a later frame and reintroduce the hold-still delay. The stable live Scanic quad is frozen at the same moment and used only when post-capture detection on the original is uncertain.
+2. Perspective output preserves the geometry-derived aspect ratio and targets a 3000-pixel long side when the source itself is at least 3000 pixels. Enlargement remains bounded by the source's total pixel count and the existing worker memory limits.
+3. OCR-color/grayscale preset v7 adds neutral-paper tone restoration after illumination flattening. A quadratic lift brings dim paper toward 238 while applying much less lift to dark glyphs; color-rich content bypasses this stage and existing white highlights are never darkened.
+
 ## Recommended next increments
 
 1. Build a licensed evaluation set containing shadows, folds, colored receipts, glossy pages, handwriting and low light. Report background-uniformity, OCR character/word error rate, clipping and runtime separately.
 2. Replace the box background estimator only if measurements justify it. Candidate independent implementations are a downsampled rolling-ball/morphological background map or a small model trained from owned/synthetic data.
 3. Add a content classifier for photo/color-document/plain-text routing. Do not apply aggressive whitening to photographs or artwork.
 4. Add curved-page dewarp as a separate optional model. The current `auto` dewarp contract honestly falls back to perspective-only; CamScanner contains dedicated `dewarp_net`/curve-line functionality that the web app does not yet reproduce.
-5. Preserve the original full-resolution capture, perform detection on a smaller frame, and render from the original. Treat 3000 pixels as an export-quality target only when memory limits and source resolution permit it; upscaling cannot recreate missing detail.
+5. Preserve the original full-resolution capture, perform detection on a smaller frame, and render from the original. This path is now implemented, including the bounded 3000-pixel target; upscaling still cannot recreate detail absent from the camera frame.
 
 ## Replacement plan for production-quality web restoration
 

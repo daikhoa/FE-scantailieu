@@ -5,6 +5,7 @@ import { scanBatchReducer, scanBatchStatus, type ScanBatchState } from './scan-b
 
 const firstSource = new Blob(['first'], { type: 'image/jpeg' });
 const secondSource = new Blob(['second'], { type: 'image/jpeg' });
+const replacementSource = new Blob(['replacement'], { type: 'image/jpeg' });
 
 function processed(source: Blob, key: string): ProcessedScanPage {
   const original = { blob: source, dimensions: { width: 1200, height: 1600 } };
@@ -102,5 +103,41 @@ describe('scan batch reducer', () => {
     });
 
     expect(state.pages).toEqual([]);
+  });
+
+  it('replaces one page in place with a new identity and ignores the old completion', () => {
+    let state: ScanBatchState = { pages: [] };
+    state = scanBatchReducer(state, {
+      type: 'captured',
+      id: 'page-1',
+      source: firstSource,
+    });
+    state = scanBatchReducer(state, {
+      type: 'captured',
+      id: 'page-2',
+      source: secondSource,
+    });
+    state = scanBatchReducer(state, {
+      type: 'replaced',
+      id: 'page-1',
+      replacementId: 'page-3',
+      source: replacementSource,
+    });
+
+    expect(state.pages).toEqual([
+      { id: 'page-3', source: replacementSource, kind: 'queued' },
+      { id: 'page-2', source: secondSource, kind: 'queued' },
+    ]);
+
+    state = scanBatchReducer(state, {
+      type: 'ready',
+      id: 'page-1',
+      page: processed(firstSource, 'stale-original'),
+    });
+    expect(state.pages[0]).toEqual({
+      id: 'page-3',
+      source: replacementSource,
+      kind: 'queued',
+    });
   });
 });

@@ -130,13 +130,61 @@ describe('background page processor', () => {
       crop: result.crop,
       rotation: 0,
       dewarp: { mode: 'perspective-only' },
-      filter: { mode: 'ocr-color', presetVersion: 'ocr-color-v6', parameters: {} },
+      filter: { mode: 'ocr-color', presetVersion: 'ocr-color-v7', parameters: {} },
     });
     expect(renderPage).toHaveBeenCalledWith(
       { original: result.original, orientation: 0, recipe: result.recipe },
       expect.any(AbortSignal),
     );
     expect(detectPage).toHaveBeenCalledOnce();
+
+    await processor.dispose();
+  });
+
+  it('falls back to the stable live crop when detection on the captured image is uncertain', async () => {
+    const source = new Blob(['page'], { type: 'image/jpeg' });
+    const { engine, detectPage, renderPage } = fakeEngine();
+    detectPage.mockResolvedValueOnce({
+      kind: 'full-frame',
+      dimensions: { width: 600, height: 800 },
+      reason: 'low-confidence',
+    });
+    const processor = createBackgroundPageProcessor({
+      importer: () => Promise.resolve(imported(source)),
+      engineFactory: () => engine,
+      frameSource: fakeFrameSource(),
+    });
+    const liveDetection = {
+      kind: 'document' as const,
+      dimensions: { width: 600, height: 800 },
+      confidence: 0.94,
+      corners: [
+        { x: 30, y: 40 },
+        { x: 570, y: 40 },
+        { x: 570, y: 760 },
+        { x: 30, y: 760 },
+      ] as const,
+    };
+
+    const result = await processor.enqueue(
+      source,
+      new AbortController().signal,
+      undefined,
+      liveDetection,
+    );
+
+    expect(result.crop).toEqual({
+      kind: 'document',
+      corners: [
+        { x: 60, y: 80 },
+        { x: 1140, y: 80 },
+        { x: 1140, y: 1520 },
+        { x: 60, y: 1520 },
+      ],
+    });
+    expect(renderPage).toHaveBeenCalledOnce();
+    expect(renderPage.mock.calls[0]?.[0].recipe.crop).toEqual(result.crop);
+    expect(renderPage.mock.calls[0]?.[1]).toBeInstanceOf(AbortSignal);
 
     await processor.dispose();
   });

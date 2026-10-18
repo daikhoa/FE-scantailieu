@@ -9,6 +9,7 @@ interface ScanBatchReviewProps {
   readonly headingRef: RefObject<HTMLHeadingElement | null> | null;
   readonly onCaptureMore: () => void;
   readonly onEditPage: (id: string) => void;
+  readonly onRetakePage: (id: string) => void;
   readonly onRetryPage: (id: string) => void;
   readonly onRemovePage: (id: string) => void;
   readonly pdfExporter?: typeof createImagePdf;
@@ -19,9 +20,16 @@ function isAbort(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
 
-function PagePreview({ page, number }: { readonly page: ScanBatchPage; readonly number: number }) {
-  const blob = page.kind === 'ready' ? page.page.variant.image.blob : page.source;
-  const url = useMemo(() => URL.createObjectURL(blob), [blob]);
+type ReadyScanBatchPage = Extract<ScanBatchPage, { readonly kind: 'ready' }>;
+
+function PagePreview({
+  page,
+  number,
+}: {
+  readonly page: ReadyScanBatchPage;
+  readonly number: number;
+}) {
+  const url = useMemo(() => URL.createObjectURL(page.page.variant.image.blob), [page]);
 
   useEffect(
     () => () => {
@@ -40,6 +48,7 @@ export function ScanBatchReview({
   headingRef,
   onCaptureMore,
   onEditPage,
+  onRetakePage,
   onRetryPage,
   onRemovePage,
   pdfExporter = createImagePdf,
@@ -50,10 +59,13 @@ export function ScanBatchReview({
   const exportOperation = useRef<AbortController | null>(null);
   const readyPages = useMemo(() => pages.filter((page) => page.kind === 'ready'), [pages]);
   const pendingCount = pages.filter(
-    (page) => page.kind === 'queued' || page.kind === 'processing',
+    (page) =>
+      page.kind === 'queued' ||
+      page.kind === 'processing' ||
+      (page.kind === 'ready' && page.page.restoration?.kind === 'processing'),
   ).length;
   const failedCount = pages.filter((page) => page.kind === 'failed').length;
-  const canExport = pages.length > 0 && readyPages.length === pages.length;
+  const canExport = pages.length > 0 && readyPages.length === pages.length && pendingCount === 0;
 
   useEffect(
     () => () => {
@@ -106,61 +118,95 @@ export function ScanBatchReview({
           </p>
         </header>
 
-        <ol className="batch-page-list" aria-label="Các trang đã chụp">
-          {pages.map((page, index) => {
-            const number = index + 1;
-            return (
-              <li className={`batch-page batch-page--${page.kind}`} key={page.id}>
-                {page.kind === 'ready' ? (
-                  <button
-                    className="batch-page__preview"
-                    type="button"
-                    aria-label={`Chỉnh trang ${String(number)}`}
-                    onClick={() => {
-                      onEditPage(page.id);
-                    }}
-                  >
-                    <PagePreview page={page} number={number} />
-                  </button>
-                ) : (
-                  <div className="batch-page__preview">
-                    <PagePreview page={page} number={number} />
-                  </div>
-                )}
-                <div className="batch-page__details">
-                  <strong>Trang {number}</strong>
-                  {page.kind === 'queued' || page.kind === 'processing' ? (
-                    <span>Đang xử lý</span>
-                  ) : page.kind === 'failed' ? (
-                    <span>Cần xử lý lại</span>
+        {pages.length === 0 ? (
+          <div className="batch-review__empty">
+            <strong>Chưa còn trang nào</strong>
+            <p>Chụp một trang mới để tiếp tục tạo tài liệu.</p>
+            <button className="primary-button" type="button" onClick={onCaptureMore}>
+              Chụp trang mới
+            </button>
+          </div>
+        ) : (
+          <ol className="batch-page-list" aria-label="Các trang đã chụp">
+            {pages.map((page, index) => {
+              const number = index + 1;
+              return (
+                <li className={`batch-page batch-page--${page.kind}`} key={page.id}>
+                  {page.kind === 'ready' ? (
+                    <button
+                      className="batch-page__preview"
+                      type="button"
+                      aria-label={`Chỉnh trang ${String(number)}`}
+                      onClick={() => {
+                        onEditPage(page.id);
+                      }}
+                    >
+                      <PagePreview page={page} number={number} />
+                    </button>
                   ) : (
-                    <span>Đã sẵn sàng</span>
+                    <div
+                      className="batch-page__preview batch-page__placeholder"
+                      role="img"
+                      aria-label={
+                        page.kind === 'failed'
+                          ? `Trang ${String(number)} chưa xử lý được`
+                          : `Trang ${String(number)} đang xử lý`
+                      }
+                    >
+                      <span aria-hidden="true" />
+                    </div>
                   )}
-                </div>
-                <div className="batch-page__actions">
-                  {page.kind === 'failed' ? (
+                  <div className="batch-page__details">
+                    <strong>Trang {number}</strong>
+                    {page.kind === 'queued' || page.kind === 'processing' ? (
+                      <span>Đang xử lý</span>
+                    ) : page.kind === 'failed' ? (
+                      <span>Cần xử lý lại</span>
+                    ) : page.page.restoration?.kind === 'processing' ? (
+                      <span>Đang tối ưu bằng GPU</span>
+                    ) : page.page.restoration?.kind === 'applied' ? (
+                      <span>Đã tối ưu bằng GPU</span>
+                    ) : page.page.restoration?.kind === 'fallback' ? (
+                      <span>Đã dùng bản xử lý cục bộ</span>
+                    ) : (
+                      <span>Đã sẵn sàng</span>
+                    )}
+                  </div>
+                  <div className="batch-page__actions">
+                    {page.kind === 'ready' || page.kind === 'failed' ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onRetakePage(page.id);
+                        }}
+                      >
+                        Chụp lại trang {number}
+                      </button>
+                    ) : null}
+                    {page.kind === 'failed' ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          onRetryPage(page.id);
+                        }}
+                      >
+                        Xử lý lại trang {number}
+                      </button>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => {
-                        onRetryPage(page.id);
+                        onRemovePage(page.id);
                       }}
                     >
-                      Xử lý lại trang {number}
+                      Xóa trang {number}
                     </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onRemovePage(page.id);
-                    }}
-                  >
-                    Xóa trang {number}
-                  </button>
-                </div>
-              </li>
-            );
-          })}
-        </ol>
+                  </div>
+                </li>
+              );
+            })}
+          </ol>
+        )}
 
         {pendingCount > 0 ? (
           <p className="editor__status" role="status" aria-live="polite">
@@ -171,11 +217,11 @@ export function ScanBatchReview({
             Có {failedCount} trang chưa xử lý được. Hãy xử lý lại hoặc xóa trang đó trước khi tạo
             PDF.
           </p>
-        ) : (
+        ) : pages.length > 0 ? (
           <p className="editor__status" role="status">
             Tất cả trang đã sẵn sàng để tạo PDF.
           </p>
-        )}
+        ) : null}
 
         {exportFailed ? (
           <p className="editor__error" role="alert">
@@ -183,16 +229,18 @@ export function ScanBatchReview({
           </p>
         ) : null}
 
-        <button
-          className="primary-button batch-review__export"
-          type="button"
-          aria-label={`Tải PDF ${String(pages.length)} trang`}
-          aria-busy={exporting}
-          disabled={!canExport || exporting}
-          onClick={() => void exportPdf()}
-        >
-          {exporting ? 'Đang tạo PDF…' : `Tải PDF ${String(pages.length)} trang`}
-        </button>
+        {pages.length > 0 ? (
+          <button
+            className="primary-button batch-review__export"
+            type="button"
+            aria-label={`Tải PDF ${String(pages.length)} trang`}
+            aria-busy={exporting}
+            disabled={!canExport || exporting}
+            onClick={() => void exportPdf()}
+          >
+            {exporting ? 'Đang tạo PDF…' : `Tải PDF ${String(pages.length)} trang`}
+          </button>
+        ) : null}
       </section>
     </main>
   );

@@ -33,6 +33,10 @@ type EditorStatus =
 
 interface DocumentEditorProps {
   readonly image: ImportedImage;
+  readonly initialPage?: {
+    readonly variant: RenderedVariant;
+    readonly recipe: EditRecipe;
+  };
   readonly onBack: () => void;
   readonly headingRef: RefObject<HTMLHeadingElement | null> | null;
   readonly engineFactory?: () => ScannerEngine;
@@ -49,8 +53,8 @@ function recipe(crop: CropRegion, mode: FilterMode): EditRecipe {
     mode === 'original'
       ? 'original-v1'
       : mode === 'black-and-white'
-        ? 'black-and-white-v4'
-        : `${mode}-v6`;
+        ? 'black-and-white-v5'
+        : `${mode}-v7`;
   return {
     version: 1,
     crop,
@@ -64,8 +68,13 @@ function isAbort(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
 }
 
+function filterLabel(mode: FilterMode): string {
+  return FILTERS.find((option) => option.mode === mode)?.label ?? 'Tự động';
+}
+
 export function DocumentEditor({
   image,
+  initialPage,
   onBack,
   headingRef,
   engineFactory = createScanicEngine,
@@ -76,22 +85,35 @@ export function DocumentEditor({
   backLabel = 'Chụp lại',
   showExport = true,
 }: DocumentEditorProps) {
-  const [mode, setMode] = useState<FilterMode>('ocr-color');
-  const [status, setStatus] = useState<EditorStatus>({ kind: 'preparing' });
-  const [cropKind, setCropKind] = useState<CropRegion['kind'] | null>(null);
-  const [processedUrl, setProcessedUrl] = useState<string | null>(null);
-  const [latestVariant, setLatestVariant] = useState<RenderedVariant | null>(null);
+  const [initialProcessedUrl] = useState(() =>
+    initialPage === undefined ? null : URL.createObjectURL(initialPage.variant.image.blob),
+  );
+  const [mode, setMode] = useState<FilterMode>(initialPage?.recipe.filter.mode ?? 'ocr-color');
+  const [status, setStatus] = useState<EditorStatus>(() =>
+    initialPage === undefined
+      ? { kind: 'preparing' }
+      : { kind: 'ready', label: filterLabel(initialPage.recipe.filter.mode) },
+  );
+  const [cropKind, setCropKind] = useState<CropRegion['kind'] | null>(
+    initialPage?.recipe.crop.kind ?? null,
+  );
+  const [processedUrl, setProcessedUrl] = useState<string | null>(initialProcessedUrl);
+  const [latestVariant, setLatestVariant] = useState<RenderedVariant | null>(
+    initialPage?.variant ?? null,
+  );
   const [exporting, setExporting] = useState(false);
   const [exportFailed, setExportFailed] = useState(false);
-  const [originalUrl] = useState(() => URL.createObjectURL(image.original.blob));
+  const [originalUrl] = useState(() =>
+    initialPage === undefined ? URL.createObjectURL(image.original.blob) : null,
+  );
   const [detectionSource] = useState(() => frameSource ?? createImageAssetFrameSource());
   const engine = useRef<ScannerEngine | null>(null);
   const activeOperation = useRef<AbortController | null>(null);
   const exportOperation = useRef<AbortController | null>(null);
   const mounted = useRef(true);
   const ready = useRef(false);
-  const crop = useRef<CropRegion>({ kind: 'full-frame' });
-  const processedUrlRef = useRef<string | null>(null);
+  const crop = useRef<CropRegion>(initialPage?.recipe.crop ?? { kind: 'full-frame' });
+  const processedUrlRef = useRef<string | null>(initialProcessedUrl);
   const onVariantReadyRef = useRef(onVariantReady);
 
   useEffect(() => {
@@ -116,6 +138,11 @@ export function DocumentEditor({
     void (async () => {
       try {
         await localEngine.initialize(controller.signal);
+        if (initialPage !== undefined) {
+          if (!mounted.current || activeOperation.current !== controller) return;
+          ready.current = true;
+          return;
+        }
         const detectedCrop =
           image.captureCrop ??
           (await detectDocumentCrop(
@@ -155,13 +182,13 @@ export function DocumentEditor({
       activeOperation.current = null;
       exportOperation.current = null;
       ready.current = false;
-      URL.revokeObjectURL(originalUrl);
+      if (originalUrl !== null) URL.revokeObjectURL(originalUrl);
       if (processedUrlRef.current !== null) URL.revokeObjectURL(processedUrlRef.current);
       processedUrlRef.current = null;
       void localEngine.dispose().catch(() => undefined);
       engine.current = null;
     };
-  }, [detectionSource, engineFactory, image.captureCrop, image.original, originalUrl]);
+  }, [detectionSource, engineFactory, image.captureCrop, image.original, initialPage, originalUrl]);
 
   const chooseFilter = async (option: FilterOption) => {
     const localEngine = engine.current;
@@ -229,7 +256,7 @@ export function DocumentEditor({
         </header>
 
         <figure className="editor__preview" aria-busy={busy}>
-          <img src={processedUrl ?? originalUrl} alt="Bản xem trước tài liệu" />
+          <img src={processedUrl ?? originalUrl ?? ''} alt="Bản xem trước tài liệu" />
           {busy ? <span className="editor__busy">Đang xử lý…</span> : null}
         </figure>
 

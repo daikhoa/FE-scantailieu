@@ -40,14 +40,16 @@ function seededNoise(seed: number): () => number {
 function createRaster(seed: number, base: Rgb): Raster {
   const pixels = new Uint8Array(WIDTH * HEIGHT * 4);
   const noise = seededNoise(seed);
+  let offset = 0;
   for (let y = 0; y < HEIGHT; y += 1) {
+    const verticalVariation = (y / HEIGHT - 0.5) * 8;
     for (let x = 0; x < WIDTH; x += 1) {
-      const variation = Math.round((noise() - 0.5) * 12 + (y / HEIGHT - 0.5) * 8);
-      setPixel(pixels, x, y, [
-        clampChannel(base[0] + variation),
-        clampChannel(base[1] + variation),
-        clampChannel(base[2] + variation),
-      ]);
+      const variation = Math.round((noise() - 0.5) * 12 + verticalVariation);
+      pixels[offset] = clampChannel(base[0] + variation);
+      pixels[offset + 1] = clampChannel(base[1] + variation);
+      pixels[offset + 2] = clampChannel(base[2] + variation);
+      pixels[offset + 3] = 255;
+      offset += 4;
     }
   }
   return { width: WIDTH, height: HEIGHT, pixels };
@@ -82,8 +84,18 @@ function pointInsideConvexPolygon(point: Point, corners: DocumentCorners): boole
 
 function fillDocument(raster: Raster, corners: DocumentCorners, seed: number): void {
   const noise = seededNoise(seed);
-  for (let y = 0; y < raster.height; y += 1) {
-    for (let x = 0; x < raster.width; x += 1) {
+  const left = Math.max(0, Math.floor(Math.min(...corners.map((corner) => corner.x))));
+  const right = Math.min(
+    raster.width - 1,
+    Math.ceil(Math.max(...corners.map((corner) => corner.x))),
+  );
+  const top = Math.max(0, Math.floor(Math.min(...corners.map((corner) => corner.y))));
+  const bottom = Math.min(
+    raster.height - 1,
+    Math.ceil(Math.max(...corners.map((corner) => corner.y))),
+  );
+  for (let y = top; y <= bottom; y += 1) {
+    for (let x = left; x <= right; x += 1) {
       if (!pointInsideConvexPolygon({ x: x + 0.5, y: y + 0.5 }, corners)) continue;
       const paperNoise = Math.round((noise() - 0.5) * 8);
       const shade = Math.round(((x / raster.width) * 0.35 + (y / raster.height) * 0.65) * 8);

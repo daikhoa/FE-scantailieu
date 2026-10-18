@@ -18,6 +18,7 @@ interface ActiveCameraViewProps {
   readonly captureFailed: boolean;
   readonly capturing: boolean;
   readonly batchStatus?: CaptureBatchStatus;
+  readonly title: string;
   readonly canFinish: boolean;
   readonly onCapture: () => void;
   readonly onClose: () => void;
@@ -54,6 +55,7 @@ export function ActiveCameraView({
   captureFailed,
   capturing,
   batchStatus,
+  title,
   canFinish,
   onCapture,
   onClose,
@@ -74,7 +76,7 @@ export function ActiveCameraView({
           <span aria-hidden="true">×</span>
         </button>
         <div className="camera-capture-screen__title">
-          <span>Quét tài liệu</span>
+          <span>{title}</span>
           <h1 className="visually-hidden" ref={headingRef} tabIndex={-1}>
             Camera đã sẵn sàng
           </h1>
@@ -145,10 +147,10 @@ export function ActiveCameraView({
               className="camera-done-button"
               type="button"
               aria-label={`Hoàn tất chụp ${String(total)} trang`}
-              disabled={total === 0}
+              disabled={total === 0 || (batchStatus?.processing ?? 0) > 0 || capturing}
               onClick={onFinish}
             >
-              Xong
+              {(batchStatus?.processing ?? 0) > 0 ? 'Đợi xử lý' : 'Xong'}
             </button>
           ) : (
             <span aria-hidden="true" />

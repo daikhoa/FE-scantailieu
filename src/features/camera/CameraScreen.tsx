@@ -27,13 +27,14 @@ interface CameraScreenProps {
   readonly service: CameraService;
   readonly headingRef: RefObject<HTMLHeadingElement | null>;
   readonly onBack: () => void;
-  readonly onPhotoCaptured: (source: Blob) => void;
+  readonly onPhotoCaptured: (source: Blob, liveDetection: LiveDetectionResult | null) => void;
   readonly onFinishCapture?: () => void;
   readonly batchStatus?: {
     readonly total: number;
     readonly processing: number;
     readonly failed: number;
   };
+  readonly title?: string;
   readonly engineFactory?: () => ScannerEngine;
   readonly frameSourceFactory?: () => VideoFrameSource;
   readonly cameraCapture?: CameraCapture;
@@ -50,6 +51,7 @@ export function CameraScreen({
   onPhotoCaptured,
   onFinishCapture,
   batchStatus,
+  title = 'Quét tài liệu',
   engineFactory = createScanicEngine,
   frameSourceFactory = defaultFrameSourceFactory,
   cameraCapture,
@@ -184,6 +186,7 @@ export function CameraScreen({
 
   const capturePhoto = async () => {
     if (state.kind !== 'active' || video.current === null || capturing) return;
+    const capturedDetection = liveDetection;
     request.current?.abort();
     const controller = new AbortController();
     request.current = controller;
@@ -192,7 +195,7 @@ export function CameraScreen({
     try {
       const photo = await resolvedCapture.capture(state.stream, video.current, controller.signal);
       if (!mounted.current || request.current !== controller) return;
-      onPhotoCaptured(photo);
+      onPhotoCaptured(photo, capturedDetection);
     } catch (error) {
       if (!mounted.current || request.current !== controller) return;
       if (!(error instanceof Error && error.name === 'AbortError')) setCaptureFailed(true);
@@ -227,6 +230,7 @@ export function CameraScreen({
         captureFailed={captureFailed}
         capturing={capturing}
         {...(batchStatus === undefined ? {} : { batchStatus })}
+        title={title}
         canFinish={onFinishCapture !== undefined && batchStatus !== undefined}
         onCapture={() => void capturePhoto()}
         onClose={exitCamera}

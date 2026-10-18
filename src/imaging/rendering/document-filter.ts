@@ -206,6 +206,31 @@ function normalizeIllumination(
   }
 }
 
+function normalizePaperTone(
+  input: RgbaBackendInput,
+  gray: Uint8Array<ArrayBuffer>,
+  profile: DocumentQualityProfile,
+): void {
+  if (!profile.stages.normalizePaperTone) return;
+  const paperLevel = Math.max(1, profile.illumination.brightLevel);
+  const lift = Math.min(72, 238 - paperLevel);
+  for (let index = 0, offset = 0; index < gray.length; index += 1, offset += 4) {
+    const sourceLuminance = gray[index] ?? 0;
+    const relativeTone = clamp(sourceLuminance / paperLevel, 0, 1);
+    // Lift paper quadratically: bright background reaches clean white while dark glyphs receive
+    // only a small adjustment and retain their local contrast for the sharpening stage.
+    const adjustment = lift * relativeTone * relativeTone;
+    const red = input.pixels[offset] ?? 0;
+    const green = input.pixels[offset + 1] ?? 0;
+    const blue = input.pixels[offset + 2] ?? 0;
+    const boundedAdjustment = Math.max(0, Math.min(adjustment, 248 - Math.max(red, green, blue)));
+    input.pixels[offset] = clampByte(red + boundedAdjustment);
+    input.pixels[offset + 1] = clampByte(green + boundedAdjustment);
+    input.pixels[offset + 2] = clampByte(blue + boundedAdjustment);
+    gray[index] = clampByte(sourceLuminance + boundedAdjustment);
+  }
+}
+
 function filterPixels(
   input: RgbaBackendInput,
   mode: Exclude<FilterMode, 'original'>,
@@ -214,6 +239,7 @@ function filterPixels(
   const profile = analyzeDocumentQuality(input);
   const gray = createLuminance(input);
   normalizeIllumination(input, gray, profile);
+  normalizePaperTone(input, gray, profile);
   const output = input.pixels;
   if (mode === 'ocr-color' && profile.stages.sharpen === 'none') return output;
   const columns = new Uint32Array(width);
@@ -286,7 +312,7 @@ function filterPixels(
         const adjustment = clamp(
           targetLuminance - sourceLuminance,
           -Math.min(red, green, blue),
-          248 - Math.max(red, green, blue),
+          Math.max(0, 248 - Math.max(red, green, blue)),
         );
         output[offset] = clampByte(red + adjustment);
         output[offset + 1] = clampByte(green + adjustment);

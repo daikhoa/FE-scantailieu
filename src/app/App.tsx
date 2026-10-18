@@ -14,12 +14,20 @@ import { DocumentEditor } from '../features/editor/DocumentEditor';
 import {
   createBackgroundPageProcessor,
   type BackgroundPageProcessor,
+  type ProcessedScanPage,
 } from '../features/scanner/background-page-processor';
+import type { LiveDetectionResult } from '../features/scanner/detection-scheduler';
 import type { ImageAssetFrameSource } from '../features/scanner/image-asset-frame-source';
 import { ScanBatchReview } from '../features/scanner/ScanBatchReview';
 import { scanBatchReducer, scanBatchStatus } from '../features/scanner/scan-batch';
 import type { VideoFrameSource } from '../features/scanner/video-frame-source';
 import type { ScannerEngine } from '../imaging/contracts/scanner-engine';
+import { restoreProcessedPage } from '../imaging/restoration/hybrid-page-restoration';
+import {
+  HybridRestorationError,
+  createHybridRestorationClient,
+  type HybridRestorationClient,
+} from '../imaging/restoration/hybrid-restoration-client';
 
 export type LibraryState =
   | { readonly kind: 'empty' }
@@ -37,6 +45,8 @@ interface AppProps {
   readonly cameraEngineFactory?: () => ScannerEngine;
   readonly cameraFrameSourceFactory?: () => VideoFrameSource;
   readonly pageProcessorFactory?: () => BackgroundPageProcessor;
+  readonly restorationClient?: HybridRestorationClient | null;
+  readonly restorationEndpoint?: string;
 }
 
 type AppView = 'library' | 'camera' | 'batch-review' | 'editor';
@@ -56,7 +66,15 @@ const HOME_IMPORT_ERROR_GUIDANCE: Readonly<Record<ImageImportFailureCode, string
   unavailable: 'Trình duyệt này chưa hỗ trợ đọc ảnh từ thư viện.',
 };
 
-function PrivacyNotice() {
+function PrivacyNotice({
+  hybridAvailable,
+  hybridEnabled,
+  onHybridEnabledChange,
+}: {
+  readonly hybridAvailable: boolean;
+  readonly hybridEnabled: boolean;
+  readonly onHybridEnabledChange: (enabled: boolean) => void;
+}) {
   return (
     <aside className="privacy-notice" aria-label="Quyền riêng tư">
       <span className="privacy-notice__icon" aria-hidden="true">
@@ -64,7 +82,23 @@ function PrivacyNotice() {
       </span>
       <div>
         <strong>Xử lý ngay trên thiết bị</strong>
-        <span>Ảnh không được tải lên máy chủ.</span>
+        <span>
+          {hybridEnabled
+            ? 'Ảnh scan sẽ được gửi đến GPU server để phân loại và phục hồi.'
+            : 'Ảnh không được tải lên máy chủ.'}
+        </span>
+        {hybridAvailable ? (
+          <label className="privacy-notice__choice">
+            <input
+              type="checkbox"
+              checked={hybridEnabled}
+              onChange={(event) => {
+                onHybridEnabledChange(event.currentTarget.checked);
+              }}
+            />
+            <span>Tối ưu ảnh bằng GPU server</span>
+          </label>
+        ) : null}
       </div>
     </aside>
   );
@@ -136,14 +170,32 @@ export function App({
   cameraEngineFactory,
   cameraFrameSourceFactory,
   pageProcessorFactory,
+  restorationClient,
+  restorationEndpoint,
 }: AppProps) {
   const [view, setView] = useState<AppView>('library');
   const [cameraReturnView, setCameraReturnView] = useState<CameraReturnView>('library');
   const [homeImportState, setHomeImportState] = useState<HomeImportState>({ kind: 'idle' });
   const [editorImage, setEditorImage] = useState<ImportedImage | null>(null);
+  const [editorProcessedPage, setEditorProcessedPage] = useState<ProcessedScanPage | null>(null);
   const [selectedBatchPageId, setSelectedBatchPageId] = useState<string | null>(null);
+  const [replacementPageId, setReplacementPageId] = useState<string | null>(null);
   const [batch, dispatchBatch] = useReducer(scanBatchReducer, { pages: [] });
+  const [hybridRestorationEnabled, setHybridRestorationEnabled] = useState(false);
   const [resolvedCameraService] = useState(() => cameraService ?? createCameraService());
+  const [resolvedRestorationClient] = useState<HybridRestorationClient | null>(() => {
+    if (restorationClient !== undefined) return restorationClient;
+    const environmentEndpoint: unknown = import.meta.env.VITE_RESTORATION_ENDPOINT;
+    const endpoint =
+      restorationEndpoint ??
+      (typeof environmentEndpoint === 'string' ? environmentEndpoint : undefined);
+    if (endpoint === undefined || endpoint.trim() === '') return null;
+    try {
+      return createHybridRestorationClient({ endpoint });
+    } catch {
+      return null;
+    }
+  });
   const viewHeadingRef = useRef<HTMLHeadingElement>(null);
   const shouldMoveFocus = useRef(false);
   const pageProcessor = useRef<BackgroundPageProcessor | null>(null);
@@ -182,7 +234,11 @@ export function App({
     setView(nextView);
   };
 
-  const processPage = (id: string, source: Blob) => {
+  const processPage = (
+    id: string,
+    source: Blob,
+    liveDetection: LiveDetectionResult | null = null,
+  ) => {
     const processor = pageProcessor.current;
     if (processor === null) {
       dispatchBatch({ type: 'failed', id });
@@ -192,11 +248,49 @@ export function App({
     pageOperations.current.get(id)?.abort();
     pageOperations.current.set(id, controller);
     void processor
-      .enqueue(source, controller.signal, () => {
-        dispatchBatch({ type: 'started', id });
-      })
-      .then((page) => {
-        dispatchBatch({ type: 'ready', id, page });
+      .enqueue(
+        source,
+        controller.signal,
+        () => {
+          dispatchBatch({ type: 'started', id });
+        },
+        liveDetection,
+      )
+      .then(async (page) => {
+        const shouldRestore = hybridRestorationEnabled && resolvedRestorationClient !== null;
+        const readyPage: ProcessedScanPage = shouldRestore
+          ? { ...page, restoration: { kind: 'processing' } }
+          : page;
+        dispatchBatch({ type: 'ready', id, page: readyPage });
+        if (!shouldRestore || pageOperations.current.get(id) !== controller) return;
+        try {
+          const restored = await restoreProcessedPage(
+            readyPage,
+            resolvedRestorationClient,
+            controller.signal,
+          );
+          if (pageOperations.current.get(id) === controller) {
+            dispatchBatch({ type: 'updated', id, page: restored });
+          }
+        } catch (error) {
+          if (
+            pageOperations.current.get(id) !== controller ||
+            (error instanceof Error && error.name === 'AbortError')
+          ) {
+            return;
+          }
+          const reason =
+            error instanceof HybridRestorationError && error.code === 'timeout'
+              ? 'timeout'
+              : error instanceof HybridRestorationError && error.code === 'unavailable'
+                ? 'unavailable'
+                : 'failed';
+          dispatchBatch({
+            type: 'updated',
+            id,
+            page: { ...readyPage, restoration: { kind: 'fallback', reason } },
+          });
+        }
       })
       .catch((error: unknown) => {
         if (!(error instanceof Error && error.name === 'AbortError')) {
@@ -213,7 +307,9 @@ export function App({
     pageOperations.current.clear();
     dispatchBatch({ type: 'reset' });
     setSelectedBatchPageId(null);
+    setReplacementPageId(null);
     setEditorImage(null);
+    setEditorProcessedPage(null);
   };
 
   const startNewCameraBatch = () => {
@@ -235,6 +331,7 @@ export function App({
       if (homeImportRequest.current !== controller) return;
       resetBatch();
       setEditorImage(image);
+      setEditorProcessedPage(null);
       setHomeImportState({ kind: 'idle' });
       navigateTo('editor');
     } catch (error) {
@@ -270,7 +367,7 @@ export function App({
         </div>
         <span className="local-status">
           <span aria-hidden="true" />
-          Cục bộ
+          {hybridRestorationEnabled && resolvedRestorationClient !== null ? 'Hybrid GPU' : 'Cục bộ'}
         </span>
       </header>
 
@@ -341,7 +438,11 @@ export function App({
             ) : null}
           </section>
 
-          <PrivacyNotice />
+          <PrivacyNotice
+            hybridAvailable={resolvedRestorationClient !== null}
+            hybridEnabled={hybridRestorationEnabled}
+            onHybridEnabledChange={setHybridRestorationEnabled}
+          />
 
           <section className="library" aria-labelledby="library-title">
             <div className="section-heading">
@@ -366,15 +467,42 @@ export function App({
             ? {}
             : { frameSourceFactory: cameraFrameSourceFactory })}
           batchStatus={scanBatchStatus(batch)}
-          onPhotoCaptured={(source) => {
-            const id = `page-${String(++pageSequence.current)}`;
-            dispatchBatch({ type: 'captured', id, source });
-            processPage(id, source);
-          }}
-          onFinishCapture={() => {
+          title={
+            replacementPageId === null
+              ? 'Quét tài liệu'
+              : `Chụp lại trang ${String(
+                  batch.pages.findIndex((page) => page.id === replacementPageId) + 1,
+                )}`
+          }
+          onPhotoCaptured={(source, liveDetection) => {
+            const nextId = `page-${String(++pageSequence.current)}`;
+            if (replacementPageId === null) {
+              dispatchBatch({ type: 'captured', id: nextId, source });
+              processPage(nextId, source, liveDetection);
+              return;
+            }
+
+            pageOperations.current.get(replacementPageId)?.abort();
+            pageOperations.current.delete(replacementPageId);
+            dispatchBatch({
+              type: 'replaced',
+              id: replacementPageId,
+              replacementId: nextId,
+              source,
+            });
+            setReplacementPageId(null);
+            processPage(nextId, source, liveDetection);
             navigateTo('batch-review');
           }}
+          {...(replacementPageId === null
+            ? {
+                onFinishCapture: () => {
+                  navigateTo('batch-review');
+                },
+              }
+            : {})}
           onBack={() => {
+            setReplacementPageId(null);
             navigateTo(cameraReturnView);
           }}
         />
@@ -390,11 +518,25 @@ export function App({
             const selected = batch.pages.find((page) => page.id === id);
             if (selected?.kind !== 'ready') return;
             setSelectedBatchPageId(id);
+            setEditorProcessedPage(selected.page);
             setEditorImage({
               original: selected.page.original,
               captureCrop: selected.page.crop,
             });
             navigateTo('editor');
+          }}
+          onRetakePage={(id) => {
+            const selected = batch.pages.find((page) => page.id === id);
+            if (
+              selected === undefined ||
+              selected.kind === 'queued' ||
+              selected.kind === 'processing'
+            ) {
+              return;
+            }
+            setReplacementPageId(id);
+            setCameraReturnView('batch-review');
+            navigateTo('camera');
           }}
           onRetryPage={(id) => {
             const selected = batch.pages.find((page) => page.id === id);
@@ -411,11 +553,13 @@ export function App({
       ) : editorImage === null ? null : (
         <DocumentEditor
           image={editorImage}
+          {...(editorProcessedPage === null ? {} : { initialPage: editorProcessedPage })}
           headingRef={viewHeadingRef}
           {...(editorEngineFactory === undefined ? {} : { engineFactory: editorEngineFactory })}
           {...(editorFrameSource === undefined ? {} : { frameSource: editorFrameSource })}
           onBack={() => {
             setEditorImage(null);
+            setEditorProcessedPage(null);
             if (selectedBatchPageId === null) {
               navigateTo('library');
             } else {

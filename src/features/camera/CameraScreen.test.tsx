@@ -38,7 +38,7 @@ function renderCamera(
       ComponentProps<typeof CameraScreen>,
       'service' | 'headingRef' | 'onBack' | 'onPhotoCaptured'
     >
-  > & { readonly onPhotoCaptured?: (source: Blob) => void } = {},
+  > & { readonly onPhotoCaptured?: ComponentProps<typeof CameraScreen>['onPhotoCaptured'] } = {},
 ) {
   return {
     onBack,
@@ -270,7 +270,7 @@ describe('CameraScreen', () => {
     } as unknown as MediaStream;
     const photo = new Blob(['captured'], { type: 'image/jpeg' });
     const capture = vi.fn<CameraCapture['capture']>(() => Promise.resolve(photo));
-    const onPhotoCaptured = vi.fn<(source: Blob) => void>();
+    const onPhotoCaptured = vi.fn<ComponentProps<typeof CameraScreen>['onPhotoCaptured']>();
     const stop = vi.fn();
     const service: CameraService = {
       lifecycle: { kind: 'idle' },
@@ -287,7 +287,7 @@ describe('CameraScreen', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Chụp tài liệu' }));
 
     await waitFor(() => {
-      expect(onPhotoCaptured).toHaveBeenCalledWith(photo);
+      expect(onPhotoCaptured).toHaveBeenCalledWith(photo, null);
     });
     expect(capture).toHaveBeenCalledWith(
       stream,
@@ -315,7 +315,7 @@ describe('CameraScreen', () => {
       .fn<CameraCapture['capture']>()
       .mockResolvedValueOnce(first)
       .mockResolvedValueOnce(second);
-    const onPhotoCaptured = vi.fn<(source: Blob) => void>();
+    const onPhotoCaptured = vi.fn<ComponentProps<typeof CameraScreen>['onPhotoCaptured']>();
     const onFinishCapture = vi.fn();
     const view = renderCamera(service, vi.fn(), {
       cameraCapture: { capture },
@@ -327,11 +327,11 @@ describe('CameraScreen', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Chụp tài liệu' }));
     await waitFor(() => {
-      expect(onPhotoCaptured).toHaveBeenCalledWith(first);
+      expect(onPhotoCaptured).toHaveBeenCalledWith(first, null);
     });
     fireEvent.click(screen.getByRole('button', { name: 'Chụp tài liệu' }));
     await waitFor(() => {
-      expect(onPhotoCaptured).toHaveBeenCalledWith(second);
+      expect(onPhotoCaptured).toHaveBeenCalledWith(second, null);
     });
 
     view.rerender(
@@ -349,6 +349,23 @@ describe('CameraScreen', () => {
     expect(screen.getByRole('status', { name: 'Tiến độ chụp' })).toHaveTextContent(
       '2 trang · 1 đang xử lý',
     );
+    const finish = screen.getByRole('button', { name: 'Hoàn tất chụp 2 trang' });
+    expect(finish).toBeDisabled();
+    fireEvent.click(finish);
+    expect(onFinishCapture).not.toHaveBeenCalled();
+
+    view.rerender(
+      <CameraScreen
+        service={service}
+        headingRef={createRef<HTMLHeadingElement>()}
+        onBack={vi.fn()}
+        cameraCapture={{ capture }}
+        onPhotoCaptured={onPhotoCaptured}
+        onFinishCapture={onFinishCapture}
+        batchStatus={{ total: 2, processing: 0, failed: 0 }}
+      />,
+    );
+
     fireEvent.click(screen.getByRole('button', { name: 'Hoàn tất chụp 2 trang' }));
     expect(onFinishCapture).toHaveBeenCalledOnce();
     expect(stopCamera).toHaveBeenCalledOnce();

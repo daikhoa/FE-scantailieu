@@ -9,6 +9,7 @@ export async function detectDocumentCrop(
   source: ImageAssetFrameSource,
   original: ImageAsset,
   signal: AbortSignal,
+  fallback: CropRegion = { kind: 'full-frame' },
 ): Promise<CropRegion> {
   const frame = await source.create(original, signal);
   try {
@@ -19,7 +20,7 @@ export async function detectDocumentCrop(
     ) {
       throw new ScannerEngineError('failed');
     }
-    if (result.kind === 'full-frame') return { kind: 'full-frame' };
+    if (result.kind === 'full-frame') return fallback;
     return {
       kind: 'document',
       corners: scaleCorners(result.corners, result.dimensions, original.dimensions),

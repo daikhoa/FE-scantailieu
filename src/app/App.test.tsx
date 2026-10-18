@@ -9,6 +9,7 @@ import type {
   BackgroundPageProcessor,
   ProcessedScanPage,
 } from '../features/scanner/background-page-processor';
+import type { HybridRestorationClient } from '../imaging/restoration/hybrid-restoration-client';
 import { App } from './App';
 
 beforeEach(() => {
@@ -25,6 +26,27 @@ afterEach(() => {
 });
 
 describe('App shell', () => {
+  it('keeps server restoration disabled until the user explicitly opts in', () => {
+    const restorationClient: HybridRestorationClient = {
+      restore: vi.fn(() => Promise.reject(new Error('not used'))),
+    };
+
+    render(<App restorationClient={restorationClient} />);
+
+    const toggle = screen.getByRole('checkbox', { name: 'Tối ưu ảnh bằng GPU server' });
+    expect(toggle).not.toBeChecked();
+    expect(screen.getByText('Ảnh không được tải lên máy chủ.')).toBeInTheDocument();
+    expect(screen.getByText('Cục bộ')).toBeInTheDocument();
+
+    fireEvent.click(toggle);
+
+    expect(toggle).toBeChecked();
+    expect(screen.getByText('Hybrid GPU')).toBeInTheDocument();
+    expect(
+      screen.getByText('Ảnh scan sẽ được gửi đến GPU server để phân loại và phục hồi.'),
+    ).toBeInTheDocument();
+  });
+
   it('offers camera and image entry points on the library and opens the camera directly', async () => {
     const stream = { getTracks: () => [] } as unknown as MediaStream;
     const start = vi.fn<CameraService['start']>(() => Promise.resolve({ stream, stop: vi.fn() }));
@@ -168,10 +190,12 @@ describe('App shell', () => {
     };
     const first = new Blob(['first'], { type: 'image/jpeg' });
     const second = new Blob(['second'], { type: 'image/jpeg' });
+    const replacement = new Blob(['replacement'], { type: 'image/jpeg' });
     const capture = vi
       .fn<CameraCapture['capture']>()
       .mockResolvedValueOnce(first)
-      .mockResolvedValueOnce(second);
+      .mockResolvedValueOnce(second)
+      .mockResolvedValueOnce(replacement);
     let nextPage = 0;
     const enqueue = vi.fn<BackgroundPageProcessor['enqueue']>((source, _signal, onStart) => {
       onStart?.();
@@ -222,6 +246,17 @@ describe('App shell', () => {
       render: vi.fn(() => Promise.reject(new Error('not used'))),
       dispose: vi.fn(() => Promise.resolve()),
     };
+    const editorRender = vi.fn<ScannerEngine['render']>(() =>
+      Promise.reject(new Error('ready pages must not render again when opened')),
+    );
+    const editorInitialize = vi.fn<ScannerEngine['initialize']>(() => Promise.resolve());
+    const editorEngine: ScannerEngine = {
+      lifecycle: { kind: 'uninitialized' },
+      initialize: editorInitialize,
+      detect: vi.fn(() => Promise.reject(new Error('ready pages must not be detected again'))),
+      render: editorRender,
+      dispose: vi.fn(() => Promise.resolve()),
+    };
     render(
       <App
         cameraService={cameraService}
@@ -231,6 +266,7 @@ describe('App shell', () => {
           capture: () => ({ dimensions: { width: 100, height: 100 }, close: vi.fn() }),
           dispose: vi.fn(),
         })}
+        editorEngineFactory={() => editorEngine}
         pageProcessorFactory={() => pageProcessor}
       />,
     );
@@ -246,6 +282,7 @@ describe('App shell', () => {
     await waitFor(() => {
       expect(enqueue).toHaveBeenCalledTimes(2);
     });
+    expect(enqueue.mock.calls[0]?.[3]).toBeNull();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Hoàn tất chụp 2 trang' }));
     expect(await screen.findByRole('heading', { name: 'Kiểm tra 2 trang' })).toBeInTheDocument();
@@ -259,5 +296,35 @@ describe('App shell', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Thoát camera' }));
     expect(await screen.findByRole('heading', { name: 'Kiểm tra 2 trang' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Chụp lại trang 1' }));
+    await screen.findByRole('heading', { name: 'Camera đã sẵn sàng' });
+    expect(screen.getByText('Chụp lại trang 1')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Hoàn tất chụp/u })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Chụp tài liệu' }));
+    await waitFor(() => {
+      expect(enqueue).toHaveBeenCalledTimes(3);
+    });
+    expect(enqueue.mock.calls[2]?.[0]).toBe(replacement);
+    expect(await screen.findByRole('heading', { name: 'Kiểm tra 2 trang' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Chỉnh trang 1' }));
+    expect(
+      await screen.findByRole('heading', { name: 'Chỉnh chất lượng trang' }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: 'Bản xem trước tài liệu' })).toHaveAttribute(
+      'src',
+      expect.stringMatching(/^blob:app-/u),
+    );
+    await waitFor(() => {
+      expect(editorInitialize).toHaveBeenCalledOnce();
+    });
+    expect(editorRender).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Quay lại chọn ảnh' }));
+    await screen.findByRole('heading', { name: 'Kiểm tra 2 trang' });
+    fireEvent.click(screen.getByRole('button', { name: 'Xóa trang 2' }));
+    expect(screen.getByRole('heading', { name: 'Kiểm tra 1 trang' })).toBeInTheDocument();
   });
 });

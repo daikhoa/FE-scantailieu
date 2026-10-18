@@ -28,6 +28,7 @@ export interface DocumentQualityProfile {
   };
   readonly stages: {
     readonly normalizeIllumination: boolean;
+    readonly normalizePaperTone: boolean;
     readonly protectColor: boolean;
     readonly sharpen: 'none' | 'gentle' | 'strong';
   };
@@ -160,6 +161,8 @@ export function analyzeDocumentQuality(input: RgbaBackendInput): DocumentQuality
     clipping: { highlightRatio },
     stages: {
       normalizeIllumination: illuminationRange >= 18 && highlightRatio < 0.55,
+      normalizePaperTone:
+        !protectColor && brightLevel >= 64 && brightLevel < 232 && highlightRatio < 0.55,
       protectColor,
       sharpen,
     },

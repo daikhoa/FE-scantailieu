@@ -62,3 +62,19 @@
 - Cần quality gate trước khi bật neural mặc định hoặc đổi output OCR-color production.
 - Không: mô hình tạo sinh/inpainting, tải model từ CDN `latest`, giữ ảnh trên server, hoặc tuyên bố phục hồi dữ liệu đã mất.
 
+## Quyết định Hybrid GPU và classifier (2026-10-18)
+
+- Người dùng chủ động bật Hybrid GPU; mặc định vẫn xử lý cục bộ và không upload.
+- Ảnh chỉ được gửi bằng HTTPS đến origin đã cấu hình, không gửi cookie/credential; backend không lưu
+  ảnh và không log pixel/blob/tên tài liệu.
+- Classifier multi-label dự đoán `shadow`, `curved`, `blur`, `moire`, `finger`, `low_contrast` và
+  `color_document`; rule router kết hợp xác suất với bằng chứng ảnh cổ điển trước khi chọn stage.
+- Stage có thứ tự ổn định: finger segmentation → dewarp → deshadow → demoire → deblur → appearance.
+  Nếu model/provider lỗi, trang giữ nguyên biến thể local đã hoàn tất và UI báo fallback.
+- Original/crop/recipe không bị neural provider sửa; chỉ rendered variant được thay sau khi response đã
+  qua xác minh MIME, kích thước, dimension và identity của model/provider.
+- Fine-tune dùng manifest có provenance/license, group-aware split để ngăn cùng một tài liệu lọt sang
+  nhiều split, MobileNetV3 Small pretrained, BCE multi-label và export ONNX. Không checkpoint nào được
+  coi là production nếu thiếu holdout thật và paired quality gate.
+- Với `finger`, nếu vật che nội dung thì không được inpaint/hallucinate; sản phẩm phải yêu cầu chụp lại.
+

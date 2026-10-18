@@ -662,7 +662,7 @@ Advanced dewarp depends on a separate feasibility gate and must not block a corr
 | Worker/WASM/model | Asset bị thay, job treo, OOM, leak bitmap | Self-host + version/hash; timeout/cancel; one-in-flight; dispose mọi path |
 | IndexedDB | Quota, partial write, dữ liệu cũ/malformed | Schema validation, transaction, migration idempotent, honest recovery |
 | Tên tài liệu/file | XSS, path/control chars, tên gây lỗi | React text escaping, length/character normalization, safe fallback |
-| Privacy | Ảnh bị upload/telemetry/log | Không backend/analytics; CSP/connect-src; E2E chặn network; không log blob/content |
+| Privacy | Ảnh bị upload/telemetry/log | Local mặc định; Hybrid chỉ sau opt-in đến HTTPS origin allowlist, không cookie; backend không lưu/log blob/content; E2E chặn mọi network ngoài endpoint đã cấu hình |
 | Supply chain | Package/model độc hại hoặc license sai | Pin lockfile, scripts disabled-first, provenance/license/audit, explicit gate |
 | Resource exhaustion | Không giới hạn trang làm tab crash | Không hard cap sản phẩm nhưng xử lý tuần tự, release memory, quota warning và cancel |
 

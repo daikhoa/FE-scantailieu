@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools==80.9.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "camscanner2-restoration-service"
+version = "0.1.0"
+description = "Fail-closed document restoration gateway for the hybrid scanner pipeline"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+  "fastapi==0.142.2",
+  "numpy==2.5.4",
+  "onnxruntime-gpu==1.31.0",
+  "Pillow==13.0.0",
+  "python-multipart==0.0.32",
+  "uvicorn[standard]==0.53.0",
+]
+
+[project.optional-dependencies]
+training = [
+  "onnx==1.20.0",
+  "onnxscript==0.6.0",
+  "torch==2.14.1",
+  "torchvision==0.29.1",
+]
+test = [
+  "httpx==0.28.1",
+  "pytest==9.1.1",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*", "training*"]
+

@@ -1,5 +1,9 @@
 # Dependencies and generated output
 node_modules/
+.venv/
+__pycache__/
+.pytest_cache/
+*.py[cod]
 dist/
 coverage/
 playwright-report/
@@ -7,6 +11,9 @@ test-results/
 tests/datasets/
 .benchmark-tmp/
 .rea-analysis/
+.codegraph/
+.tmp-*/
+server/models/
 
 # Local configuration and secrets
 .env

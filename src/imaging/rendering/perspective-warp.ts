@@ -2,8 +2,9 @@ import type { DocumentCorners, ImageDimensions } from '../../domain/document';
 import type { RgbaBackendInput } from '../engines/scanic-backend-contract';
 import { ScannerEngineError } from '../engines/scanner-engine-error';
 import { isValidImageDimensions } from '../geometry/coordinates';
-import { getOutputDimensions, getProjectiveTransform, validateQuad } from '../geometry/quad';
+import { getProjectiveTransform, validateQuad } from '../geometry/quad';
 import { MAX_WORKING_IMAGE_PIXELS, MAX_WORKING_IMAGE_SIDE } from '../working-image-limits';
+import { resolveHighQualityOutputDimensions } from './output-resolution';
 
 export interface RgbaImage {
   readonly dimensions: ImageDimensions;
@@ -78,7 +79,7 @@ function validateInput(input: RgbaBackendInput, corners: DocumentCorners): Image
   ) {
     throw new ScannerEngineError('invalid-input');
   }
-  const output = getOutputDimensions(corners, input.dimensions);
+  const output = resolveHighQualityOutputDimensions(corners, input.dimensions);
   if (
     Math.max(output.width, output.height) > MAX_WORKING_IMAGE_SIDE ||
     output.width * output.height > MAX_WORKING_IMAGE_PIXELS

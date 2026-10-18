@@ -1,0 +1,14 @@
+Metadata-Version: 2.4
+Name: camscanner2-restoration-service
+Version: 0.1.0
+Summary: Fail-closed document restoration gateway for the hybrid scanner pipeline
+Requires-Python: <3.13,>=3.12
+Requires-Dist: fastapi==0.142.2
+Requires-Dist: numpy==2.5.4
+Requires-Dist: onnxruntime-gpu==1.31.0
+Requires-Dist: Pillow==13.0.0
+Requires-Dist: python-multipart==0.0.32
+Requires-Dist: uvicorn[standard]==0.53.0
+Provides-Extra: test
+Requires-Dist: httpx==0.28.1; extra == "test"
+Requires-Dist: pytest==9.1.1; extra == "test"
