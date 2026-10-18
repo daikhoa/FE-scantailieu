@@ -13,8 +13,6 @@ tests/datasets/
 .rea-analysis/
 .codegraph/
 .tmp-*/
-server/models/
-server/datasets/
 
 # Local configuration and secrets
 .env
