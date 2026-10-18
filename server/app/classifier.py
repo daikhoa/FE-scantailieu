@@ -71,7 +71,7 @@ class OnnxDocumentClassifier:
         model_path: Path,
         model_id: str,
         model_version: str,
-        providers: Sequence[str] = ("CUDAExecutionProvider", "CPUExecutionProvider"),
+        providers: Sequence[str] = ("CPUExecutionProvider",),
         session_factory: SessionFactory = _default_session_factory,
     ) -> None:
         self._model_path = model_path

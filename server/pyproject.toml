@@ -10,7 +10,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
   "fastapi==0.142.2",
   "numpy==2.5.4",
-  "onnxruntime-gpu==1.31.0",
+  "onnxruntime==1.31.0",
   "Pillow==13.0.0",
   "python-multipart==0.0.32",
   "uvicorn[standard]==0.53.0",

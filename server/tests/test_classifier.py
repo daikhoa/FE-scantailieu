@@ -1,3 +1,4 @@
+from collections.abc import Sequence
 from pathlib import Path
 import sys
 from types import SimpleNamespace
@@ -31,11 +32,17 @@ def test_classifier_preprocesses_image_and_maps_logits(tmp_path: Path) -> None:
     model_path = tmp_path / "classifier.onnx"
     model_path.write_bytes(b"fixture")
     session = FakeSession(np.zeros((1, len(LABELS)), dtype=np.float32))
+    providers_seen: list[tuple[str, ...]] = []
+
+    def session_factory(_path: str, providers: Sequence[str]) -> FakeSession:
+        providers_seen.append(tuple(providers))
+        return session
+
     classifier = OnnxDocumentClassifier(
         model_path=model_path,
         model_id="doc-defects",
         model_version="test-1",
-        session_factory=lambda _path, _providers: session,
+        session_factory=session_factory,
     )
 
     result = classifier.classify(Image.new("RGB", (640, 480), "white"))
@@ -46,6 +53,7 @@ def test_classifier_preprocesses_image_and_maps_logits(tmp_path: Path) -> None:
     assert session.input_seen is not None
     assert session.input_seen.shape == (1, 3, 224, 224)
     assert np.isfinite(session.input_seen).all()
+    assert providers_seen == [("CPUExecutionProvider",)]
 
 
 def test_missing_model_fails_closed(tmp_path: Path) -> None:
