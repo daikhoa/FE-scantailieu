@@ -54,7 +54,7 @@ afterEach(() => {
 });
 
 describe('browser RGBA codec', () => {
-  it('decodes a bounded raster, copies pixels, and releases bitmap/canvas resources', async () => {
+  it('decodes a bounded raster without duplicating ImageData and releases resources', async () => {
     const decoded = bitmap();
     const create = vi.fn(() => Promise.resolve(decoded));
     vi.stubGlobal('createImageBitmap', create);
@@ -65,7 +65,7 @@ describe('browser RGBA codec', () => {
 
     expect(create).toHaveBeenCalledWith(blob, { imageOrientation: 'none' });
     expect(result).toEqual({ dimensions, pixels: rgba });
-    expect(result.pixels).not.toBe(rgba);
+    expect(result.pixels).toBe(rgba);
     expect(decoded.close).toHaveBeenCalledOnce();
     const surface = FakeOffscreenCanvas.instances[0];
     expect(surface?.context.drawImage).toHaveBeenCalledWith(decoded, 0, 0);
@@ -142,8 +142,9 @@ describe('browser RGBA codec', () => {
     vi.stubGlobal('createImageBitmap', vi.fn());
     const codec = createBrowserRgbaCodec();
 
+    const sourcePixels = rgba.slice();
     const result = await codec.encode(
-      { dimensions, pixels: rgba.slice() },
+      { dimensions, pixels: sourcePixels },
       { type: 'image/png' },
       new AbortController().signal,
     );
@@ -152,6 +153,8 @@ describe('browser RGBA codec', () => {
     expect(result.type).toBe('image/png');
     const surface = FakeOffscreenCanvas.instances[0];
     expect(surface?.context.putImageData).toHaveBeenCalledWith(expect.any(FakeImageData), 0, 0);
+    const written = surface?.context.putImageData.mock.calls[0]?.[0] as FakeImageData | undefined;
+    expect(written?.data).toBe(sourcePixels);
     expect(surface?.convertToBlob).toHaveBeenCalledWith({ type: 'image/png' });
     expect(surface).toMatchObject({ width: 1, height: 1 });
   });

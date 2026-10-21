@@ -131,7 +131,7 @@ export function createBrowserRgbaCodec(): RgbaImageCodec {
         checkAbort(signal);
         return {
           dimensions: { ...asset.dimensions },
-          pixels: image.data.slice(),
+          pixels: image.data,
         };
       } catch (error) {
         throw sanitizedFailure(error, signal);
@@ -150,7 +150,7 @@ export function createBrowserRgbaCodec(): RgbaImageCodec {
         surface = createSurface(input.dimensions);
         const context = context2d(surface, false);
         context.putImageData(
-          new ImageData(input.pixels.slice(), input.dimensions.width, input.dimensions.height),
+          new ImageData(input.pixels, input.dimensions.width, input.dimensions.height),
           0,
           0,
         );
