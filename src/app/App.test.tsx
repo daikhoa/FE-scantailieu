@@ -240,14 +240,22 @@ describe('App shell', () => {
       render: vi.fn(() => Promise.reject(new Error('not used'))),
       dispose: vi.fn(() => Promise.resolve()),
     };
-    const editorRender = vi.fn<ScannerEngine['render']>(() =>
-      Promise.reject(new Error('ready pages must not render again when opened')),
+    const editorRender = vi.fn<ScannerEngine['render']>((request) =>
+      Promise.resolve({
+        recipeKey: `edited-${request.recipe.filter.mode}`,
+        engineVersion: 'test-editor',
+        image: {
+          blob: new Blob(['edited'], { type: 'image/png' }),
+          dimensions: request.original.dimensions,
+        },
+        dewarp: { kind: 'not-requested' },
+      }),
     );
     const editorInitialize = vi.fn<ScannerEngine['initialize']>(() => Promise.resolve());
     const editorEngine: ScannerEngine = {
       lifecycle: { kind: 'uninitialized' },
       initialize: editorInitialize,
-      detect: vi.fn(() => Promise.reject(new Error('ready pages must not be detected again'))),
+      detect: vi.fn(() => Promise.reject(new Error('batch edits must not run detection again'))),
       render: editorRender,
       dispose: vi.fn(() => Promise.resolve()),
     };
@@ -303,21 +311,18 @@ describe('App shell', () => {
     expect(enqueue.mock.calls[2]?.[0]).toBe(replacement);
     expect(await screen.findByRole('heading', { name: 'Kiểm tra 2 trang' })).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Chỉnh trang 1' }));
-    expect(
-      await screen.findByRole('heading', { name: 'Chỉnh chất lượng trang' }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: 'Bản xem trước tài liệu' })).toHaveAttribute(
-      'src',
-      expect.stringMatching(/^blob:app-/u),
-    );
+    fireEvent.click(screen.getByRole('button', { name: 'Xám' }));
     await waitFor(() => {
       expect(editorInitialize).toHaveBeenCalledOnce();
+      expect(editorRender).toHaveBeenCalledOnce();
     });
-    expect(editorRender).not.toHaveBeenCalled();
+    expect(editorRender.mock.calls[0]?.[0].recipe.filter.mode).toBe('grayscale');
 
-    fireEvent.click(screen.getByRole('button', { name: 'Quay lại chọn ảnh' }));
-    await screen.findByRole('heading', { name: 'Kiểm tra 2 trang' });
+    fireEvent.click(screen.getByRole('button', { name: 'Cắt trang 1' }));
+    expect(screen.getByRole('heading', { name: 'Điều chỉnh 4 góc' })).toBeInTheDocument();
+    expect(screen.getAllByRole('slider')).toHaveLength(4);
+    fireEvent.click(screen.getByRole('button', { name: 'Hủy' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Chọn trang 2' }));
     fireEvent.click(screen.getByRole('button', { name: 'Xóa trang 2' }));
     expect(screen.getByRole('heading', { name: 'Kiểm tra 1 trang' })).toBeInTheDocument();
   });

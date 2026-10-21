@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 
+import type { EditRecipe } from '../domain/document';
 import { CameraScreen } from '../features/camera/CameraScreen';
 import type { CameraCapture } from '../features/camera/camera-capture';
 import { createCameraService, type CameraService } from '../features/camera/camera-service';
@@ -23,6 +24,7 @@ import { ScanBatchReview } from '../features/scanner/ScanBatchReview';
 import { scanBatchReducer, scanBatchStatus } from '../features/scanner/scan-batch';
 import type { VideoFrameSource } from '../features/scanner/video-frame-source';
 import type { ScannerEngine } from '../imaging/contracts/scanner-engine';
+import { createScanicEngine } from '../imaging/engines/scanic-classical-engine';
 import { restoreProcessedPage } from '../imaging/restoration/local-page-restoration';
 import {
   createLocalRestorationClient,
@@ -153,8 +155,6 @@ export function App({
   const [cameraReturnView, setCameraReturnView] = useState<CameraReturnView>('library');
   const [homeImportState, setHomeImportState] = useState<HomeImportState>({ kind: 'idle' });
   const [editorImage, setEditorImage] = useState<ImportedImage | null>(null);
-  const [editorProcessedPage, setEditorProcessedPage] = useState<ProcessedScanPage | null>(null);
-  const [selectedBatchPageId, setSelectedBatchPageId] = useState<string | null>(null);
   const [replacementPageId, setReplacementPageId] = useState<string | null>(null);
   const [batch, dispatchBatch] = useReducer(scanBatchReducer, { pages: [] });
   const [resolvedCameraService] = useState(() => cameraService ?? createCameraService());
@@ -288,10 +288,78 @@ export function App({
     for (const operation of pageOperations.current.values()) operation.abort();
     pageOperations.current.clear();
     dispatchBatch({ type: 'reset' });
-    setSelectedBatchPageId(null);
     setReplacementPageId(null);
     setEditorImage(null);
-    setEditorProcessedPage(null);
+  };
+
+  const applyBatchRecipe = async (id: string, recipe: EditRecipe): Promise<void> => {
+    const selected = batch.pages.find((page) => page.id === id);
+    if (selected?.kind !== 'ready') throw new Error('Page is not ready for editing.');
+
+    const controller = new AbortController();
+    pageOperations.current.get(id)?.abort();
+    pageOperations.current.set(id, controller);
+    const localEngine = (editorEngineFactory ?? createScanicEngine)();
+    let restorationContinues = false;
+    try {
+      await localEngine.initialize(controller.signal);
+      const variant = await localEngine.render(
+        { original: selected.page.original, orientation: 0, recipe },
+        controller.signal,
+      );
+      if (controller.signal.aborted || pageOperations.current.get(id) !== controller) {
+        const error = new Error('Page edit cancelled.');
+        error.name = 'AbortError';
+        throw error;
+      }
+
+      const resolvedRestorationClient = restorationClientRef.current;
+      const editedPage: ProcessedScanPage = {
+        original: selected.page.original,
+        crop: recipe.crop,
+        recipe,
+        variant,
+        ...(resolvedRestorationClient === null
+          ? {}
+          : { restoration: { kind: 'processing' as const } }),
+      };
+      dispatchBatch({ type: 'updated', id, page: editedPage });
+
+      if (resolvedRestorationClient !== null) {
+        restorationContinues = true;
+        void restoreProcessedPage(editedPage, resolvedRestorationClient, controller.signal)
+          .then((restored) => {
+            if (pageOperations.current.get(id) === controller) {
+              dispatchBatch({ type: 'updated', id, page: restored });
+            }
+          })
+          .catch((error: unknown) => {
+            if (
+              pageOperations.current.get(id) !== controller ||
+              (error instanceof Error && error.name === 'AbortError')
+            ) {
+              return;
+            }
+            const reason =
+              error instanceof Error && error.message.includes('unavailable')
+                ? 'unavailable'
+                : 'failed';
+            dispatchBatch({
+              type: 'updated',
+              id,
+              page: { ...editedPage, restoration: { kind: 'fallback', reason } },
+            });
+          })
+          .finally(() => {
+            if (pageOperations.current.get(id) === controller) pageOperations.current.delete(id);
+          });
+      }
+    } finally {
+      await localEngine.dispose().catch(() => undefined);
+      if (!restorationContinues && pageOperations.current.get(id) === controller) {
+        pageOperations.current.delete(id);
+      }
+    }
   };
 
   const startNewCameraBatch = () => {
@@ -313,7 +381,6 @@ export function App({
       if (homeImportRequest.current !== controller) return;
       resetBatch();
       setEditorImage(image);
-      setEditorProcessedPage(null);
       setHomeImportState({ kind: 'idle' });
       navigateTo('editor');
     } catch (error) {
@@ -492,17 +559,7 @@ export function App({
             setCameraReturnView('batch-review');
             navigateTo('camera');
           }}
-          onEditPage={(id) => {
-            const selected = batch.pages.find((page) => page.id === id);
-            if (selected?.kind !== 'ready') return;
-            setSelectedBatchPageId(id);
-            setEditorProcessedPage(selected.page);
-            setEditorImage({
-              original: selected.page.original,
-              captureCrop: selected.page.crop,
-            });
-            navigateTo('editor');
-          }}
+          onApplyRecipe={applyBatchRecipe}
           onRetakePage={(id) => {
             const selected = batch.pages.find((page) => page.id === id);
             if (
@@ -531,35 +588,13 @@ export function App({
       ) : editorImage === null ? null : (
         <DocumentEditor
           image={editorImage}
-          {...(editorProcessedPage === null ? {} : { initialPage: editorProcessedPage })}
           headingRef={viewHeadingRef}
           {...(editorEngineFactory === undefined ? {} : { engineFactory: editorEngineFactory })}
           {...(editorFrameSource === undefined ? {} : { frameSource: editorFrameSource })}
           onBack={() => {
             setEditorImage(null);
-            setEditorProcessedPage(null);
-            if (selectedBatchPageId === null) {
-              navigateTo('library');
-            } else {
-              setSelectedBatchPageId(null);
-              navigateTo('batch-review');
-            }
+            navigateTo('library');
           }}
-          {...(selectedBatchPageId === null
-            ? {}
-            : {
-                backLabel: 'Tài liệu',
-                showExport: false,
-                onVariantReady: (variant, recipe) => {
-                  const selected = batch.pages.find((page) => page.id === selectedBatchPageId);
-                  if (selected?.kind !== 'ready') return;
-                  dispatchBatch({
-                    type: 'updated',
-                    id: selectedBatchPageId,
-                    page: { ...selected.page, crop: recipe.crop, recipe, variant },
-                  });
-                },
-              })}
         />
       )}
 

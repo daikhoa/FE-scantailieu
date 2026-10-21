@@ -11,19 +11,12 @@ import {
   type ImageAssetFrameSource,
 } from '../scanner/image-asset-frame-source';
 import { detectDocumentCrop } from './detect-document-crop';
-
-interface FilterOption {
-  readonly mode: FilterMode;
-  readonly label: string;
-  readonly description: string;
-}
-
-const FILTERS: readonly FilterOption[] = [
-  { mode: 'original', label: 'Gốc', description: 'Chỉ cắt và làm thẳng' },
-  { mode: 'ocr-color', label: 'Tự động', description: 'Làm nét chữ, giữ màu' },
-  { mode: 'grayscale', label: 'Xám', description: 'Nền trung tính, chữ rõ' },
-  { mode: 'black-and-white', label: 'Đen trắng', description: 'Tách chữ khỏi nền' },
-];
+import {
+  createDocumentRecipe,
+  DOCUMENT_FILTERS,
+  documentFilterLabel,
+  type DocumentFilterOption,
+} from './document-filters';
 
 type EditorStatus =
   | { readonly kind: 'preparing' }
@@ -48,28 +41,8 @@ interface DocumentEditorProps {
   readonly showExport?: boolean;
 }
 
-function recipe(crop: CropRegion, mode: FilterMode): EditRecipe {
-  const presetVersion =
-    mode === 'original'
-      ? 'original-v1'
-      : mode === 'black-and-white'
-        ? 'black-and-white-v5'
-        : `${mode}-v7`;
-  return {
-    version: 1,
-    crop,
-    rotation: 0,
-    dewarp: { mode: 'perspective-only' },
-    filter: { mode, presetVersion, parameters: {} },
-  };
-}
-
 function isAbort(error: unknown): boolean {
   return error instanceof Error && error.name === 'AbortError';
-}
-
-function filterLabel(mode: FilterMode): string {
-  return FILTERS.find((option) => option.mode === mode)?.label ?? 'Tự động';
 }
 
 export function DocumentEditor({
@@ -92,7 +65,7 @@ export function DocumentEditor({
   const [status, setStatus] = useState<EditorStatus>(() =>
     initialPage === undefined
       ? { kind: 'preparing' }
-      : { kind: 'ready', label: filterLabel(initialPage.recipe.filter.mode) },
+      : { kind: 'ready', label: documentFilterLabel(initialPage.recipe.filter.mode) },
   );
   const [cropKind, setCropKind] = useState<CropRegion['kind'] | null>(
     initialPage?.recipe.crop.kind ?? null,
@@ -152,7 +125,7 @@ export function DocumentEditor({
             controller.signal,
           ));
         crop.current = detectedCrop;
-        const initialRecipe = recipe(detectedCrop, 'ocr-color');
+        const initialRecipe = createDocumentRecipe(detectedCrop, 'ocr-color');
         const variant = await localEngine.render(
           {
             original: image.original,
@@ -190,7 +163,7 @@ export function DocumentEditor({
     };
   }, [detectionSource, engineFactory, image.captureCrop, image.original, initialPage, originalUrl]);
 
-  const chooseFilter = async (option: FilterOption) => {
+  const chooseFilter = async (option: DocumentFilterOption) => {
     const localEngine = engine.current;
     if (!ready.current || localEngine === null || status.kind === 'processing') return;
     const controller = new AbortController();
@@ -198,7 +171,7 @@ export function DocumentEditor({
     activeOperation.current = controller;
     setStatus({ kind: 'processing', label: option.label });
     try {
-      const nextRecipe = recipe(crop.current, option.mode);
+      const nextRecipe = createDocumentRecipe(crop.current, option.mode);
       const variant = await localEngine.render(
         { original: image.original, orientation: 0, recipe: nextRecipe },
         controller.signal,
@@ -269,7 +242,7 @@ export function DocumentEditor({
         )}
 
         <div className="editor__filters" role="group" aria-label="Bộ lọc tài liệu">
-          {FILTERS.map((option) => (
+          {DOCUMENT_FILTERS.map((option) => (
             <button
               key={option.mode}
               type="button"

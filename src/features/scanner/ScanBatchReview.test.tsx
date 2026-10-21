@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import type { EditRecipe } from '../../domain/document';
 import { createImagePdf } from '../export/image-pdf';
 import type { ScanBatchPage } from './scan-batch';
 import { ScanBatchReview } from './ScanBatchReview';
@@ -60,6 +61,60 @@ afterEach(() => {
 });
 
 describe('ScanBatchReview', () => {
+  it('shows one selected page at a time and moves through the document in capture order', () => {
+    const pages = [readyPage('page-1', 'first'), readyPage('page-2', 'second')] as const;
+    render(
+      <ScanBatchReview
+        pages={pages}
+        headingRef={null}
+        onCaptureMore={vi.fn()}
+        onApplyRecipe={vi.fn(() => Promise.resolve())}
+        onRetakePage={vi.fn()}
+        onRetryPage={vi.fn()}
+        onRemovePage={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('1 / 2')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Trang kế tiếp' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Trang kế tiếp' }));
+    expect(screen.getByText('2 / 2')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Trang trước' })).toBeEnabled();
+  });
+
+  it('applies a filter and opens four-corner crop for the selected page', async () => {
+    const page = readyPage('page-1', 'first');
+    const onApplyRecipe = vi.fn<(id: string, recipe: EditRecipe) => Promise<void>>(() =>
+      Promise.resolve(),
+    );
+    render(
+      <ScanBatchReview
+        pages={[page]}
+        headingRef={null}
+        onCaptureMore={vi.fn()}
+        onApplyRecipe={onApplyRecipe}
+        onRetakePage={vi.fn()}
+        onRetryPage={vi.fn()}
+        onRemovePage={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Xám' }));
+    await waitFor(() => {
+      expect(onApplyRecipe).toHaveBeenCalledOnce();
+    });
+    expect(onApplyRecipe.mock.calls[0]?.[0]).toBe('page-1');
+    expect(onApplyRecipe.mock.calls[0]?.[1].filter).toEqual({
+      mode: 'grayscale',
+      presetVersion: 'grayscale-v7',
+      parameters: {},
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cắt trang 1' }));
+    expect(screen.getByRole('heading', { name: 'Điều chỉnh 4 góc' })).toBeInTheDocument();
+    expect(screen.getAllByRole('slider')).toHaveLength(4);
+  });
+
   it('shows pages in capture order with honest processing and failure actions', () => {
     const onRetryPage = vi.fn();
     const onRemovePage = vi.fn();
@@ -82,7 +137,7 @@ describe('ScanBatchReview', () => {
         pages={pages}
         headingRef={null}
         onCaptureMore={vi.fn()}
-        onEditPage={vi.fn()}
+        onApplyRecipe={vi.fn(() => Promise.resolve())}
         onRetakePage={vi.fn()}
         onRetryPage={onRetryPage}
         onRemovePage={onRemovePage}
@@ -98,6 +153,7 @@ describe('ScanBatchReview', () => {
     expect(screen.getAllByAltText(/Bản xem trước trang/u)).toHaveLength(1);
     expect(createObjectUrl).toHaveBeenCalledOnce();
 
+    fireEvent.click(screen.getByRole('button', { name: 'Chọn trang 3' }));
     fireEvent.click(screen.getByRole('button', { name: 'Xử lý lại trang 3' }));
     fireEvent.click(screen.getByRole('button', { name: 'Xóa trang 3' }));
     expect(onRetryPage).toHaveBeenCalledWith('page-3');
@@ -114,7 +170,7 @@ describe('ScanBatchReview', () => {
         pages={pages}
         headingRef={null}
         onCaptureMore={vi.fn()}
-        onEditPage={vi.fn()}
+        onApplyRecipe={vi.fn(() => Promise.resolve())}
         onRetakePage={vi.fn()}
         onRetryPage={vi.fn()}
         onRemovePage={vi.fn()}
@@ -147,7 +203,7 @@ describe('ScanBatchReview', () => {
         pages={[processingPage]}
         headingRef={null}
         onCaptureMore={vi.fn()}
-        onEditPage={vi.fn()}
+        onApplyRecipe={vi.fn(() => Promise.resolve())}
         onRetakePage={vi.fn()}
         onRetryPage={vi.fn()}
         onRemovePage={vi.fn()}
@@ -177,7 +233,7 @@ describe('ScanBatchReview', () => {
         pages={[warnedPage]}
         headingRef={null}
         onCaptureMore={vi.fn()}
-        onEditPage={vi.fn()}
+        onApplyRecipe={vi.fn(() => Promise.resolve())}
         onRetakePage={vi.fn()}
         onRetryPage={vi.fn()}
         onRemovePage={vi.fn()}
@@ -190,9 +246,8 @@ describe('ScanBatchReview', () => {
     ).toBeInTheDocument();
   });
 
-  it('lets the user return to the camera or edit a ready page', () => {
+  it('lets the user return to the camera, retake or remove the selected page', () => {
     const onCaptureMore = vi.fn();
-    const onEditPage = vi.fn();
     const onRetakePage = vi.fn();
     const onRemovePage = vi.fn();
     render(
@@ -200,7 +255,7 @@ describe('ScanBatchReview', () => {
         pages={[readyPage('page-1', 'first')]}
         headingRef={null}
         onCaptureMore={onCaptureMore}
-        onEditPage={onEditPage}
+        onApplyRecipe={vi.fn(() => Promise.resolve())}
         onRetakePage={onRetakePage}
         onRetryPage={vi.fn()}
         onRemovePage={onRemovePage}
@@ -208,11 +263,9 @@ describe('ScanBatchReview', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Chụp thêm trang' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Chỉnh trang 1' }));
     fireEvent.click(screen.getByRole('button', { name: 'Chụp lại trang 1' }));
     fireEvent.click(screen.getByRole('button', { name: 'Xóa trang 1' }));
     expect(onCaptureMore).toHaveBeenCalledOnce();
-    expect(onEditPage).toHaveBeenCalledWith('page-1');
     expect(onRetakePage).toHaveBeenCalledWith('page-1');
     expect(onRemovePage).toHaveBeenCalledWith('page-1');
   });
@@ -224,7 +277,7 @@ describe('ScanBatchReview', () => {
         pages={[]}
         headingRef={null}
         onCaptureMore={onCaptureMore}
-        onEditPage={vi.fn()}
+        onApplyRecipe={vi.fn(() => Promise.resolve())}
         onRetakePage={vi.fn()}
         onRetryPage={vi.fn()}
         onRemovePage={vi.fn()}
