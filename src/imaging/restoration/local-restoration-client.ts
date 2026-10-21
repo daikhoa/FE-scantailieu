@@ -12,8 +12,17 @@ export interface LocalRestorationResult {
 
 export interface LocalRestorationClient {
   warmup?(): void;
-  restore(source: Blob, signal: AbortSignal): Promise<LocalRestorationResult>;
+  restore(
+    source: Blob,
+    signal: AbortSignal,
+    options?: LocalRestorationRequestOptions,
+  ): Promise<LocalRestorationResult>;
   dispose?(): void;
+}
+
+export interface LocalRestorationRequestOptions {
+  readonly analysisKey?: string;
+  readonly reuseAnalysis?: boolean;
 }
 
 interface WorkerSuccess {
@@ -73,7 +82,7 @@ export function createLocalRestorationClient(): LocalRestorationClient {
     warmup() {
       if (!closed) worker.postMessage({ operation: 'warmup' });
     },
-    restore(source, signal) {
+    restore(source, signal, options = {}) {
       if (closed) return Promise.reject(new Error('Local restoration worker is closed.'));
       if (signal.aborted) return Promise.reject(abortError());
       const id = ++sequence;
@@ -87,7 +96,7 @@ export function createLocalRestorationClient(): LocalRestorationClient {
         };
         pending.set(id, { resolve, reject, signal, abort });
         signal.addEventListener('abort', abort, { once: true });
-        worker.postMessage({ operation: 'restore', id, source });
+        worker.postMessage({ operation: 'restore', id, source, ...options });
       });
     },
     dispose() {

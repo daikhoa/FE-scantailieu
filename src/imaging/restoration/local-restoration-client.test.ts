@@ -50,10 +50,16 @@ describe('local restoration client', () => {
     const operation = client.restore(
       new Blob(['scan'], { type: 'image/jpeg' }),
       new AbortController().signal,
+      { analysisKey: 'page-1', reuseAnalysis: true },
     );
 
     expect(worker.posted[0]).toEqual({ operation: 'warmup' });
-    expect(worker.posted[1]).toMatchObject({ operation: 'restore', id: 1 });
+    expect(worker.posted[1]).toMatchObject({
+      operation: 'restore',
+      id: 1,
+      analysisKey: 'page-1',
+      reuseAnalysis: true,
+    });
     worker.emit({
       id: 1,
       kind: 'success',

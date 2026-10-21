@@ -3,6 +3,7 @@ import * as ort from 'onnxruntime-web/webgpu';
 
 import { loadMultipartModel } from './multipart-model-loader';
 import { decideRestorationPolicy, type DocumentDefectScores } from './restoration-policy';
+import { chooseRestorationPerformanceProfile } from './restoration-performance-profile';
 import type { AppliedRestorationStage, RestorationWarning } from './restoration-types';
 
 const CLASSIFIER_URL = '/models/local-restoration/document-defects.onnx';
@@ -23,6 +24,7 @@ const LABELS = [
   'lowContrast',
   'colorDocument',
 ] as const;
+const ANALYSIS_CACHE_LIMIT = 24;
 const cancelled = new Set<number>();
 const workerScope = globalThis as unknown as {
   postMessage(message: unknown): void;
@@ -33,10 +35,29 @@ let dewarpPromise: Promise<ort.InferenceSession> | null = null;
 let deblurPromise: Promise<ort.InferenceSession> | null = null;
 let restorationQueue: Promise<void> = Promise.resolve();
 
+function numericNavigatorSignal(name: string): number | null {
+  const value = Reflect.get(navigator, name);
+  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function dataSaverEnabled(): boolean {
+  const connection = Reflect.get(navigator, 'connection');
+  return typeof connection === 'object' && connection !== null && Reflect.get(connection, 'saveData') === true;
+}
+
+const performanceProfile = chooseRestorationPerformanceProfile({
+  hasWebGpu: browserGpu() !== undefined,
+  hardwareConcurrency: numericNavigatorSignal('hardwareConcurrency'),
+  deviceMemoryGb: numericNavigatorSignal('deviceMemory'),
+  saveData: dataSaverEnabled(),
+});
+
 interface RestoreRequest {
   readonly operation: 'restore';
   readonly id: number;
   readonly source: Blob;
+  readonly analysisKey?: string;
+  readonly reuseAnalysis?: boolean;
 }
 type WorkerRequest =
   | RestoreRequest
@@ -162,6 +183,30 @@ async function classify(bitmap: ImageBitmap) {
   return { scores: scores as DocumentDefectScores, evidence: evidence(input.pixels) };
 }
 
+type ClassificationAnalysis = Awaited<ReturnType<typeof classify>>;
+const analysisCache = new Map<string, ClassificationAnalysis>();
+
+function rememberAnalysis(key: string, analysis: ClassificationAnalysis): void {
+  analysisCache.delete(key);
+  analysisCache.set(key, analysis);
+  const oldest = analysisCache.keys().next();
+  if (analysisCache.size > ANALYSIS_CACHE_LIMIT && !oldest.done) analysisCache.delete(oldest.value);
+}
+
+async function analysisFor(request: RestoreRequest, bitmap: ImageBitmap): Promise<ClassificationAnalysis> {
+  const key = request.analysisKey;
+  if (key !== undefined && request.reuseAnalysis === true) {
+    const cached = analysisCache.get(key);
+    if (cached !== undefined) {
+      rememberAnalysis(key, cached);
+      return cached;
+    }
+  }
+  const analysis = await classify(bitmap);
+  if (key !== undefined) rememberAnalysis(key, analysis);
+  return analysis;
+}
+
 function floatToHalf(value: number): number {
   const float = new Float32Array([value]);
   const bits = new Uint32Array(float.buffer)[0]!;
@@ -183,7 +228,11 @@ function halfToFloat(value: number): number {
 }
 
 async function runImageModel(bitmap: ImageBitmap, kind: 'dewarp' | 'deblur'): Promise<ImageBitmap> {
-  const maximumSide = kind === 'dewarp' ? 1024 : 768;
+  const maximumSide =
+    kind === 'dewarp'
+      ? performanceProfile.dewarpMaximumSide
+      : performanceProfile.deblurMaximumSide;
+  if (maximumSide <= 0) throw new Error(`${kind}-disabled`);
   const scale = Math.min(1, maximumSide / Math.max(bitmap.width, bitmap.height));
   const width = Math.max(8, Math.round((bitmap.width * scale) / 8) * 8);
   const height = Math.max(8, Math.round((bitmap.height * scale) / 8) * 8);
@@ -410,19 +459,24 @@ async function restore(request: RestoreRequest) {
   let bitmap = await decode(request.source);
   const outputDimensions = { width: bitmap.width, height: bitmap.height };
   try {
-    const analysis = await classify(bitmap);
+    const analysis = await analysisFor(request, bitmap);
     if (cancelled.has(request.id)) return;
     const decision = decideRestorationPolicy(analysis);
     const warnings: RestorationWarning[] = [];
     if (analysis.scores.finger >= 0.75) warnings.push('retake-finger');
     if (analysis.scores.moire >= 0.75) warnings.push('unsupported-moire');
-    const stages =
+    const requestedStages =
       decision.kind === 'enhance'
         ? decision.stages.filter(
             (stage): stage is AppliedRestorationStage =>
               stage !== 'finger-segmentation' && stage !== 'demoire',
           )
         : [];
+    const stages = requestedStages.filter((stage) => {
+      if (stage === 'dewarp') return performanceProfile.allowNeuralDewarp;
+      if (stage === 'deblur') return performanceProfile.allowNeuralDeblur;
+      return performanceProfile.allowGpuAppearance;
+    });
     for (const stage of stages) {
       if (stage !== 'dewarp' && stage !== 'deblur') continue;
       const next = await runImageModel(bitmap, stage);

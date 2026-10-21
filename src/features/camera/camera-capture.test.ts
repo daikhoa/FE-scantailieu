@@ -12,7 +12,7 @@ function stream(): MediaStream {
 
 function canvasFixture() {
   const drawImage = vi.fn();
-  let pixels = new Uint8ClampedArray<ArrayBuffer>();
+  let pixels = new Uint8ClampedArray(0);
   const getImageData = vi.fn((_x: number, _y: number, width: number, height: number) => {
     pixels = new Uint8ClampedArray(width * height * 4);
     return { data: pixels };

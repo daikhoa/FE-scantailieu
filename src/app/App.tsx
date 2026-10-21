@@ -25,7 +25,10 @@ import { scanBatchReducer, scanBatchStatus } from '../features/scanner/scan-batc
 import type { VideoFrameSource } from '../features/scanner/video-frame-source';
 import type { ScannerEngine } from '../imaging/contracts/scanner-engine';
 import { createScanicEngine } from '../imaging/engines/scanic-classical-engine';
-import { restoreProcessedPage } from '../imaging/restoration/local-page-restoration';
+import {
+  canReuseRestorationAnalysis,
+  restoreProcessedPage,
+} from '../imaging/restoration/local-page-restoration';
 import {
   createLocalRestorationClient,
   type LocalRestorationClient,
@@ -291,6 +294,7 @@ export function App({
             readyPage,
             resolvedRestorationClient,
             controller.signal,
+            { analysisKey: id },
           );
           if (pageOperations.current.get(id) === controller) {
             dispatchBatch({ type: 'updated', id, page: restored });
@@ -365,7 +369,10 @@ export function App({
 
       if (resolvedRestorationClient !== null) {
         restorationContinues = true;
-        void restoreProcessedPage(editedPage, resolvedRestorationClient, controller.signal)
+        void restoreProcessedPage(editedPage, resolvedRestorationClient, controller.signal, {
+          analysisKey: id,
+          reuseAnalysis: canReuseRestorationAnalysis(selected.page.recipe, recipe),
+        })
           .then((restored) => {
             if (pageOperations.current.get(id) === controller) {
               dispatchBatch({ type: 'updated', id, page: restored });
