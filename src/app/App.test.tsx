@@ -259,7 +259,8 @@ describe('App shell', () => {
       render: editorRender,
       dispose: vi.fn(() => Promise.resolve()),
     };
-    render(
+    const editorEngineFactory = vi.fn(() => editorEngine);
+    const view = render(
       <App
         cameraService={cameraService}
         cameraCapture={{ capture }}
@@ -268,7 +269,7 @@ describe('App shell', () => {
           capture: () => ({ dimensions: { width: 100, height: 100 }, close: vi.fn() }),
           dispose: vi.fn(),
         })}
-        editorEngineFactory={() => editorEngine}
+        editorEngineFactory={editorEngineFactory}
         pageProcessorFactory={() => pageProcessor}
       />,
     );
@@ -318,6 +319,14 @@ describe('App shell', () => {
     });
     expect(editorRender.mock.calls[0]?.[0].recipe.filter.mode).toBe('grayscale');
 
+    fireEvent.click(screen.getByRole('button', { name: 'Gốc' }));
+    await waitFor(() => {
+      expect(editorRender).toHaveBeenCalledTimes(2);
+    });
+    expect(editorEngineFactory).toHaveBeenCalledOnce();
+    expect(editorInitialize).toHaveBeenCalledOnce();
+    expect(editorEngine.dispose).not.toHaveBeenCalled();
+
     fireEvent.click(screen.getByRole('button', { name: 'Cắt trang 1' }));
     expect(screen.getByRole('heading', { name: 'Điều chỉnh 4 góc' })).toBeInTheDocument();
     expect(screen.getAllByRole('slider')).toHaveLength(4);
@@ -325,5 +334,10 @@ describe('App shell', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Chọn trang 2' }));
     fireEvent.click(screen.getByRole('button', { name: 'Xóa trang 2' }));
     expect(screen.getByRole('heading', { name: 'Kiểm tra 1 trang' })).toBeInTheDocument();
+
+    view.unmount();
+    await waitFor(() => {
+      expect(editorEngine.dispose).toHaveBeenCalledOnce();
+    });
   });
 });

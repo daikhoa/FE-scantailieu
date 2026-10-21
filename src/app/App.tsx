@@ -165,6 +165,9 @@ export function App({
   const pageOperations = useRef(new Map<string, AbortController>());
   const homeImportRequest = useRef<AbortController | null>(null);
   const pageSequence = useRef(0);
+  const editorEngine = useRef<ScannerEngine | null>(null);
+  const editorEngineInitialization = useRef<Promise<ScannerEngine> | null>(null);
+  const editorEngineLifetime = useRef<AbortController | null>(null);
 
   useEffect(() => {
     if (restorationClient !== undefined) {
@@ -201,6 +204,18 @@ export function App({
     };
   }, [editorEngineFactory, imageImporter, pageProcessorFactory]);
 
+  useEffect(
+    () => () => {
+      editorEngineLifetime.current?.abort();
+      editorEngineLifetime.current = null;
+      editorEngineInitialization.current = null;
+      const current = editorEngine.current;
+      editorEngine.current = null;
+      void current?.dispose().catch(() => undefined);
+    },
+    [editorEngineFactory],
+  );
+
   useEffect(() => {
     if (view === 'camera') restorationClientRef.current?.warmup?.();
   }, [view]);
@@ -215,6 +230,30 @@ export function App({
   const navigateTo = (nextView: AppView) => {
     shouldMoveFocus.current = true;
     setView(nextView);
+  };
+
+  const readyEditorEngine = (): Promise<ScannerEngine> => {
+    const pending = editorEngineInitialization.current;
+    if (pending !== null) return pending;
+
+    const engine = (editorEngineFactory ?? createScanicEngine)();
+    const lifetime = new AbortController();
+    editorEngine.current = engine;
+    editorEngineLifetime.current = lifetime;
+    const initialization = engine.initialize(lifetime.signal).then(
+      () => engine,
+      async (error: unknown) => {
+        if (editorEngine.current === engine) {
+          editorEngine.current = null;
+          editorEngineInitialization.current = null;
+          editorEngineLifetime.current = null;
+        }
+        await engine.dispose().catch(() => undefined);
+        throw error;
+      },
+    );
+    editorEngineInitialization.current = initialization;
+    return initialization;
   };
 
   const processPage = (
@@ -299,10 +338,9 @@ export function App({
     const controller = new AbortController();
     pageOperations.current.get(id)?.abort();
     pageOperations.current.set(id, controller);
-    const localEngine = (editorEngineFactory ?? createScanicEngine)();
     let restorationContinues = false;
     try {
-      await localEngine.initialize(controller.signal);
+      const localEngine = await readyEditorEngine();
       const variant = await localEngine.render(
         { original: selected.page.original, orientation: 0, recipe },
         controller.signal,
@@ -355,7 +393,6 @@ export function App({
           });
       }
     } finally {
-      await localEngine.dispose().catch(() => undefined);
       if (!restorationContinues && pageOperations.current.get(id) === controller) {
         pageOperations.current.delete(id);
       }
