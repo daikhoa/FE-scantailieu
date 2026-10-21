@@ -1,11 +1,16 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion -- Pixel and tensor indices are bounded by validated dimensions and loop limits. */
 import * as ort from 'onnxruntime-web/webgpu';
 
+import { loadMultipartModel } from './multipart-model-loader';
 import { decideRestorationPolicy, type DocumentDefectScores } from './restoration-policy';
 import type { AppliedRestorationStage, RestorationWarning } from './restoration-types';
 
 const CLASSIFIER_URL = '/models/local-restoration/document-defects.onnx';
-const DEWARP_URL = '/models/local-restoration/uvdoc.onnx';
+const DEWARP_PART_URLS = [
+  '/models/local-restoration/uvdoc.onnx.part-0',
+  '/models/local-restoration/uvdoc.onnx.part-1',
+] as const;
+const MAX_DEWARP_MODEL_BYTES = 32 * 1024 * 1024;
 const DEBLUR_URL = '/models/local-restoration/rt-focuser-int8-fp16.onnx';
 const CLASSIFIER_MODEL = 'document-defects@cord-v2-bootstrap-2026-10-18';
 const GPU_BUFFER_USAGE = { mapRead: 1, copySrc: 4, copyDst: 8, uniform: 64, storage: 128 } as const;
@@ -56,10 +61,14 @@ function classifier(): Promise<ort.InferenceSession> {
 
 function optionalModel(kind: 'dewarp' | 'deblur'): Promise<ort.InferenceSession> {
   if (kind === 'dewarp') {
-    dewarpPromise ??= ort.InferenceSession.create(DEWARP_URL, {
-      executionProviders: providers(),
-      graphOptimizationLevel: 'all',
-    });
+    dewarpPromise ??= loadMultipartModel(DEWARP_PART_URLS, {
+      maximumBytes: MAX_DEWARP_MODEL_BYTES,
+    }).then((model) =>
+      ort.InferenceSession.create(model, {
+        executionProviders: providers(),
+        graphOptimizationLevel: 'all',
+      }),
+    );
     return dewarpPromise;
   }
   deblurPromise ??= ort.InferenceSession.create(DEBLUR_URL, {

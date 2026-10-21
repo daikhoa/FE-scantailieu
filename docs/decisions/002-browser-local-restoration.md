@@ -20,7 +20,8 @@ optional AI pass:
 1. `document-defects.onnx` classifies shadow, curvature, blur, moiré, finger occlusion, low contrast
    and color-document content at 224 × 224.
 2. Classical luminance and detail evidence confirms uncertain shadow and blur predictions.
-3. UVDoc is fetched only for a high-confidence curved page.
+3. UVDoc is fetched only for a high-confidence curved page. Its two static parts are fetched in
+   parallel and reassembled inside the worker before ONNX Runtime creates the session.
 4. RT-Focuser is fetched only for a confirmed blurred page.
 5. ONNX Runtime Web selects WebGPU where available and WASM otherwise. The final lighting, color,
    contrast and sharpening pass uses a WebGPU compute shader, with a Canvas 2D fallback.
