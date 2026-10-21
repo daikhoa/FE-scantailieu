@@ -12,13 +12,15 @@ function stream(): MediaStream {
 
 function canvasFixture() {
   const drawImage = vi.fn();
-  const getImageData = vi.fn((_x: number, _y: number, width: number, height: number) => ({
-    data: new Uint8ClampedArray(width * height * 4),
-  }));
+  let pixels = new Uint8ClampedArray<ArrayBuffer>();
+  const getImageData = vi.fn((_x: number, _y: number, width: number, height: number) => {
+    pixels = new Uint8ClampedArray(width * height * 4);
+    return { data: pixels };
+  });
   const toBlob = vi.fn();
   const getContext = vi.fn(() => ({ drawImage, getImageData }));
   const canvas = { width: 0, height: 0, getContext, toBlob } as unknown as HTMLCanvasElement;
-  return { canvas, drawImage, getImageData, toBlob };
+  return { canvas, drawImage, getImageData, toBlob, pixels: () => pixels };
 }
 
 describe('camera capture', () => {
@@ -62,6 +64,8 @@ describe('camera capture', () => {
       dimensions: { width: 1280, height: 720 },
     });
     expect(output).not.toBeInstanceOf(Blob);
+    if (output instanceof Blob) throw new Error('Expected captured RGBA pixels.');
+    expect(output.pixels).toBe(fixture.pixels());
     expect(fixture.drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 1280, 720);
     expect(fixture.toBlob).not.toHaveBeenCalled();
   });

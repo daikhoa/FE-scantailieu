@@ -83,8 +83,9 @@ export function createCameraCapture(options: CameraCaptureOptions = {}): CameraC
         const context = canvas.getContext('2d', { alpha: false });
         if (context === null) throw new CameraCaptureError('unavailable');
 
-        // Freeze the current high-resolution preview synchronously at the shutter press. Keep raw
-        // pixels for worker rendering; durable storage encoding happens once after capture.
+        // Freeze the current high-resolution preview synchronously at the shutter press. ImageData
+        // already owns its ArrayBuffer, so hand that buffer to the pipeline instead of cloning a
+        // second full-resolution RGBA allocation.
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         checkAbort(signal);
         const image = context.getImageData(0, 0, canvas.width, canvas.height);
@@ -92,7 +93,7 @@ export function createCameraCapture(options: CameraCaptureOptions = {}): CameraC
         return Promise.resolve({
           kind: 'rgba-frame',
           dimensions: { width: canvas.width, height: canvas.height },
-          pixels: image.data.slice(),
+          pixels: image.data,
         });
       } catch (error) {
         if (signal.aborted) return Promise.reject(abortError());
