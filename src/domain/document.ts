@@ -70,6 +70,11 @@ export interface RenderedVariant {
   readonly engineVersion: string;
   readonly image: ImageAsset;
   readonly dewarp: DewarpOutcome;
+  /** Ephemeral worker handoff; consumers must drop it after local restoration starts. */
+  readonly transientRgba?: {
+    readonly dimensions: ImageDimensions;
+    readonly pixels: Uint8ClampedArray<ArrayBuffer>;
+  };
 }
 
 export type PageProcessingState =

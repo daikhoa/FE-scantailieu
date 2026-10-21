@@ -16,16 +16,25 @@ export function canReuseRestorationAnalysis(previous: EditRecipe, next: EditReci
   });
 }
 
+export function discardTransientRestorationPixels(page: ProcessedScanPage): ProcessedScanPage {
+  const { transientRgba: _transientRgba, ...variant } = page.variant;
+  return _transientRgba === undefined ? page : { ...page, variant };
+}
+
 export async function restoreProcessedPage(
   page: ProcessedScanPage,
   client: LocalRestorationClient,
   signal: AbortSignal,
   options?: LocalRestorationRequestOptions,
 ): Promise<ProcessedScanPage> {
-  const result = await client.restore(page.variant.image.blob, signal, options);
+  const transient = page.variant.transientRgba;
+  const source =
+    transient === undefined ? page.variant.image.blob : { kind: 'rgba-frame' as const, ...transient };
+  const result = await client.restore(source, signal, options);
+  const persistentPage = discardTransientRestorationPixels(page);
   if (result.route === 'local' || result.image === undefined || result.provider === null) {
     return {
-      ...page,
+      ...persistentPage,
       restoration: {
         kind: 'classified-local',
         classifierModel: result.classifierModel,
@@ -34,14 +43,14 @@ export async function restoreProcessedPage(
     };
   }
   return {
-    ...page,
+    ...persistentPage,
     variant: {
-      ...page.variant,
+      ...persistentPage.variant,
       image: result.image,
       engineVersion: `${page.variant.engineVersion}+local-ai:${result.provider}`,
       dewarp: result.stages.includes('dewarp')
         ? { kind: 'applied', modelVersion: result.provider }
-        : page.variant.dewarp,
+        : persistentPage.variant.dewarp,
     },
     restoration: {
       kind: 'applied',

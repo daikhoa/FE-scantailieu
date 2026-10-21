@@ -5,6 +5,7 @@ import { createLocalRestorationClient } from './local-restoration-client';
 class FakeWorker {
   static latest: FakeWorker | null = null;
   readonly posted: unknown[] = [];
+  readonly transfers: readonly Transferable[][] = [];
   readonly terminate = vi.fn();
   private readonly listeners = new Map<string, ((event: MessageEvent) => void)[]>();
 
@@ -18,8 +19,9 @@ class FakeWorker {
     this.listeners.set(type, current);
   }
 
-  postMessage(message: unknown): void {
+  postMessage(message: unknown, transfer: Transferable[] = []): void {
     this.posted.push(message);
+    (this.transfers as Transferable[][]).push(transfer);
   }
 
   emit(message: unknown): void {
@@ -90,6 +92,25 @@ describe('local restoration client', () => {
       message: 'Local restoration cancelled.',
     });
     expect(worker.posted.at(-1)).toEqual({ operation: 'cancel', id: 1 });
+  });
+
+  it('transfers rendered RGBA pixels to restoration without a Blob decode round trip', () => {
+    vi.stubGlobal('Worker', FakeWorker);
+    const client = createLocalRestorationClient();
+    const worker = FakeWorker.latest;
+    if (worker === null) throw new Error('Worker was not created.');
+    const pixels = new Uint8ClampedArray(4 * 3 * 2);
+
+    void client.restore(
+      { kind: 'rgba-frame', dimensions: { width: 3, height: 2 }, pixels },
+      new AbortController().signal,
+    );
+
+    expect(worker.posted[0]).toMatchObject({
+      operation: 'restore',
+      source: { kind: 'rgba-frame', dimensions: { width: 3, height: 2 } },
+    });
+    expect(worker.transfers[0]).toEqual([pixels.buffer]);
   });
 
   it('removes abort listeners when the worker fails all pending jobs', async () => {

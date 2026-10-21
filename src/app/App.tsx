@@ -27,6 +27,7 @@ import type { ScannerEngine } from '../imaging/contracts/scanner-engine';
 import { createScanicEngine } from '../imaging/engines/scanic-classical-engine';
 import {
   canReuseRestorationAnalysis,
+  discardTransientRestorationPixels,
   restoreProcessedPage,
 } from '../imaging/restoration/local-page-restoration';
 import {
@@ -286,7 +287,7 @@ export function App({
         const shouldRestore = resolvedRestorationClient !== null;
         const readyPage: ProcessedScanPage = shouldRestore
           ? { ...page, restoration: { kind: 'processing' } }
-          : page;
+          : discardTransientRestorationPixels(page);
         dispatchBatch({ type: 'ready', id, page: readyPage });
         if (!shouldRestore || pageOperations.current.get(id) !== controller) return;
         try {
@@ -313,7 +314,10 @@ export function App({
           dispatchBatch({
             type: 'updated',
             id,
-            page: { ...readyPage, restoration: { kind: 'fallback', reason } },
+            page: {
+              ...discardTransientRestorationPixels(readyPage),
+              restoration: { kind: 'fallback', reason },
+            },
           });
         }
       })
@@ -346,7 +350,7 @@ export function App({
     try {
       const localEngine = await readyEditorEngine();
       const variant = await localEngine.render(
-        { original: selected.page.original, orientation: 0, recipe },
+        { original: selected.page.original, orientation: 0, recipe, preserveOutputPixels: true },
         controller.signal,
       );
       if (controller.signal.aborted || pageOperations.current.get(id) !== controller) {
@@ -392,7 +396,10 @@ export function App({
             dispatchBatch({
               type: 'updated',
               id,
-              page: { ...editedPage, restoration: { kind: 'fallback', reason } },
+              page: {
+                ...discardTransientRestorationPixels(editedPage),
+                restoration: { kind: 'fallback', reason },
+              },
             });
           })
           .finally(() => {

@@ -5,6 +5,9 @@ import { loadMultipartModel } from './multipart-model-loader';
 import { decideRestorationPolicy, type DocumentDefectScores } from './restoration-policy';
 import { chooseRestorationPerformanceProfile } from './restoration-performance-profile';
 import type { AppliedRestorationStage, RestorationWarning } from './restoration-types';
+import type { LocalRestorationSource } from './local-restoration-client';
+import { isValidImageDimensions } from '../geometry/coordinates';
+import { MAX_WORKING_IMAGE_PIXELS, MAX_WORKING_IMAGE_SIDE } from '../working-image-limits';
 
 const CLASSIFIER_URL = '/models/local-restoration/document-defects.onnx';
 const DEWARP_PART_URLS = [
@@ -55,7 +58,7 @@ const performanceProfile = chooseRestorationPerformanceProfile({
 interface RestoreRequest {
   readonly operation: 'restore';
   readonly id: number;
-  readonly source: Blob;
+  readonly source: LocalRestorationSource;
   readonly analysisKey?: string;
   readonly reuseAnalysis?: boolean;
 }
@@ -99,8 +102,22 @@ function optionalModel(kind: 'dewarp' | 'deblur'): Promise<ort.InferenceSession>
   return deblurPromise;
 }
 
-async function decode(source: Blob): Promise<ImageBitmap> {
-  return await createImageBitmap(source, { imageOrientation: 'none' });
+async function decode(source: LocalRestorationSource): Promise<ImageBitmap> {
+  if (source instanceof Blob) return await createImageBitmap(source, { imageOrientation: 'none' });
+  const { dimensions, pixels } = source;
+  if (
+    !isValidImageDimensions(dimensions) ||
+    Math.max(dimensions.width, dimensions.height) > MAX_WORKING_IMAGE_SIDE ||
+    dimensions.width * dimensions.height > MAX_WORKING_IMAGE_PIXELS ||
+    pixels.byteLength !== dimensions.width * dimensions.height * 4
+  ) {
+    throw new Error('invalid-rgba-source');
+  }
+  const canvas = new OffscreenCanvas(dimensions.width, dimensions.height);
+  const context = canvas.getContext('2d', { alpha: false });
+  if (context === null) throw new Error('canvas-unavailable');
+  context.putImageData(new ImageData(pixels, dimensions.width, dimensions.height), 0, 0);
+  return await createImageBitmap(canvas);
 }
 
 function sampleCanvas(bitmap: ImageBitmap, width: number, height: number): OffscreenCanvas {

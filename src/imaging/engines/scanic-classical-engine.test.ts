@@ -469,6 +469,7 @@ describe('Scanic serialized work, cancellation and cleanup', () => {
       original: { blob: new Blob(['original'], { type: 'image/png' }), dimensions },
       orientation: 0 as const,
       recipe,
+      preserveOutputPixels: true,
     };
     const backend = fakeBackend();
     const codec = fakeCodec();
@@ -509,6 +510,7 @@ describe('Scanic serialized work, cancellation and cleanup', () => {
       dewarp: { kind: 'not-requested' },
     });
     expect(result.image.blob.type).toBe('image/png');
+    expect(result.transientRgba).toBe(warped);
     expect(engine.lifecycle.kind).toBe('ready');
     await engine.dispose();
   });

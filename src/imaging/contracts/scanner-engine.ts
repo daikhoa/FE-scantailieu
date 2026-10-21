@@ -57,6 +57,8 @@ export interface RenderPageRequest {
    */
   readonly orientation: QuarterTurn;
   readonly recipe: EditRecipe;
+  /** Keeps rendered pixels for one zero-copy handoff to the local restoration worker. */
+  readonly preserveOutputPixels?: boolean;
 }
 
 /**

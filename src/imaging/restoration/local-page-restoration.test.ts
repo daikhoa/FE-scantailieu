@@ -54,6 +54,14 @@ describe('restoreProcessedPage', () => {
 
   it('keeps local pixels when the classifier selects no heavy stage', async () => {
     const original = page();
+    const transientRgba = {
+      dimensions: original.variant.image.dimensions,
+      pixels: new Uint8ClampedArray(100 * 140 * 4),
+    };
+    const pageWithPixels = {
+      ...original,
+      variant: { ...original.variant, transientRgba },
+    };
     const restore = vi.fn<LocalRestorationClient['restore']>(() =>
       Promise.resolve({
         route: 'local',
@@ -68,21 +76,26 @@ describe('restoreProcessedPage', () => {
     };
     const signal = new AbortController().signal;
 
-    const result = await restoreProcessedPage(original, client, signal, {
+    const result = await restoreProcessedPage(pageWithPixels, client, signal, {
       analysisKey: 'page-1',
       reuseAnalysis: true,
     });
 
-    expect(result.variant).toBe(original.variant);
+    expect(result.variant.image).toBe(original.variant.image);
+    expect(result.variant).not.toHaveProperty('transientRgba');
     expect(result.restoration).toEqual({
       kind: 'classified-local',
       classifierModel: 'defects@1',
       warnings: ['retake-finger'],
     });
-    expect(restore).toHaveBeenCalledWith(original.variant.image.blob, signal, {
+    expect(restore).toHaveBeenCalledWith(
+      { kind: 'rgba-frame', ...transientRgba },
+      signal,
+      {
       analysisKey: 'page-1',
       reuseAnalysis: true,
-    });
+      },
+    );
   });
 
   it('replaces only the rendered variant after local model restoration', async () => {

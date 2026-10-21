@@ -174,6 +174,7 @@ export function createBackgroundPageProcessor(
           original: imported.original,
           orientation: 0,
           recipe,
+          preserveOutputPixels: true,
           ...(source instanceof Blob
             ? {}
             : {

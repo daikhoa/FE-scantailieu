@@ -1,4 +1,4 @@
-import type { ImageAsset } from '../../domain/document';
+import type { ImageAsset, ImageDimensions } from '../../domain/document';
 import type { AppliedRestorationStage, RestorationWarning } from './restoration-types';
 
 export interface LocalRestorationResult {
@@ -13,12 +13,20 @@ export interface LocalRestorationResult {
 export interface LocalRestorationClient {
   warmup?(): void;
   restore(
-    source: Blob,
+    source: LocalRestorationSource,
     signal: AbortSignal,
     options?: LocalRestorationRequestOptions,
   ): Promise<LocalRestorationResult>;
   dispose?(): void;
 }
+
+export type LocalRestorationSource =
+  | Blob
+  | {
+      readonly kind: 'rgba-frame';
+      readonly dimensions: ImageDimensions;
+      readonly pixels: Uint8ClampedArray<ArrayBuffer>;
+    };
 
 export interface LocalRestorationRequestOptions {
   readonly analysisKey?: string;
@@ -96,7 +104,8 @@ export function createLocalRestorationClient(): LocalRestorationClient {
         };
         pending.set(id, { resolve, reject, signal, abort });
         signal.addEventListener('abort', abort, { once: true });
-        worker.postMessage({ operation: 'restore', id, source, ...options });
+        const transfer = source instanceof Blob ? [] : [source.pixels.buffer];
+        worker.postMessage({ operation: 'restore', id, source, ...options }, transfer);
       });
     },
     dispose() {

@@ -431,6 +431,7 @@ class ScanicEngine implements ScannerEngine {
         recipeKey,
         engineVersion: ENGINE_VERSION,
         image: { blob, dimensions: { ...output.dimensions } },
+        ...(request.preserveOutputPixels ? { transientRgba: output } : {}),
         dewarp:
           request.recipe.dewarp.mode === 'perspective-only'
             ? { kind: 'not-requested' }

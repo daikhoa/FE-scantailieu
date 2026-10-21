@@ -133,7 +133,12 @@ describe('background page processor', () => {
       filter: { mode: 'ocr-color', presetVersion: 'ocr-color-v7', parameters: {} },
     });
     expect(renderPage).toHaveBeenCalledWith(
-      { original: result.original, orientation: 0, recipe: result.recipe },
+      {
+        original: result.original,
+        orientation: 0,
+        recipe: result.recipe,
+        preserveOutputPixels: true,
+      },
       expect.any(AbortSignal),
     );
     expect(detectPage).toHaveBeenCalledOnce();
