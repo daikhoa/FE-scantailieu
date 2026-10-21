@@ -38,6 +38,26 @@ function processed(source: Blob, key: string): ProcessedScanPage {
 }
 
 describe('scan batch reducer', () => {
+  it('releases the large captured RGBA buffer after durable processing succeeds', () => {
+    const capturedSource = {
+      kind: 'rgba-frame' as const,
+      dimensions: { width: 2, height: 2 },
+      pixels: new Uint8ClampedArray(16),
+    };
+    const durableSource = new Blob(['durable'], { type: 'image/jpeg' });
+    let state: ScanBatchState = {
+      pages: [{ id: 'page-1', source: capturedSource, kind: 'processing' }],
+    };
+
+    state = scanBatchReducer(state, {
+      type: 'ready',
+      id: 'page-1',
+      page: processed(durableSource, 'ready'),
+    });
+
+    expect(state.pages[0]?.source).toBe(durableSource);
+  });
+
   it('keeps capture order while pages finish independently', () => {
     let state: ScanBatchState = { pages: [] };
     state = scanBatchReducer(state, {

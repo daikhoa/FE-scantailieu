@@ -1,10 +1,14 @@
 import type { CropRegion, EditRecipe, ImageAsset, RenderedVariant } from '../../domain/document';
 import type { ScannerEngine } from '../../imaging/contracts/scanner-engine';
+import type { RestorationWarning } from '../../imaging/restoration/restoration-types';
 import { createScanicEngine } from '../../imaging/engines/scanic-classical-engine';
 import { detectDocumentCrop } from '../editor/detect-document-crop';
 import { importImage, type ImageImporter } from '../camera/image-import';
 import { mapLiveDetectionToCrop } from '../camera/live-capture-crop';
 import type { LiveDetectionResult } from './detection-scheduler';
+import type { CapturedRgbaFrame } from '../camera/camera-capture';
+import { createBrowserRgbaCodec } from '../../imaging/codecs/browser-rgba-codec';
+import type { RgbaImageCodec } from '../../imaging/codecs/rgba-image-codec';
 import {
   createImageAssetFrameSource,
   type ImageAssetFrameSource,
@@ -24,12 +28,14 @@ export type PageRestorationState =
   | {
       readonly kind: 'classified-local';
       readonly classifierModel: string;
+      readonly warnings: readonly RestorationWarning[];
     }
   | {
       readonly kind: 'applied';
       readonly stages: readonly string[];
       readonly classifierModel: string;
       readonly provider: string;
+      readonly warnings: readonly RestorationWarning[];
     }
   | {
       readonly kind: 'fallback';
@@ -38,7 +44,7 @@ export type PageRestorationState =
 
 export interface BackgroundPageProcessor {
   enqueue(
-    source: Blob,
+    source: ScanPageSource,
     signal: AbortSignal,
     onStart?: () => void,
     liveDetection?: LiveDetectionResult | null,
@@ -46,10 +52,13 @@ export interface BackgroundPageProcessor {
   dispose(): Promise<void>;
 }
 
+export type ScanPageSource = Blob | CapturedRgbaFrame;
+
 interface BackgroundPageProcessorOptions {
   readonly importer?: ImageImporter;
   readonly engineFactory?: () => ScannerEngine;
   readonly frameSource?: ImageAssetFrameSource;
+  readonly codec?: RgbaImageCodec;
 }
 
 export function createDefaultPageRecipe(crop: CropRegion): EditRecipe {
@@ -101,6 +110,7 @@ export function createBackgroundPageProcessor(
   const importer = options.importer ?? importImage;
   const engineFactory = options.engineFactory ?? createScanicEngine;
   const frameSource = options.frameSource ?? createImageAssetFrameSource();
+  const codec = options.codec ?? createBrowserRgbaCodec();
   const disposal = new AbortController();
   let engine: ScannerEngine | null = null;
   let tail: Promise<unknown> = Promise.resolve();
@@ -129,12 +139,24 @@ export function createBackgroundPageProcessor(
   };
 
   const process = async (
-    source: Blob,
+    source: ScanPageSource,
     signal: AbortSignal,
     liveDetection: LiveDetectionResult | null,
   ): Promise<ProcessedScanPage> => {
     checkAbort(signal, disposal.signal);
-    const imported = await importer(source, signal);
+    const imported =
+      source instanceof Blob
+        ? await importer(source, signal)
+        : {
+            original: {
+              blob: await codec.encode(
+                { dimensions: source.dimensions, pixels: source.pixels },
+                { type: 'image/jpeg', quality: 0.97 },
+                signal,
+              ),
+              dimensions: { ...source.dimensions },
+            },
+          };
     checkAbort(signal, disposal.signal);
     const currentEngine = await readyEngine(signal);
     try {
@@ -148,7 +170,19 @@ export function createBackgroundPageProcessor(
       );
       const recipe = createDefaultPageRecipe(crop);
       const variant = await currentEngine.render(
-        { original: imported.original, orientation: 0, recipe },
+        {
+          original: imported.original,
+          orientation: 0,
+          recipe,
+          ...(source instanceof Blob
+            ? {}
+            : {
+                sourcePixels: {
+                  dimensions: source.dimensions,
+                  pixels: source.pixels,
+                },
+              }),
+        },
         signal,
       );
       checkAbort(signal, disposal.signal);

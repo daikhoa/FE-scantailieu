@@ -12,7 +12,6 @@ const SAFE_MESSAGES: Readonly<Record<CameraCaptureFailureCode, string>> = {
   failed: 'Camera capture failed.',
 };
 const HAVE_CURRENT_DATA = 2;
-const OUTPUT_TYPE = 'image/png';
 
 export class CameraCaptureError extends Error {
   override readonly name = 'CameraCaptureError';
@@ -27,7 +26,17 @@ interface CameraCaptureOptions {
 }
 
 export interface CameraCapture {
-  capture(stream: MediaStream, video: HTMLVideoElement, signal: AbortSignal): Promise<Blob>;
+  capture(
+    stream: MediaStream,
+    video: HTMLVideoElement,
+    signal: AbortSignal,
+  ): Promise<CapturedRgbaFrame | Blob>;
+}
+
+export interface CapturedRgbaFrame {
+  readonly kind: 'rgba-frame';
+  readonly dimensions: { readonly width: number; readonly height: number };
+  readonly pixels: Uint8ClampedArray<ArrayBuffer>;
 }
 
 function abortError(): Error {
@@ -54,67 +63,41 @@ function validDimensions(width: number, height: number): boolean {
   );
 }
 
-function canvasBlob(canvas: HTMLCanvasElement, signal: AbortSignal): Promise<Blob> {
-  return new Promise((resolve, reject) => {
-    let settled = false;
-    const finish = (action: () => void) => {
-      if (settled) return;
-      settled = true;
-      signal.removeEventListener('abort', onAbort);
-      action();
-    };
-    const onAbort = () => {
-      finish(() => {
-        reject(abortError());
-      });
-    };
-    signal.addEventListener('abort', onAbort, { once: true });
-    canvas.toBlob(
-      (blob) => {
-        finish(() => {
-          if (blob === null || blob.size <= 0 || blob.type !== OUTPUT_TYPE) {
-            reject(new CameraCaptureError('failed'));
-          } else {
-            resolve(blob);
-          }
-        });
-      },
-      OUTPUT_TYPE,
-      undefined,
-    );
-  });
-}
-
 export function createCameraCapture(options: CameraCaptureOptions = {}): CameraCapture {
   const createCanvas = options.createCanvas ?? browserCanvas;
 
   return {
-    async capture(_stream, video, signal) {
-      checkAbort(signal);
-      if (
-        video.readyState < HAVE_CURRENT_DATA ||
-        !validDimensions(video.videoWidth, video.videoHeight)
-      ) {
-        throw new CameraCaptureError('invalid-input');
-      }
-
+    capture(_stream, video, signal) {
       let canvas: HTMLCanvasElement | null = null;
       try {
+        checkAbort(signal);
+        if (
+          video.readyState < HAVE_CURRENT_DATA ||
+          !validDimensions(video.videoWidth, video.videoHeight)
+        ) {
+          throw new CameraCaptureError('invalid-input');
+        }
         canvas = createCanvas();
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         const context = canvas.getContext('2d', { alpha: false });
         if (context === null) throw new CameraCaptureError('unavailable');
 
-        // Freeze the current high-resolution preview before the first await. Encoding may finish
-        // later, but movement after the shutter press cannot change these captured pixels.
+        // Freeze the current high-resolution preview synchronously at the shutter press. Keep raw
+        // pixels for worker rendering; durable storage encoding happens once after capture.
         context.drawImage(video, 0, 0, canvas.width, canvas.height);
         checkAbort(signal);
-        return await canvasBlob(canvas, signal);
+        const image = context.getImageData(0, 0, canvas.width, canvas.height);
+        checkAbort(signal);
+        return Promise.resolve({
+          kind: 'rgba-frame',
+          dimensions: { width: canvas.width, height: canvas.height },
+          pixels: image.data.slice(),
+        });
       } catch (error) {
-        if (signal.aborted) throw abortError();
-        if (error instanceof CameraCaptureError) throw error;
-        throw new CameraCaptureError('failed');
+        if (signal.aborted) return Promise.reject(abortError());
+        if (error instanceof CameraCaptureError) return Promise.reject(error);
+        return Promise.reject(new CameraCaptureError('failed'));
       } finally {
         if (canvas !== null) {
           canvas.width = 1;

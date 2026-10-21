@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { downloadBlob } from '../export/download-blob';
 import { createImagePdf } from '../export/image-pdf';
 import type { ScanBatchPage } from './scan-batch';
+import type { RestorationWarning } from '../../imaging/restoration/restoration-types';
 
 interface ScanBatchReviewProps {
   readonly pages: readonly ScanBatchPage[];
@@ -21,6 +22,18 @@ function isAbort(error: unknown): boolean {
 }
 
 type ReadyScanBatchPage = Extract<ScanBatchPage, { readonly kind: 'ready' }>;
+
+const RESTORATION_WARNING_LABELS: Record<RestorationWarning, string> = {
+  'retake-finger': 'Tay đang che tài liệu — nên chụp lại trang này.',
+  'unsupported-moire': 'Có vân moiré — bộ xử lý hiện tại chưa khử hoàn toàn.',
+};
+
+function pageWarnings(page: ReadyScanBatchPage): readonly RestorationWarning[] {
+  const restoration = page.page.restoration;
+  return restoration?.kind === 'classified-local' || restoration?.kind === 'applied'
+    ? restoration.warnings
+    : [];
+}
 
 function PagePreview({
   page,
@@ -130,6 +143,7 @@ export function ScanBatchReview({
           <ol className="batch-page-list" aria-label="Các trang đã chụp">
             {pages.map((page, index) => {
               const number = index + 1;
+              const warnings = page.kind === 'ready' ? pageWarnings(page) : [];
               return (
                 <li className={`batch-page batch-page--${page.kind}`} key={page.id}>
                   {page.kind === 'ready' ? (
@@ -163,14 +177,19 @@ export function ScanBatchReview({
                     ) : page.kind === 'failed' ? (
                       <span>Cần xử lý lại</span>
                     ) : page.page.restoration?.kind === 'processing' ? (
-                      <span>Đang tối ưu bằng GPU</span>
+                      <span>Đang hoàn thiện trên thiết bị</span>
                     ) : page.page.restoration?.kind === 'applied' ? (
-                      <span>Đã tối ưu bằng GPU</span>
+                      <span>Đã tối ưu trên thiết bị</span>
                     ) : page.page.restoration?.kind === 'fallback' ? (
                       <span>Đã dùng bản xử lý cục bộ</span>
                     ) : (
                       <span>Đã sẵn sàng</span>
                     )}
+                    {warnings.map((warning) => (
+                      <span className="batch-page__warning" role="alert" key={warning}>
+                        {RESTORATION_WARNING_LABELS[warning]}
+                      </span>
+                    ))}
                   </div>
                   <div className="batch-page__actions">
                     {page.kind === 'ready' || page.kind === 'failed' ? (

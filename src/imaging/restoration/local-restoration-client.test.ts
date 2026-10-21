@@ -1,0 +1,106 @@
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { createLocalRestorationClient } from './local-restoration-client';
+
+class FakeWorker {
+  static latest: FakeWorker | null = null;
+  readonly posted: unknown[] = [];
+  readonly terminate = vi.fn();
+  private readonly listeners = new Map<string, ((event: MessageEvent) => void)[]>();
+
+  constructor() {
+    FakeWorker.latest = this;
+  }
+
+  addEventListener(type: string, listener: EventListener): void {
+    const current = this.listeners.get(type) ?? [];
+    current.push(listener as (event: MessageEvent) => void);
+    this.listeners.set(type, current);
+  }
+
+  postMessage(message: unknown): void {
+    this.posted.push(message);
+  }
+
+  emit(message: unknown): void {
+    for (const listener of this.listeners.get('message') ?? []) {
+      listener({ data: message } as MessageEvent);
+    }
+  }
+
+  emitWorkerError(): void {
+    for (const listener of this.listeners.get('error') ?? []) {
+      listener({} as MessageEvent);
+    }
+  }
+}
+
+describe('local restoration client', () => {
+  afterEach(() => {
+    FakeWorker.latest = null;
+    vi.unstubAllGlobals();
+  });
+
+  it('warms the classifier and resolves a local worker result', async () => {
+    vi.stubGlobal('Worker', FakeWorker);
+    const client = createLocalRestorationClient();
+    const worker = FakeWorker.latest;
+    if (worker === null) throw new Error('Worker was not created.');
+    client.warmup?.();
+    const operation = client.restore(
+      new Blob(['scan'], { type: 'image/jpeg' }),
+      new AbortController().signal,
+    );
+
+    expect(worker.posted[0]).toEqual({ operation: 'warmup' });
+    expect(worker.posted[1]).toMatchObject({ operation: 'restore', id: 1 });
+    worker.emit({
+      id: 1,
+      kind: 'success',
+      result: {
+        route: 'local',
+        stages: [],
+        classifierModel: 'classifier@test',
+        provider: 'browser-ort',
+        warnings: [],
+      },
+    });
+
+    await expect(operation).resolves.toMatchObject({ route: 'local' });
+  });
+
+  it('cancels the worker job without exposing the abort reason', async () => {
+    vi.stubGlobal('Worker', FakeWorker);
+    const client = createLocalRestorationClient();
+    const worker = FakeWorker.latest;
+    if (worker === null) throw new Error('Worker was not created.');
+    const controller = new AbortController();
+    const operation = client.restore(new Blob(['scan'], { type: 'image/jpeg' }), controller.signal);
+
+    controller.abort('private page data');
+
+    await expect(operation).rejects.toMatchObject({
+      name: 'AbortError',
+      message: 'Local restoration cancelled.',
+    });
+    expect(worker.posted.at(-1)).toEqual({ operation: 'cancel', id: 1 });
+  });
+
+  it('removes abort listeners when the worker fails all pending jobs', async () => {
+    vi.stubGlobal('Worker', FakeWorker);
+    const client = createLocalRestorationClient();
+    const worker = FakeWorker.latest;
+    if (worker === null) throw new Error('Worker was not created.');
+    const controller = new AbortController();
+    const removeEventListener = vi.spyOn(controller.signal, 'removeEventListener');
+    const operation = client.restore(new Blob(['scan'], { type: 'image/jpeg' }), controller.signal);
+
+    worker.emitWorkerError();
+
+    await expect(operation).rejects.toThrow('Local restoration worker failed.');
+    expect(removeEventListener).toHaveBeenCalledWith('abort', expect.any(Function));
+    const postedBeforeAbort = worker.posted.length;
+    controller.abort();
+    expect(worker.posted).toHaveLength(postedBeforeAbort);
+  });
+});

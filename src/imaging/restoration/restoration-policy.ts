@@ -24,7 +24,7 @@ export interface RestorationEvidence {
 export type RestorationDecision =
   | { readonly kind: 'local'; readonly protectColor: boolean }
   | {
-      readonly kind: 'gpu';
+      readonly kind: 'enhance';
       readonly stages: readonly RestorationStage[];
       readonly protectColor: boolean;
     };
@@ -89,5 +89,5 @@ export function decideRestorationPolicy({
   const protectColor = scores.colorDocument >= COLOR_PROTECTION_CONFIDENCE;
   return stages.length === 0
     ? { kind: 'local', protectColor }
-    : { kind: 'gpu', stages, protectColor };
+    : { kind: 'enhance', stages, protectColor };
 }

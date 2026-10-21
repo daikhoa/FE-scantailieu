@@ -37,7 +37,7 @@ describe('decideRestorationPolicy', () => {
         evidence: { illuminationRange: 32, highlightRatio: 0.1, detail: 'low' },
       }),
     ).toEqual({
-      kind: 'gpu',
+      kind: 'enhance',
       stages: ['dewarp', 'deshadow', 'demoire', 'deblur', 'appearance'],
       protectColor: true,
     });
@@ -49,7 +49,7 @@ describe('decideRestorationPolicy', () => {
         scores: { ...cleanScores, shadow: 0.58 },
         evidence: { illuminationRange: 24, highlightRatio: 0.12, detail: 'medium' },
       }),
-    ).toEqual({ kind: 'gpu', stages: ['deshadow'], protectColor: false });
+    ).toEqual({ kind: 'enhance', stages: ['deshadow'], protectColor: false });
   });
 
   it('does not run shadow restoration when highlights are already heavily clipped', () => {
@@ -67,7 +67,7 @@ describe('decideRestorationPolicy', () => {
         scores: { ...cleanScores, finger: 0.86 },
         evidence: { illuminationRange: 4, highlightRatio: 0.02, detail: 'high' },
       }),
-    ).toEqual({ kind: 'gpu', stages: ['finger-segmentation'], protectColor: false });
+    ).toEqual({ kind: 'enhance', stages: ['finger-segmentation'], protectColor: false });
   });
 
   it('rejects non-finite or out-of-range model scores at the trust boundary', () => {

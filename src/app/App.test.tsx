@@ -9,7 +9,7 @@ import type {
   BackgroundPageProcessor,
   ProcessedScanPage,
 } from '../features/scanner/background-page-processor';
-import type { HybridRestorationClient } from '../imaging/restoration/hybrid-restoration-client';
+import type { LocalRestorationClient } from '../imaging/restoration/local-restoration-client';
 import { App } from './App';
 
 beforeEach(() => {
@@ -26,25 +26,16 @@ afterEach(() => {
 });
 
 describe('App shell', () => {
-  it('keeps server restoration disabled until the user explicitly opts in', () => {
-    const restorationClient: HybridRestorationClient = {
+  it('runs restoration locally without a server opt-in toggle', () => {
+    const restorationClient: LocalRestorationClient = {
       restore: vi.fn(() => Promise.reject(new Error('not used'))),
     };
 
     render(<App restorationClient={restorationClient} />);
 
-    const toggle = screen.getByRole('checkbox', { name: 'Tối ưu ảnh bằng GPU server' });
-    expect(toggle).not.toBeChecked();
-    expect(screen.getByText('Ảnh không được tải lên máy chủ.')).toBeInTheDocument();
-    expect(screen.getByText('Cục bộ')).toBeInTheDocument();
-
-    fireEvent.click(toggle);
-
-    expect(toggle).toBeChecked();
-    expect(screen.getByText('Hybrid GPU')).toBeInTheDocument();
-    expect(
-      screen.getByText('Ảnh scan sẽ được gửi đến GPU server để phân loại và phục hồi.'),
-    ).toBeInTheDocument();
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.getByText(/Ảnh không được tải lên máy chủ/)).toBeInTheDocument();
+    expect(screen.getByText('AI cục bộ')).toBeInTheDocument();
   });
 
   it('offers camera and image entry points on the library and opens the camera directly', async () => {
@@ -106,7 +97,7 @@ describe('App shell', () => {
     render(<App />);
 
     expect(screen.getByText('Chưa có tài liệu nào')).toBeInTheDocument();
-    expect(screen.getByText('Ảnh không được tải lên máy chủ.')).toBeInTheDocument();
+    expect(screen.getByText(/Ảnh không được tải lên máy chủ/)).toBeInTheDocument();
   });
 
   it('continues from a validated library image into Scanic post-capture processing', async () => {
@@ -200,7 +191,10 @@ describe('App shell', () => {
     const enqueue = vi.fn<BackgroundPageProcessor['enqueue']>((source, _signal, onStart) => {
       onStart?.();
       nextPage++;
-      const original = { blob: source, dimensions: { width: 1200, height: 1600 } };
+      const original = {
+        blob: source instanceof Blob ? source : new Blob([source.pixels], { type: 'image/jpeg' }),
+        dimensions: { width: 1200, height: 1600 },
+      };
       const crop = { kind: 'full-frame' as const };
       const recipe = {
         version: 1,

@@ -10,14 +10,15 @@ function stream(): MediaStream {
   return { getVideoTracks: () => [{} as MediaStreamTrack] } as unknown as MediaStream;
 }
 
-function canvasFixture(blob: Blob | null = new Blob(['photo'], { type: 'image/png' })) {
+function canvasFixture() {
   const drawImage = vi.fn();
-  const toBlob = vi.fn((callback: BlobCallback) => {
-    callback(blob);
-  });
-  const getContext = vi.fn(() => ({ drawImage }));
+  const getImageData = vi.fn((_x: number, _y: number, width: number, height: number) => ({
+    data: new Uint8ClampedArray(width * height * 4),
+  }));
+  const toBlob = vi.fn();
+  const getContext = vi.fn(() => ({ drawImage, getImageData }));
   const canvas = { width: 0, height: 0, getContext, toBlob } as unknown as HTMLCanvasElement;
-  return { canvas, drawImage, toBlob };
+  return { canvas, drawImage, getImageData, toBlob };
 }
 
 describe('camera capture', () => {
@@ -25,12 +26,8 @@ describe('camera capture', () => {
     vi.unstubAllGlobals();
   });
 
-  it('freezes the current 4K frame before asynchronous encoding or still-photo delay', async () => {
+  it('freezes the current 4K frame immediately without still-photo delay', async () => {
     const fixture = canvasFixture();
-    let finishEncoding: BlobCallback | undefined;
-    fixture.toBlob.mockImplementationOnce((callback) => {
-      finishEncoding = callback;
-    });
     const takePhoto = vi.fn(() => new Promise<Blob>(() => undefined));
     const ImageCapture = vi.fn(function ImageCapture() {
       return { takePhoto };
@@ -41,26 +38,32 @@ describe('camera capture', () => {
     const result = capture.capture(stream(), video(3840, 2160), new AbortController().signal);
 
     expect(fixture.drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 3840, 2160);
-    expect(fixture.canvas.width).toBe(3840);
-    expect(fixture.canvas.height).toBe(2160);
     expect(ImageCapture).not.toHaveBeenCalled();
     expect(takePhoto).not.toHaveBeenCalled();
 
-    finishEncoding?.(new Blob(['frozen'], { type: 'image/png' }));
-    await expect(result).resolves.toMatchObject({ type: 'image/png' });
+    await expect(result).resolves.toMatchObject({
+      kind: 'rgba-frame',
+      dimensions: { width: 3840, height: 2160 },
+    });
+    expect(fixture.getImageData).toHaveBeenCalledWith(0, 0, 3840, 2160);
+    expect(fixture.toBlob).not.toHaveBeenCalled();
     expect(fixture.canvas.width).toBe(1);
     expect(fixture.canvas.height).toBe(1);
   });
 
-  it('encodes the frozen frame as lossless PNG', async () => {
+  it('returns raw RGBA pixels for direct worker processing', async () => {
     const fixture = canvasFixture();
     const capture = createCameraCapture({ createCanvas: () => fixture.canvas });
 
     const output = await capture.capture(stream(), video(1280, 720), new AbortController().signal);
 
-    expect(output.type).toBe('image/png');
+    expect(output).toMatchObject({
+      kind: 'rgba-frame',
+      dimensions: { width: 1280, height: 720 },
+    });
+    expect(output).not.toBeInstanceOf(Blob);
     expect(fixture.drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 1280, 720);
-    expect(fixture.toBlob).toHaveBeenCalledWith(expect.any(Function), 'image/png', undefined);
+    expect(fixture.toBlob).not.toHaveBeenCalled();
   });
 
   it('rejects unsafe video dimensions before allocating a canvas', async () => {
@@ -89,8 +92,12 @@ describe('camera capture', () => {
     expect(fixture.canvas.height).toBe(1);
   });
 
-  it('reports an honest failure when the browser cannot encode a frame', async () => {
-    const capture = createCameraCapture({ createCanvas: () => canvasFixture(null).canvas });
+  it('reports an honest failure when the browser cannot read pixels', async () => {
+    const fixture = canvasFixture();
+    fixture.getImageData.mockImplementationOnce(() => {
+      throw new DOMException('blocked');
+    });
+    const capture = createCameraCapture({ createCanvas: () => fixture.canvas });
 
     await expect(capture.capture(stream(), video(), new AbortController().signal)).rejects.toEqual(
       new CameraCaptureError('failed'),

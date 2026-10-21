@@ -15,6 +15,7 @@ import {
   createBackgroundPageProcessor,
   type BackgroundPageProcessor,
   type ProcessedScanPage,
+  type ScanPageSource,
 } from '../features/scanner/background-page-processor';
 import type { LiveDetectionResult } from '../features/scanner/detection-scheduler';
 import type { ImageAssetFrameSource } from '../features/scanner/image-asset-frame-source';
@@ -22,12 +23,11 @@ import { ScanBatchReview } from '../features/scanner/ScanBatchReview';
 import { scanBatchReducer, scanBatchStatus } from '../features/scanner/scan-batch';
 import type { VideoFrameSource } from '../features/scanner/video-frame-source';
 import type { ScannerEngine } from '../imaging/contracts/scanner-engine';
-import { restoreProcessedPage } from '../imaging/restoration/hybrid-page-restoration';
+import { restoreProcessedPage } from '../imaging/restoration/local-page-restoration';
 import {
-  HybridRestorationError,
-  createHybridRestorationClient,
-  type HybridRestorationClient,
-} from '../imaging/restoration/hybrid-restoration-client';
+  createLocalRestorationClient,
+  type LocalRestorationClient,
+} from '../imaging/restoration/local-restoration-client';
 
 export type LibraryState =
   | { readonly kind: 'empty' }
@@ -45,8 +45,7 @@ interface AppProps {
   readonly cameraEngineFactory?: () => ScannerEngine;
   readonly cameraFrameSourceFactory?: () => VideoFrameSource;
   readonly pageProcessorFactory?: () => BackgroundPageProcessor;
-  readonly restorationClient?: HybridRestorationClient | null;
-  readonly restorationEndpoint?: string;
+  readonly restorationClient?: LocalRestorationClient | null;
 }
 
 type AppView = 'library' | 'camera' | 'batch-review' | 'editor';
@@ -66,15 +65,7 @@ const HOME_IMPORT_ERROR_GUIDANCE: Readonly<Record<ImageImportFailureCode, string
   unavailable: 'Trình duyệt này chưa hỗ trợ đọc ảnh từ thư viện.',
 };
 
-function PrivacyNotice({
-  hybridAvailable,
-  hybridEnabled,
-  onHybridEnabledChange,
-}: {
-  readonly hybridAvailable: boolean;
-  readonly hybridEnabled: boolean;
-  readonly onHybridEnabledChange: (enabled: boolean) => void;
-}) {
+function PrivacyNotice() {
   return (
     <aside className="privacy-notice" aria-label="Quyền riêng tư">
       <span className="privacy-notice__icon" aria-hidden="true">
@@ -83,22 +74,8 @@ function PrivacyNotice({
       <div>
         <strong>Xử lý ngay trên thiết bị</strong>
         <span>
-          {hybridEnabled
-            ? 'Ảnh scan sẽ được gửi đến GPU server để phân loại và phục hồi.'
-            : 'Ảnh không được tải lên máy chủ.'}
+          Ảnh không được tải lên máy chủ. Classifier và model phục hồi chạy trong trình duyệt.
         </span>
-        {hybridAvailable ? (
-          <label className="privacy-notice__choice">
-            <input
-              type="checkbox"
-              checked={hybridEnabled}
-              onChange={(event) => {
-                onHybridEnabledChange(event.currentTarget.checked);
-              }}
-            />
-            <span>Tối ưu ảnh bằng GPU server</span>
-          </label>
-        ) : null}
       </div>
     </aside>
   );
@@ -171,7 +148,6 @@ export function App({
   cameraFrameSourceFactory,
   pageProcessorFactory,
   restorationClient,
-  restorationEndpoint,
 }: AppProps) {
   const [view, setView] = useState<AppView>('library');
   const [cameraReturnView, setCameraReturnView] = useState<CameraReturnView>('library');
@@ -181,27 +157,30 @@ export function App({
   const [selectedBatchPageId, setSelectedBatchPageId] = useState<string | null>(null);
   const [replacementPageId, setReplacementPageId] = useState<string | null>(null);
   const [batch, dispatchBatch] = useReducer(scanBatchReducer, { pages: [] });
-  const [hybridRestorationEnabled, setHybridRestorationEnabled] = useState(false);
   const [resolvedCameraService] = useState(() => cameraService ?? createCameraService());
-  const [resolvedRestorationClient] = useState<HybridRestorationClient | null>(() => {
-    if (restorationClient !== undefined) return restorationClient;
-    const environmentEndpoint: unknown = import.meta.env.VITE_RESTORATION_ENDPOINT;
-    const endpoint =
-      restorationEndpoint ??
-      (typeof environmentEndpoint === 'string' ? environmentEndpoint : undefined);
-    if (endpoint === undefined || endpoint.trim() === '') return null;
-    try {
-      return createHybridRestorationClient({ endpoint });
-    } catch {
-      return null;
-    }
-  });
+  const restorationClientRef = useRef<LocalRestorationClient | null>(null);
   const viewHeadingRef = useRef<HTMLHeadingElement>(null);
   const shouldMoveFocus = useRef(false);
   const pageProcessor = useRef<BackgroundPageProcessor | null>(null);
   const pageOperations = useRef(new Map<string, AbortController>());
   const homeImportRequest = useRef<AbortController | null>(null);
   const pageSequence = useRef(0);
+
+  useEffect(() => {
+    if (restorationClient !== undefined) {
+      restorationClientRef.current = restorationClient;
+      return () => {
+        restorationClientRef.current = null;
+      };
+    }
+    if (typeof Worker !== 'function') return;
+    const client = createLocalRestorationClient();
+    restorationClientRef.current = client;
+    return () => {
+      if (restorationClientRef.current === client) restorationClientRef.current = null;
+      client.dispose?.();
+    };
+  }, [restorationClient]);
 
   useEffect(() => {
     const processor =
@@ -223,6 +202,10 @@ export function App({
   }, [editorEngineFactory, imageImporter, pageProcessorFactory]);
 
   useEffect(() => {
+    if (view === 'camera') restorationClientRef.current?.warmup?.();
+  }, [view]);
+
+  useEffect(() => {
     if (shouldMoveFocus.current) {
       shouldMoveFocus.current = false;
       viewHeadingRef.current?.focus();
@@ -236,7 +219,7 @@ export function App({
 
   const processPage = (
     id: string,
-    source: Blob,
+    source: ScanPageSource,
     liveDetection: LiveDetectionResult | null = null,
   ) => {
     const processor = pageProcessor.current;
@@ -257,7 +240,8 @@ export function App({
         liveDetection,
       )
       .then(async (page) => {
-        const shouldRestore = hybridRestorationEnabled && resolvedRestorationClient !== null;
+        const resolvedRestorationClient = restorationClientRef.current;
+        const shouldRestore = resolvedRestorationClient !== null;
         const readyPage: ProcessedScanPage = shouldRestore
           ? { ...page, restoration: { kind: 'processing' } }
           : page;
@@ -280,11 +264,9 @@ export function App({
             return;
           }
           const reason =
-            error instanceof HybridRestorationError && error.code === 'timeout'
-              ? 'timeout'
-              : error instanceof HybridRestorationError && error.code === 'unavailable'
-                ? 'unavailable'
-                : 'failed';
+            error instanceof Error && error.message.includes('unavailable')
+              ? 'unavailable'
+              : 'failed';
           dispatchBatch({
             type: 'updated',
             id,
@@ -367,7 +349,7 @@ export function App({
         </div>
         <span className="local-status">
           <span aria-hidden="true" />
-          {hybridRestorationEnabled && resolvedRestorationClient !== null ? 'Hybrid GPU' : 'Cục bộ'}
+          AI cục bộ
         </span>
       </header>
 
@@ -438,11 +420,7 @@ export function App({
             ) : null}
           </section>
 
-          <PrivacyNotice
-            hybridAvailable={resolvedRestorationClient !== null}
-            hybridEnabled={hybridRestorationEnabled}
-            onHybridEnabledChange={setHybridRestorationEnabled}
-          />
+          <PrivacyNotice />
 
           <section className="library" aria-labelledby="library-title">
             <div className="section-heading">

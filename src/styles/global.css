@@ -482,28 +482,6 @@ p {
   font-size: 0.75rem;
 }
 
-.privacy-notice__choice {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  margin-top: var(--space-3);
-  color: var(--color-text);
-  cursor: pointer;
-}
-
-.privacy-notice__choice input {
-  width: 1rem;
-  height: 1rem;
-  margin: 0;
-  accent-color: var(--color-accent);
-}
-
-.privacy-notice__choice span:not(.privacy-notice__icon) {
-  margin-top: 0;
-  color: inherit;
-  font-weight: 700;
-}
-
 .library {
   margin-top: var(--space-10);
 }
@@ -1062,6 +1040,11 @@ button.batch-page__preview:hover {
 .batch-page__details span {
   color: var(--color-text-muted);
   font-size: 0.8125rem;
+}
+
+.batch-page__details .batch-page__warning {
+  color: var(--color-danger, #ff8a95);
+  font-weight: 650;
 }
 
 .batch-page__actions {

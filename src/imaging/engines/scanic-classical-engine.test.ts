@@ -457,7 +457,7 @@ describe('Scanic serialized work, cancellation and cleanup', () => {
     expect(engine.lifecycle.kind).toBe('failed');
   });
 
-  it('renders the original filter through decode, perspective warp, rotation and PNG encode', async () => {
+  it('renders the original filter through decode, perspective warp, rotation and high-quality JPEG encode', async () => {
     const recipe: EditRecipe = {
       version: 1,
       crop: { kind: 'full-frame' },
@@ -497,7 +497,11 @@ describe('Scanic serialized work, cancellation and cleanup', () => {
       90,
       'original',
     );
-    expect(encode).toHaveBeenCalledWith(warped, { type: 'image/png' }, expect.any(AbortSignal));
+    expect(encode).toHaveBeenCalledWith(
+      warped,
+      { type: 'image/jpeg', quality: 0.96 },
+      expect.any(AbortSignal),
+    );
     expect(result.recipeKey).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(result).toMatchObject({
       engineVersion: 'scanic-1.6.0+ml-classical-fallback-perspective-v2-filter-v7',
@@ -599,6 +603,38 @@ describe('Scanic serialized work, cancellation and cleanup', () => {
     await engine.initialize(signal());
     const request = {
       original: { blob: new Blob(['<svg/>'], { type: 'image/svg+xml' }), dimensions },
+      orientation: 0 as const,
+      recipe: {
+        version: 1,
+        crop: { kind: 'full-frame' as const },
+        rotation: 0 as const,
+        dewarp: { mode: 'perspective-only' as const },
+        filter: { mode: 'original' as const, presetVersion: '1', parameters: {} },
+      },
+    };
+
+    await expect(engine.render(request, signal())).rejects.toMatchObject({
+      code: 'invalid-input',
+    });
+    expect(decode).not.toHaveBeenCalled();
+    expect(warp).not.toHaveBeenCalled();
+    expect(engine.lifecycle.kind).toBe('ready');
+    await engine.dispose();
+  });
+
+  it('rejects captured pixels that do not exactly match the durable original', async () => {
+    const codec = fakeCodec();
+    const decode = vi.spyOn(codec, 'decode');
+    const backend = fakeBackend();
+    const warp = vi.spyOn(backend, 'warp');
+    const engine = createScanicClassicalEngine({ createBackend: () => backend, codec });
+    await engine.initialize(signal());
+    const request = {
+      original: { blob: new Blob(['original'], { type: 'image/png' }), dimensions },
+      sourcePixels: {
+        dimensions: { width: 19, height: 10 },
+        pixels: new Uint8ClampedArray(19 * 10 * 4),
+      },
       orientation: 0 as const,
       recipe: {
         version: 1,

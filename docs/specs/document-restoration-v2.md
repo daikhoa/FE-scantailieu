@@ -20,12 +20,14 @@
 - OCR color, grayscale và black-and-white dùng chung quyết định chất lượng nhưng giữ chính sách đầu ra riêng.
 - Mọi xử lý vẫn ở worker khi trình duyệt hỗ trợ; fallback main thread giữ cùng kết quả.
 
-### Slice 2 — neural provider tùy chọn
+### Slice 2 — model ONNX cục bộ trong trình duyệt
 
-- Định nghĩa provider có timeout, cancellation, kích thước đầu vào/đầu ra và fallback trung thực.
-- Ưu tiên model dự đoán illumination/residual ở độ phân giải thấp rồi áp lên ảnh gốc; không upscale mù ảnh model nhỏ.
-- DocRes là ứng viên deshadow/deblur/appearance; UVDoc là ứng viên trang cong.
-- Không tự gửi ảnh ra mạng. Bất kỳ backend nào cũng cần cấu hình rõ, TLS, giới hạn payload, không lưu/log nội dung và UI thông báo trước khi bật.
+- Classifier multi-label nhỏ được tải sớm và chạy bằng ONNX Runtime Web trong worker.
+- UVDoc và RT-Focuser chỉ được tải lười khi classifier chọn `dewarp` hoặc `deblur`.
+- Model chuyên biệt chạy trên đầu vào có giới hạn để giữ độ trễ tương tác; kết quả cuối được render lại
+  ở kích thước ảnh scan để PDF không mất pixel budget.
+- Ánh sáng, màu, tương phản và sharpen dùng WebGPU compute khi có; Canvas là fallback trung thực.
+- Toàn bộ ảnh và suy luận ở trình duyệt, không có REST API hay backend upload.
 
 ### Slice 3 — quality gate và PDF
 
@@ -44,8 +46,7 @@
 
 ## Công nghệ và lệnh
 
-- React 19, TypeScript 6 strict, Vite 7, Vitest 4, Scanic/Scanic ML hiện có.
-- Không thêm dependency trong Slice 1.
+- React 19, TypeScript 6 strict, Vite 7, Vitest 4, Scanic/Scanic ML và ONNX Runtime Web 1.27.
 - Focused test: `npm test -- --run <test-files>`.
 - Full verification: `npm test -- --run --testTimeout 15000`, `npm run typecheck`, `npm run lint`, `npm run format:check`, `npm run build`.
 
@@ -59,20 +60,20 @@
 ## Ranh giới
 
 - Luôn: giữ original bất biến, bounded input, cancellation, fallback trung thực, test trước code.
-- Cần quality gate trước khi bật neural mặc định hoặc đổi output OCR-color production.
+- Cần quality gate bằng ảnh điện thoại thật trước khi xem classifier bootstrap là production-ready.
 - Không: mô hình tạo sinh/inpainting, tải model từ CDN `latest`, giữ ảnh trên server, hoặc tuyên bố phục hồi dữ liệu đã mất.
 
-## Quyết định Hybrid GPU và classifier (2026-10-18)
+## Quyết định FE-only WebGPU và classifier (cập nhật 2026-10-21)
 
-- Người dùng chủ động bật Hybrid GPU; mặc định vẫn xử lý cục bộ và không upload.
-- Ảnh chỉ được gửi bằng HTTPS đến origin đã cấu hình, không gửi cookie/credential; backend không lưu
-  ảnh và không log pixel/blob/tên tài liệu.
+- Người dùng chốt chỉ xử lý ở frontend; không còn endpoint, cấu hình backend hay nhánh upload ảnh.
+- Nhấn chụp lấy RGBA trực tiếp từ video; trang xuất hiện ngay trong batch và classical crop/filter chạy
+  nền, không encode PNG rồi decode lại.
 - Classifier multi-label dự đoán `shadow`, `curved`, `blur`, `moire`, `finger`, `low_contrast` và
   `color_document`; rule router kết hợp xác suất với bằng chứng ảnh cổ điển trước khi chọn stage.
-- Stage có thứ tự ổn định: finger segmentation → dewarp → deshadow → demoire → deblur → appearance.
-  Nếu model/provider lỗi, trang giữ nguyên biến thể local đã hoàn tất và UI báo fallback.
-- Original/crop/recipe không bị neural provider sửa; chỉ rendered variant được thay sau khi response đã
-  qua xác minh MIME, kích thước, dimension và identity của model/provider.
+- Stage có thứ tự ổn định: dewarp → deshadow → deblur → appearance. `finger` và `moire` hiện tạo
+  cảnh báo chụp lại/không hỗ trợ thay vì bịa nội dung hoặc âm thầm báo đã sửa.
+- Nếu Worker/model lỗi, trang giữ nguyên biến thể perspective/classical đã hoàn tất và UI báo fallback.
+- Original/crop/recipe không bị model cục bộ sửa; chỉ rendered variant được thay trong nền.
 - Fine-tune dùng manifest có provenance/license, group-aware split để ngăn cùng một tài liệu lọt sang
   nhiều split, MobileNetV3 Small pretrained, BCE multi-label và export ONNX. Không checkpoint nào được
   coi là production nếu thiếu holdout thật và paired quality gate.

@@ -6,7 +6,7 @@ import type { LiveDetectionResult } from '../scanner/detection-scheduler';
 import { startLiveDetectionSession } from '../scanner/live-detection-session';
 import { createVideoFrameSource, type VideoFrameSource } from '../scanner/video-frame-source';
 import { ActiveCameraView } from './ActiveCameraView';
-import { createCameraCapture, type CameraCapture } from './camera-capture';
+import { createCameraCapture, type CameraCapture, type CapturedRgbaFrame } from './camera-capture';
 import { CameraServiceError, type CameraFailureCode, type CameraService } from './camera-service';
 
 type CameraViewState =
@@ -27,7 +27,10 @@ interface CameraScreenProps {
   readonly service: CameraService;
   readonly headingRef: RefObject<HTMLHeadingElement | null>;
   readonly onBack: () => void;
-  readonly onPhotoCaptured: (source: Blob, liveDetection: LiveDetectionResult | null) => void;
+  readonly onPhotoCaptured: (
+    source: CapturedRgbaFrame | Blob,
+    liveDetection: LiveDetectionResult | null,
+  ) => void;
   readonly onFinishCapture?: () => void;
   readonly batchStatus?: {
     readonly total: number;

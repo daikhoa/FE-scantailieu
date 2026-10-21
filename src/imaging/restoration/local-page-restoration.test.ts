@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import type { ProcessedScanPage } from '../../features/scanner/background-page-processor';
-import type { HybridRestorationClient } from './hybrid-restoration-client';
-import { restoreProcessedPage } from './hybrid-page-restoration';
+import type { LocalRestorationClient } from './local-restoration-client';
+import { restoreProcessedPage } from './local-page-restoration';
 
 function page(): ProcessedScanPage {
   const blob = new Blob([new Uint8Array([1])], { type: 'image/png' });
@@ -29,33 +29,38 @@ function page(): ProcessedScanPage {
 describe('restoreProcessedPage', () => {
   it('keeps local pixels when the classifier selects no heavy stage', async () => {
     const original = page();
-    const client: HybridRestorationClient = {
+    const client: LocalRestorationClient = {
       restore: () =>
         Promise.resolve({
           route: 'local',
           stages: [],
           classifierModel: 'defects@1',
           provider: null,
-          image: original.variant.image,
+          warnings: ['retake-finger'],
         }),
     };
 
     const result = await restoreProcessedPage(original, client, new AbortController().signal);
 
     expect(result.variant).toBe(original.variant);
-    expect(result.restoration).toEqual({ kind: 'classified-local', classifierModel: 'defects@1' });
+    expect(result.restoration).toEqual({
+      kind: 'classified-local',
+      classifierModel: 'defects@1',
+      warnings: ['retake-finger'],
+    });
   });
 
-  it('replaces only the rendered variant after verified GPU restoration', async () => {
+  it('replaces only the rendered variant after local model restoration', async () => {
     const original = page();
     const restoredBlob = new Blob([new Uint8Array([2])], { type: 'image/png' });
-    const client: HybridRestorationClient = {
+    const client: LocalRestorationClient = {
       restore: () =>
         Promise.resolve({
-          route: 'gpu',
+          route: 'enhanced',
           stages: ['dewarp', 'deshadow'],
           classifierModel: 'defects@1',
-          provider: 'docres@2024',
+          provider: 'browser-ort-webgpu@1.27.0',
+          warnings: ['unsupported-moire'],
           image: { blob: restoredBlob, dimensions: { width: 120, height: 160 } },
         }),
     };
@@ -65,8 +70,14 @@ describe('restoreProcessedPage', () => {
     expect(result.original).toBe(original.original);
     expect(result.crop).toBe(original.crop);
     expect(result.variant.image.blob).toBe(restoredBlob);
-    expect(result.variant.engineVersion).toContain('docres@2024');
-    expect(result.variant.dewarp).toEqual({ kind: 'applied', modelVersion: 'docres@2024' });
-    expect(result.restoration).toMatchObject({ kind: 'applied' });
+    expect(result.variant.engineVersion).toContain('browser-ort-webgpu@1.27.0');
+    expect(result.variant.dewarp).toEqual({
+      kind: 'applied',
+      modelVersion: 'browser-ort-webgpu@1.27.0',
+    });
+    expect(result.restoration).toMatchObject({
+      kind: 'applied',
+      warnings: ['unsupported-moire'],
+    });
   });
 });

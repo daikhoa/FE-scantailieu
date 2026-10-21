@@ -1,8 +1,8 @@
-import type { ProcessedScanPage } from './background-page-processor';
+import type { ProcessedScanPage, ScanPageSource } from './background-page-processor';
 
 interface ScanPageIdentity {
   readonly id: string;
-  readonly source: Blob;
+  readonly source: ScanPageSource;
 }
 
 export type ScanBatchPage = ScanPageIdentity &
@@ -21,13 +21,13 @@ export type ScanBatchEvent =
   | {
       readonly type: 'captured';
       readonly id: string;
-      readonly source: Blob;
+      readonly source: ScanPageSource;
     }
   | {
       readonly type: 'replaced';
       readonly id: string;
       readonly replacementId: string;
-      readonly source: Blob;
+      readonly source: ScanPageSource;
     }
   | { readonly type: 'started'; readonly id: string }
   | { readonly type: 'ready'; readonly id: string; readonly page: ProcessedScanPage }
@@ -89,7 +89,9 @@ export function scanBatchReducer(state: ScanBatchState, event: ScanBatchEvent): 
         page.kind === 'queued' || page.kind === 'processing'
           ? {
               id: page.id,
-              source: page.source,
+              // The durable JPEG replaces the much larger captured RGBA buffer once processing
+              // succeeds. Failed pages retain their original source so retry remains possible.
+              source: event.page.original.blob,
               kind: 'ready',
               page: event.page,
             }

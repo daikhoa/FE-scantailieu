@@ -141,6 +141,44 @@ describe('background page processor', () => {
     await processor.dispose();
   });
 
+  it('passes freshly captured RGBA pixels directly to render without importing them again', async () => {
+    const { engine, renderPage } = fakeEngine();
+    const encoded = new Blob(['durable'], { type: 'image/jpeg' });
+    const encode = vi.fn(() => Promise.resolve(encoded));
+    const importer = vi.fn<ImageImporter>();
+    const source = {
+      kind: 'rgba-frame' as const,
+      dimensions: { width: 2, height: 2 },
+      pixels: new Uint8ClampedArray(16),
+    };
+    const processor = createBackgroundPageProcessor({
+      importer,
+      engineFactory: () => engine,
+      frameSource: fakeFrameSource(),
+      codec: { decode: vi.fn(), encode },
+    });
+
+    const result = await processor.enqueue(source, new AbortController().signal, undefined, {
+      kind: 'full-frame',
+      dimensions: source.dimensions,
+      reason: 'no-document',
+    });
+
+    expect(importer).not.toHaveBeenCalled();
+    expect(encode).toHaveBeenCalledWith(
+      { dimensions: source.dimensions, pixels: source.pixels },
+      { type: 'image/jpeg', quality: 0.97 },
+      expect.any(AbortSignal),
+    );
+    expect(result.original.blob).toBe(encoded);
+    expect(renderPage.mock.calls[0]?.[0].sourcePixels).toEqual({
+      dimensions: source.dimensions,
+      pixels: source.pixels,
+    });
+
+    await processor.dispose();
+  });
+
   it('falls back to the stable live crop when detection on the captured image is uncertain', async () => {
     const source = new Blob(['page'], { type: 'image/jpeg' });
     const { engine, detectPage, renderPage } = fakeEngine();

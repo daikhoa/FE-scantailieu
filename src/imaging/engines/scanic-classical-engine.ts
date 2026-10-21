@@ -155,6 +155,7 @@ function isQuarterTurn(value: number): value is QuarterTurn {
 
 function renderCorners(request: RenderPageRequest): DocumentCorners {
   const { dimensions } = request.original;
+  const sourcePixels = request.sourcePixels;
   validateRasterAsset(request.original);
   if (
     !isValidImageDimensions(dimensions) ||
@@ -166,7 +167,12 @@ function renderCorners(request: RenderPageRequest): DocumentCorners {
     !isQuarterTurn(request.recipe.rotation) ||
     request.recipe.filter.presetVersion.length === 0 ||
     request.recipe.filter.presetVersion.length > 128 ||
-    Object.keys(request.recipe.filter.parameters).length !== 0
+    Object.keys(request.recipe.filter.parameters).length !== 0 ||
+    (sourcePixels !== undefined &&
+      (sourcePixels.dimensions.width !== dimensions.width ||
+        sourcePixels.dimensions.height !== dimensions.height ||
+        !(sourcePixels.pixels instanceof Uint8ClampedArray) ||
+        sourcePixels.pixels.byteLength !== dimensions.width * dimensions.height * 4))
   ) {
     throw new ScannerEngineError('invalid-input');
   }
@@ -391,7 +397,13 @@ class ScanicEngine implements ScannerEngine {
       const recipeKey = await createRenderRecipeKey(request, ENGINE_VERSION, signal);
       let input;
       try {
-        input = await this.codec.decode(request.original, signal);
+        input =
+          request.sourcePixels === undefined
+            ? await this.codec.decode(request.original, signal)
+            : {
+                dimensions: { ...request.sourcePixels.dimensions },
+                pixels: request.sourcePixels.pixels.slice(),
+              };
         checkAbort(signal, this.disposal.signal);
       } catch (error) {
         throw operationFailure(error, signal);
@@ -410,7 +422,7 @@ class ScanicEngine implements ScannerEngine {
       }
       let blob: Blob;
       try {
-        blob = await this.codec.encode(output, { type: 'image/png' }, signal);
+        blob = await this.codec.encode(output, { type: 'image/jpeg', quality: 0.96 }, signal);
         checkAbort(signal, this.disposal.signal);
       } catch (error) {
         throw operationFailure(error, signal);

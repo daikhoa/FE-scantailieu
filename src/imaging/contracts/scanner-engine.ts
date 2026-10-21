@@ -45,6 +45,11 @@ export type DetectionResult =
 
 export interface RenderPageRequest {
   readonly original: ImageAsset;
+  /** Optional captured pixels avoid re-decoding the newly encoded durable original. */
+  readonly sourcePixels?: {
+    readonly dimensions: ImageDimensions;
+    readonly pixels: Uint8ClampedArray<ArrayBuffer>;
+  };
   /**
    * Clockwise correction for the stored original. Render first crops/corrects geometry in
    * stored-image axes, then applies this orientation, then recipe.rotation clockwise.

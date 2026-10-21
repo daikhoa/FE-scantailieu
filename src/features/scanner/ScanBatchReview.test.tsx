@@ -135,7 +135,7 @@ describe('ScanBatchReview', () => {
     expect(download).toHaveBeenCalledWith(pdf, 'clonecamscanner.pdf');
   });
 
-  it('waits for an opted-in GPU restoration before exporting the PDF', () => {
+  it('waits for local AI restoration before exporting the PDF', () => {
     const page = readyPage('page-1', 'first');
     const processingPage: ReadyScanBatchPage = {
       ...page,
@@ -154,8 +154,40 @@ describe('ScanBatchReview', () => {
       />,
     );
 
-    expect(screen.getByText('Đang tối ưu bằng GPU')).toBeInTheDocument();
+    expect(screen.getByText('Đang hoàn thiện trên thiết bị')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Tải PDF 1 trang' })).toBeDisabled();
+  });
+
+  it('shows actionable quality warnings returned by the classifier', () => {
+    const page = readyPage('page-1', 'first');
+    const warnedPage: ReadyScanBatchPage = {
+      ...page,
+      page: {
+        ...page.page,
+        restoration: {
+          kind: 'classified-local',
+          classifierModel: 'defects@1',
+          warnings: ['retake-finger', 'unsupported-moire'],
+        },
+      },
+    };
+
+    render(
+      <ScanBatchReview
+        pages={[warnedPage]}
+        headingRef={null}
+        onCaptureMore={vi.fn()}
+        onEditPage={vi.fn()}
+        onRetakePage={vi.fn()}
+        onRetryPage={vi.fn()}
+        onRemovePage={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText('Tay đang che tài liệu — nên chụp lại trang này.')).toBeInTheDocument();
+    expect(
+      screen.getByText('Có vân moiré — bộ xử lý hiện tại chưa khử hoàn toàn.'),
+    ).toBeInTheDocument();
   });
 
   it('lets the user return to the camera or edit a ready page', () => {
