@@ -52,9 +52,9 @@ export type DetectionSchedulerConfiguration = DetectionSmootherOptions & {
   readonly intervalMs?: number;
 };
 
-const DEFAULT_STABLE_FRAMES = 2;
+const DEFAULT_STABLE_FRAMES = 3;
 const DEFAULT_MISS_TOLERANCE = 1;
-const DEFAULT_MAX_CORNER_DRIFT_RATIO = 0.05;
+const DEFAULT_MAX_CORNER_DRIFT_RATIO = 0.03;
 const DEFAULT_SMOOTHING_ALPHA = 0.5;
 const DEFAULT_INTERVAL_MS = 125;
 const FAILURE_CODES = new Set<ProcessingFailure['code']>([

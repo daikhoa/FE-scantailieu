@@ -235,14 +235,18 @@ describe('detection smoothing', () => {
     });
   });
 
-  it('locks the default overlay after two similar detections', () => {
+  it('locks the default overlay only after three tightly grouped detections', () => {
     const smoother = createDetectionSmoother();
 
     expect(smoother.update(documentResult(0))).toMatchObject({
       kind: 'full-frame',
       reason: 'unstable-document',
     });
-    expect(smoother.update(documentResult(4)).kind).toBe('document');
+    expect(smoother.update(documentResult(4))).toMatchObject({
+      kind: 'full-frame',
+      reason: 'unstable-document',
+    });
+    expect(smoother.update(documentResult(8)).kind).toBe('document');
   });
 
   it('resets stability when frame dimensions change', () => {

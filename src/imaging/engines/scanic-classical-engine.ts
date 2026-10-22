@@ -31,7 +31,7 @@ export interface ScanicEngineOptions {
   readonly codec?: RgbaImageCodec;
 }
 
-const ENGINE_VERSION = 'scanic-1.6.0+ml-classical-fallback-perspective-v2-filter-v7';
+const ENGINE_VERSION = 'scanic-1.6.0+classical-ml-fallback-perspective-v2-filter-v7';
 const FILTER_MODES: readonly FilterMode[] = [
   'original',
   'ocr-color',
@@ -317,8 +317,8 @@ class ScanicEngine implements ScannerEngine {
         await backend.initialize();
         checkAbort(signal, this.disposal.signal);
         // Scanic.initialize swallows failures. A real scan must work before ready.
-        // The ML detector is trained around normal image inputs. An 8 px probe can make a valid
-        // runtime look broken and permanently select the weaker classical fallback.
+        // Use a realistic probe size so either detector can validate its runtime without treating
+        // an unsupported tiny input as an engine failure.
         const warmupDimensions = { width: 224, height: 224 };
         const output = await backend.detect({
           dimensions: warmupDimensions,

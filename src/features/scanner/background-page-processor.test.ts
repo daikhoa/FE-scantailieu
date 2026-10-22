@@ -196,7 +196,7 @@ describe('background page processor', () => {
     await processor.dispose();
   });
 
-  it('uses the stable corners visible at capture time without detecting the frozen image again', async () => {
+  it('refines the live corners on the frozen captured image before perspective rendering', async () => {
     const source = new Blob(['page'], { type: 'image/jpeg' });
     const { engine, detectPage, renderPage } = fakeEngine();
     const processor = createBackgroundPageProcessor({
@@ -232,7 +232,7 @@ describe('background page processor', () => {
         { x: 60, y: 1520 },
       ],
     });
-    expect(detectPage).not.toHaveBeenCalled();
+    expect(detectPage).toHaveBeenCalledOnce();
     expect(renderPage).toHaveBeenCalledTimes(2);
     expect(renderPage.mock.calls[0]?.[0].recipe.crop).toEqual(result.crop);
     expect(renderPage.mock.calls[0]?.[1]).toBeInstanceOf(AbortSignal);

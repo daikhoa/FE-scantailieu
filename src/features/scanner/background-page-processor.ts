@@ -171,16 +171,15 @@ export function createBackgroundPageProcessor(
     const currentEngine = await readyEngine(signal);
     try {
       const liveCrop = mapLiveDetectionToCrop(liveDetection, imported.original.dimensions);
-      const crop =
-        liveCrop.kind === 'document'
-          ? liveCrop
-          : await detectDocumentCrop(
-              currentEngine,
-              frameSource,
-              imported.original,
-              signal,
-              liveCrop,
-            );
+      // The live guide can be one or more video frames behind the shutter. Refine it against the
+      // frozen capture so camera motion at press time cannot skew the perspective transform.
+      const crop = await detectDocumentCrop(
+        currentEngine,
+        frameSource,
+        imported.original,
+        signal,
+        liveCrop,
+      );
       const recipe = createDefaultPageRecipe(crop);
       const sourcePixels =
         source instanceof Blob
