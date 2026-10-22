@@ -252,12 +252,13 @@ describe('App shell', () => {
       }),
     );
     const editorInitialize = vi.fn<ScannerEngine['initialize']>(() => Promise.resolve());
+    const editorDispose = vi.fn<ScannerEngine['dispose']>(() => Promise.resolve());
     const editorEngine: ScannerEngine = {
       lifecycle: { kind: 'uninitialized' },
       initialize: editorInitialize,
       detect: vi.fn(() => Promise.reject(new Error('batch edits must not run detection again'))),
       render: editorRender,
-      dispose: vi.fn(() => Promise.resolve()),
+      dispose: editorDispose,
     };
     const editorEngineFactory = vi.fn(() => editorEngine);
     const view = render(
@@ -325,7 +326,7 @@ describe('App shell', () => {
     });
     expect(editorEngineFactory).toHaveBeenCalledOnce();
     expect(editorInitialize).toHaveBeenCalledOnce();
-    expect(editorEngine.dispose).not.toHaveBeenCalled();
+    expect(editorDispose).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Cắt trang 1' }));
     expect(screen.getByRole('heading', { name: 'Điều chỉnh 4 góc' })).toBeInTheDocument();
@@ -337,7 +338,7 @@ describe('App shell', () => {
 
     view.unmount();
     await waitFor(() => {
-      expect(editorEngine.dispose).toHaveBeenCalledOnce();
+      expect(editorDispose).toHaveBeenCalledOnce();
     });
   });
 });

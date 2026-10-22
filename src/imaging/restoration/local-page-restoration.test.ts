@@ -88,14 +88,10 @@ describe('restoreProcessedPage', () => {
       classifierModel: 'defects@1',
       warnings: ['retake-finger'],
     });
-    expect(restore).toHaveBeenCalledWith(
-      { kind: 'rgba-frame', ...transientRgba },
-      signal,
-      {
+    expect(restore).toHaveBeenCalledWith({ kind: 'rgba-frame', ...transientRgba }, signal, {
       analysisKey: 'page-1',
       reuseAnalysis: true,
-      },
-    );
+    });
   });
 
   it('replaces only the rendered variant after local model restoration', async () => {

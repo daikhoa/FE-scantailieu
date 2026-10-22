@@ -12,7 +12,7 @@ export function canReuseRestorationAnalysis(previous: EditRecipe, next: EditReci
   if (left.kind === 'full-frame' || right.kind === 'full-frame') return true;
   return left.corners.every((point, index) => {
     const candidate = right.corners[index];
-    return candidate !== undefined && point.x === candidate.x && point.y === candidate.y;
+    return point.x === candidate?.x && point.y === candidate.y;
   });
 }
 
@@ -29,7 +29,9 @@ export async function restoreProcessedPage(
 ): Promise<ProcessedScanPage> {
   const transient = page.variant.transientRgba;
   const source =
-    transient === undefined ? page.variant.image.blob : { kind: 'rgba-frame' as const, ...transient };
+    transient === undefined
+      ? page.variant.image.blob
+      : { kind: 'rgba-frame' as const, ...transient };
   const result = await client.restore(source, signal, options);
   const persistentPage = discardTransientRestorationPixels(page);
   if (result.route === 'local' || result.image === undefined || result.provider === null) {

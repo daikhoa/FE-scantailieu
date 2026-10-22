@@ -39,13 +39,17 @@ let deblurPromise: Promise<ort.InferenceSession> | null = null;
 let restorationQueue: Promise<void> = Promise.resolve();
 
 function numericNavigatorSignal(name: string): number | null {
-  const value = Reflect.get(navigator, name);
+  const value = (navigator as unknown as Record<string, unknown>)[name];
   return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
 }
 
 function dataSaverEnabled(): boolean {
-  const connection = Reflect.get(navigator, 'connection');
-  return typeof connection === 'object' && connection !== null && Reflect.get(connection, 'saveData') === true;
+  const connection = (navigator as unknown as Record<string, unknown>).connection;
+  return (
+    typeof connection === 'object' &&
+    connection !== null &&
+    (connection as Record<string, unknown>).saveData === true
+  );
 }
 
 const performanceProfile = chooseRestorationPerformanceProfile({
@@ -210,7 +214,10 @@ function rememberAnalysis(key: string, analysis: ClassificationAnalysis): void {
   if (analysisCache.size > ANALYSIS_CACHE_LIMIT && !oldest.done) analysisCache.delete(oldest.value);
 }
 
-async function analysisFor(request: RestoreRequest, bitmap: ImageBitmap): Promise<ClassificationAnalysis> {
+async function analysisFor(
+  request: RestoreRequest,
+  bitmap: ImageBitmap,
+): Promise<ClassificationAnalysis> {
   const key = request.analysisKey;
   if (key !== undefined && request.reuseAnalysis === true) {
     const cached = analysisCache.get(key);
@@ -246,9 +253,7 @@ function halfToFloat(value: number): number {
 
 async function runImageModel(bitmap: ImageBitmap, kind: 'dewarp' | 'deblur'): Promise<ImageBitmap> {
   const maximumSide =
-    kind === 'dewarp'
-      ? performanceProfile.dewarpMaximumSide
-      : performanceProfile.deblurMaximumSide;
+    kind === 'dewarp' ? performanceProfile.dewarpMaximumSide : performanceProfile.deblurMaximumSide;
   if (maximumSide <= 0) throw new Error(`${kind}-disabled`);
   const scale = Math.min(1, maximumSide / Math.max(bitmap.width, bitmap.height));
   const width = Math.max(8, Math.round((bitmap.width * scale) / 8) * 8);
