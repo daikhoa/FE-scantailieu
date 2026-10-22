@@ -21,6 +21,7 @@ export interface ClassicalBackend {
     corners: DocumentCorners,
     rotation: QuarterTurn,
     filter: FilterMode,
+    maximumOutputLongSide?: number,
   ) => Promise<RgbaBackendInput>;
   /** Must settle outstanding work, including termination of its owned worker. */
   dispose: () => Promise<void>;

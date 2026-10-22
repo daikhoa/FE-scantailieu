@@ -1,5 +1,5 @@
 import type { RestorationStage } from './restoration-policy';
 
-export type AppliedRestorationStage = Exclude<RestorationStage, 'finger-segmentation' | 'demoire'>;
+export type AppliedRestorationStage = Exclude<RestorationStage, 'finger-segmentation' | 'dewarp'>;
 
-export type RestorationWarning = 'retake-finger' | 'unsupported-moire';
+export type RestorationWarning = 'retake-finger' | 'retake-curved' | 'unsupported-moire';

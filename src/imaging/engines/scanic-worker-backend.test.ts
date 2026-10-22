@@ -83,9 +83,17 @@ describe('Scanic isolated worker backend', () => {
     worker.reply({ id: 1, kind: 'success', output: null });
     await initialization;
 
-    const job = backend.warp(input, corners, 90, 'ocr-color');
+    const job = backend.warp(input, corners, 90, 'ocr-color', 1600);
     expect(worker.messages[1]).toEqual({
-      message: { id: 2, operation: 'warp', input, corners, rotation: 90, filter: 'ocr-color' },
+      message: {
+        id: 2,
+        operation: 'warp',
+        input,
+        corners,
+        rotation: 90,
+        filter: 'ocr-color',
+        maximumOutputLongSide: 1600,
+      },
       transfer: [input.pixels.buffer],
     });
     const output: RgbaBackendInput = {

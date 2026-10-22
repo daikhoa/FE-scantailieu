@@ -168,6 +168,10 @@ function renderCorners(request: RenderPageRequest): DocumentCorners {
     request.recipe.filter.presetVersion.length === 0 ||
     request.recipe.filter.presetVersion.length > 128 ||
     Object.keys(request.recipe.filter.parameters).length !== 0 ||
+    (request.maximumOutputLongSide !== undefined &&
+      (!Number.isSafeInteger(request.maximumOutputLongSide) ||
+        request.maximumOutputLongSide <= 0 ||
+        request.maximumOutputLongSide > MAX_WORKING_IMAGE_SIDE)) ||
     (sourcePixels !== undefined &&
       (sourcePixels.dimensions.width !== dimensions.width ||
         sourcePixels.dimensions.height !== dimensions.height ||
@@ -318,9 +322,7 @@ class ScanicEngine implements ScannerEngine {
         const warmupDimensions = { width: 224, height: 224 };
         const output = await backend.detect({
           dimensions: warmupDimensions,
-          pixels: new Uint8ClampedArray(
-            warmupDimensions.width * warmupDimensions.height * 4,
-          ),
+          pixels: new Uint8ClampedArray(warmupDimensions.width * warmupDimensions.height * 4),
         });
         checkAbort(signal, this.disposal.signal);
         detectionResult(output, warmupDimensions, this.minimumConfidence, this.mlMinimumConfidence);
@@ -414,12 +416,16 @@ class ScanicEngine implements ScannerEngine {
       }
       let output;
       try {
-        output = await backend.warp(
-          input,
-          corners,
-          totalRotation(request),
-          request.recipe.filter.mode,
-        );
+        output =
+          request.maximumOutputLongSide === undefined
+            ? await backend.warp(input, corners, totalRotation(request), request.recipe.filter.mode)
+            : await backend.warp(
+                input,
+                corners,
+                totalRotation(request),
+                request.recipe.filter.mode,
+                request.maximumOutputLongSide,
+              );
         checkAbort(signal, this.disposal.signal);
       } catch (error) {
         return await this.failBackendOperation(error, signal);

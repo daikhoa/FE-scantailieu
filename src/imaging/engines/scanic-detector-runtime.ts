@@ -35,10 +35,19 @@ export interface ScanicDetectorResult extends ScannerResult {
   readonly detector: ScanicDetectorKind;
 }
 
-/** Uses ML by default and falls back once only when that runtime cannot execute. */
+type ScanicScanner = Pick<Scanner, 'initialize' | 'scan'>;
+type ScanicScannerFactory = (options: DetectionOptions) => ScanicScanner;
+
+/** Uses ML by default, retries one fresh ML runtime, then falls back if ML cannot execute. */
 export class ScanicDetectorRuntime {
   private detector: ScanicDetectorKind = 'ml';
-  private scanner = new Scanner(detectorOptions('ml'));
+  private scanner: ScanicScanner;
+
+  constructor(
+    private readonly createScanner: ScanicScannerFactory = (options) => new Scanner(options),
+  ) {
+    this.scanner = createScanner(detectorOptions('ml'));
+  }
 
   async initialize(): Promise<void> {
     await this.scanner.initialize();
@@ -52,8 +61,17 @@ export class ScanicDetectorRuntime {
       };
     } catch (error) {
       if (this.detector !== 'ml') throw error;
+      try {
+        const recovered = this.createScanner(detectorOptions('ml'));
+        await recovered.initialize();
+        const result = await recovered.scan(image, detectorOptions('ml'));
+        this.scanner = recovered;
+        return { ...result, detector: 'ml' };
+      } catch {
+        // Two independent ML runtimes failed consecutively; use the bounded classical fallback.
+      }
       this.detector = 'classical';
-      this.scanner = new Scanner(detectorOptions('classical'));
+      this.scanner = this.createScanner(detectorOptions('classical'));
       await this.scanner.initialize();
       return {
         ...(await this.scanner.scan(image, detectorOptions('classical'))),

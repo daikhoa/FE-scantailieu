@@ -60,8 +60,8 @@ export function createCompatibleScanicBackend(
     detect(input) {
       return requireActive().detect(input);
     },
-    warp(input, corners, rotation, filter) {
-      return requireActive().warp(input, corners, rotation, filter);
+    warp(input, corners, rotation, filter, maximumOutputLongSide) {
+      return requireActive().warp(input, corners, rotation, filter, maximumOutputLongSide);
     },
     async dispose() {
       if (disposed) return;

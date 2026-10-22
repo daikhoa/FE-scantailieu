@@ -41,6 +41,7 @@ describe('createRenderRecipeKey', () => {
       request(new Blob(['image-b'], { type: 'image/png' }), {}),
       { ...base, orientation: 90 },
       { ...base, recipe: { ...base.recipe, rotation: 90 } },
+      { ...base, maximumOutputLongSide: 1600 },
     ];
     const baseKey = await createRenderRecipeKey(base, 'engine-v1', new AbortController().signal);
     const keys = await Promise.all(
@@ -50,7 +51,7 @@ describe('createRenderRecipeKey', () => {
     );
     keys.push(await createRenderRecipeKey(base, 'engine-v2', new AbortController().signal));
 
-    expect(new Set([baseKey, ...keys])).toHaveLength(5);
+    expect(new Set([baseKey, ...keys])).toHaveLength(6);
   });
 
   it('returns a sanitized AbortError without exposing signal.reason', async () => {

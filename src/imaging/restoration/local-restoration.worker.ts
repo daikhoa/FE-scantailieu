@@ -1,21 +1,14 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion -- Pixel and tensor indices are bounded by validated dimensions and loop limits. */
 import * as ort from 'onnxruntime-web/webgpu';
 
-import { loadMultipartModel } from './multipart-model-loader';
+import { createClassicalRestorationPlan } from './classical-restoration-plan';
 import { decideRestorationPolicy, type DocumentDefectScores } from './restoration-policy';
-import { chooseRestorationPerformanceProfile } from './restoration-performance-profile';
-import type { AppliedRestorationStage, RestorationWarning } from './restoration-types';
-import type { LocalRestorationSource } from './local-restoration-client';
+import type { AppliedRestorationStage } from './restoration-types';
+import type { LocalRestorationAnalysis, LocalRestorationSource } from './local-restoration-client';
 import { isValidImageDimensions } from '../geometry/coordinates';
 import { MAX_WORKING_IMAGE_PIXELS, MAX_WORKING_IMAGE_SIDE } from '../working-image-limits';
 
 const CLASSIFIER_URL = '/models/local-restoration/document-defects.onnx';
-const DEWARP_PART_URLS = [
-  '/models/local-restoration/uvdoc.onnx.part-0',
-  '/models/local-restoration/uvdoc.onnx.part-1',
-] as const;
-const MAX_DEWARP_MODEL_BYTES = 32 * 1024 * 1024;
-const DEBLUR_URL = '/models/local-restoration/rt-focuser-int8-fp16.onnx';
 const CLASSIFIER_MODEL = 'document-defects@cord-v2-bootstrap-2026-10-18';
 const GPU_BUFFER_USAGE = { mapRead: 1, copySrc: 4, copyDst: 8, uniform: 64, storage: 128 } as const;
 const LABELS = [
@@ -34,30 +27,7 @@ const workerScope = globalThis as unknown as {
   addEventListener(type: 'message', listener: (event: MessageEvent<WorkerRequest>) => void): void;
 };
 let classifierPromise: Promise<ort.InferenceSession> | null = null;
-let dewarpPromise: Promise<ort.InferenceSession> | null = null;
-let deblurPromise: Promise<ort.InferenceSession> | null = null;
 let restorationQueue: Promise<void> = Promise.resolve();
-
-function numericNavigatorSignal(name: string): number | null {
-  const value = (navigator as unknown as Record<string, unknown>)[name];
-  return typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : null;
-}
-
-function dataSaverEnabled(): boolean {
-  const connection = (navigator as unknown as Record<string, unknown>).connection;
-  return (
-    typeof connection === 'object' &&
-    connection !== null &&
-    (connection as Record<string, unknown>).saveData === true
-  );
-}
-
-const performanceProfile = chooseRestorationPerformanceProfile({
-  hasWebGpu: browserGpu() !== undefined,
-  hardwareConcurrency: numericNavigatorSignal('hardwareConcurrency'),
-  deviceMemoryGb: numericNavigatorSignal('deviceMemory'),
-  saveData: dataSaverEnabled(),
-});
 
 interface RestoreRequest {
   readonly operation: 'restore';
@@ -66,8 +36,15 @@ interface RestoreRequest {
   readonly analysisKey?: string;
   readonly reuseAnalysis?: boolean;
 }
+interface AnalyzeRequest {
+  readonly operation: 'analyze';
+  readonly id: number;
+  readonly source: LocalRestorationSource;
+  readonly analysisKey?: string;
+}
 type WorkerRequest =
   | RestoreRequest
+  | AnalyzeRequest
   | { readonly operation: 'warmup' }
   | { readonly operation: 'cancel'; readonly id: number };
 
@@ -85,25 +62,6 @@ function classifier(): Promise<ort.InferenceSession> {
     graphOptimizationLevel: 'all',
   });
   return classifierPromise;
-}
-
-function optionalModel(kind: 'dewarp' | 'deblur'): Promise<ort.InferenceSession> {
-  if (kind === 'dewarp') {
-    dewarpPromise ??= loadMultipartModel(DEWARP_PART_URLS, {
-      maximumBytes: MAX_DEWARP_MODEL_BYTES,
-    }).then((model) =>
-      ort.InferenceSession.create(model, {
-        executionProviders: providers(),
-        graphOptimizationLevel: 'all',
-      }),
-    );
-    return dewarpPromise;
-  }
-  deblurPromise ??= ort.InferenceSession.create(DEBLUR_URL, {
-    executionProviders: providers(),
-    graphOptimizationLevel: 'all',
-  });
-  return deblurPromise;
 }
 
 async function decode(source: LocalRestorationSource): Promise<ImageBitmap> {
@@ -215,7 +173,7 @@ function rememberAnalysis(key: string, analysis: ClassificationAnalysis): void {
 }
 
 async function analysisFor(
-  request: RestoreRequest,
+  request: { readonly analysisKey?: string; readonly reuseAnalysis?: boolean },
   bitmap: ImageBitmap,
 ): Promise<ClassificationAnalysis> {
   const key = request.analysisKey;
@@ -231,67 +189,32 @@ async function analysisFor(
   return analysis;
 }
 
-function floatToHalf(value: number): number {
-  const float = new Float32Array([value]);
-  const bits = new Uint32Array(float.buffer)[0]!;
-  const sign = (bits >>> 16) & 0x8000;
-  const exponent = ((bits >>> 23) & 0xff) - 127 + 15;
-  const mantissa = bits & 0x7fffff;
-  if (exponent <= 0) return sign;
-  if (exponent >= 31) return sign | 0x7c00;
-  return sign | (exponent << 10) | (mantissa >>> 13);
+function restorationPlan(analysis: ClassificationAnalysis): LocalRestorationAnalysis {
+  const decision = decideRestorationPolicy(analysis);
+  const plan = createClassicalRestorationPlan(decision, analysis.scores);
+  return {
+    kind: 'analysis',
+    stages: plan.stages,
+    classifierModel: CLASSIFIER_MODEL,
+    warnings: plan.warnings,
+    protectColor: plan.protectColor,
+  };
 }
 
-function halfToFloat(value: number): number {
-  const sign = value & 0x8000 ? -1 : 1;
-  const exponent = (value >>> 10) & 0x1f;
-  const mantissa = value & 0x3ff;
-  if (exponent === 0) return sign * Math.pow(2, -14) * (mantissa / 1024);
-  if (exponent === 31) return mantissa === 0 ? sign * Infinity : NaN;
-  return sign * Math.pow(2, exponent - 15) * (1 + mantissa / 1024);
-}
-
-async function runImageModel(bitmap: ImageBitmap, kind: 'dewarp' | 'deblur'): Promise<ImageBitmap> {
-  const maximumSide =
-    kind === 'dewarp' ? performanceProfile.dewarpMaximumSide : performanceProfile.deblurMaximumSide;
-  if (maximumSide <= 0) throw new Error(`${kind}-disabled`);
-  const scale = Math.min(1, maximumSide / Math.max(bitmap.width, bitmap.height));
-  const width = Math.max(8, Math.round((bitmap.width * scale) / 8) * 8);
-  const height = Math.max(8, Math.round((bitmap.height * scale) / 8) * 8);
-  const canvas = sampleCanvas(bitmap, width, height);
-  const context = canvas.getContext('2d', { willReadFrequently: true });
-  if (context === null) throw new Error('canvas-unavailable');
-  const pixels = context.getImageData(0, 0, width, height).data;
-  const plane = width * height;
-  const session = await optionalModel(kind);
-  const inputName = session.inputNames[0]!;
-  let tensor: ort.Tensor;
-  if (kind === 'deblur') {
-    const data = new Uint16Array(plane * 3);
-    for (let i = 0; i < plane; i++)
-      for (let c = 0; c < 3; c++) data[c * plane + i] = floatToHalf(pixels[i * 4 + c]! / 255);
-    tensor = new ort.Tensor('float16', data, [1, 3, height, width]);
-  } else {
-    const data = new Float32Array(plane * 3);
-    for (let i = 0; i < plane; i++)
-      for (let c = 0; c < 3; c++) data[c * plane + i] = pixels[i * 4 + c]!;
-    tensor = new ort.Tensor('float32', data, [1, 3, height, width]);
+async function analyze(request: AnalyzeRequest): Promise<void> {
+  const sample = await decode(request.source);
+  try {
+    const analysis = await analysisFor(request, sample);
+    if (cancelled.has(request.id)) return;
+    workerScope.postMessage({
+      id: request.id,
+      kind: 'success',
+      result: restorationPlan(analysis),
+    });
+  } finally {
+    sample.close();
+    cancelled.delete(request.id);
   }
-  const result = await session.run({ [inputName]: tensor });
-  const output = result[session.outputNames[0]!]!;
-  const rgba = new Uint8ClampedArray(plane * 4);
-  for (let i = 0; i < plane; i++) {
-    for (let c = 0; c < 3; c++) {
-      const raw =
-        output.type === 'float16'
-          ? halfToFloat(Number(output.data[c * plane + i])) * 255
-          : Number(output.data[c * plane + i]);
-      rgba[i * 4 + c] = Math.max(0, Math.min(255, Math.round(raw)));
-    }
-    rgba[i * 4 + 3] = 255;
-  }
-  context.putImageData(new ImageData(rgba, width, height), 0, 0);
-  return await createImageBitmap(canvas);
 }
 
 function canvasAppearance(
@@ -308,9 +231,35 @@ function canvasAppearance(
   const mean = total / (data.length / 4);
   const lift = stages.includes('deshadow') ? Math.max(0, 196 - mean) * 0.45 : 0;
   const contrast = stages.includes('appearance') ? 1.1 : 1.04;
+  const reduceMoire = stages.includes('demoire');
+  const sharpen = stages.includes('deblur') ? (reduceMoire ? 0.12 : 0.28) : 0;
+  const spatialFilter = reduceMoire || sharpen > 0;
+  const source = spatialFilter ? data.slice() : data;
   for (let i = 0; i < data.length; i += 4) {
-    for (let c = 0; c < 3; c++)
-      data[i + c] = Math.max(0, Math.min(255, (data[i + c]! + lift - 128) * contrast + 128));
+    let left = i;
+    let right = i;
+    let up = i;
+    let down = i;
+    if (spatialFilter) {
+      const pixel = i / 4;
+      const x = pixel % canvas.width;
+      const y = Math.floor(pixel / canvas.width);
+      left = (y * canvas.width + Math.max(0, x - 1)) * 4;
+      right = (y * canvas.width + Math.min(canvas.width - 1, x + 1)) * 4;
+      up = (Math.max(0, y - 1) * canvas.width + x) * 4;
+      down = (Math.min(canvas.height - 1, y + 1) * canvas.width + x) * 4;
+    }
+    for (let c = 0; c < 3; c++) {
+      const center = source[i + c]!;
+      let neighborhood = center;
+      if (spatialFilter) {
+        neighborhood =
+          (source[left + c]! + source[right + c]! + source[up + c]! + source[down + c]!) / 4;
+      }
+      const denoised = reduceMoire ? center * 0.82 + neighborhood * 0.18 : center;
+      const detailed = denoised + (denoised - neighborhood) * sharpen;
+      data[i + c] = Math.max(0, Math.min(255, (detailed + lift - 128) * contrast + 128));
+    }
     if (!protectColor) {
       const gray = 0.2126 * data[i]! + 0.7152 * data[i + 1]! + 0.0722 * data[i + 2]!;
       data[i] = data[i]! * 0.86 + gray * 0.14;
@@ -350,8 +299,8 @@ async function webGpuAppearance(
     stages.includes('deshadow') ? Math.max(0, 196 - luminance / count) * 0.45 : 0,
     stages.includes('appearance') ? 1.1 : 1.04,
     protectColor ? 1 : 0,
-    stages.includes('deblur') ? 0.16 : 0.1,
-    0,
+    stages.includes('deblur') ? (stages.includes('demoire') ? 0.12 : 0.28) : 0,
+    stages.includes('demoire') ? 0.18 : 0,
     0,
   ]);
   const byteLength = packed.byteLength;
@@ -376,7 +325,7 @@ async function webGpuAppearance(
     device.queue.writeBuffer(uniform, 0, parameters);
     const shader = device.createShaderModule({
       code: `
-      struct Params { width: f32, height: f32, lift: f32, contrast: f32, protectColor: f32, sharpen: f32, pad0: f32, pad1: f32 }
+      struct Params { width: f32, height: f32, lift: f32, contrast: f32, protectColor: f32, sharpen: f32, denoise: f32, pad0: f32 }
       @group(0) @binding(0) var<storage, read> source: array<u32>;
       @group(0) @binding(1) var<storage, read_write> target: array<u32>;
       @group(0) @binding(2) var<uniform> params: Params;
@@ -400,7 +349,8 @@ async function webGpuAppearance(
         let down = select(y, y + 1u, y + 1u < height) * width + x;
         let center = rgb(source[index]);
         let neighborhood = (rgb(source[left]) + rgb(source[right]) + rgb(source[up]) + rgb(source[down])) * 0.25;
-        var color = center + (center - neighborhood) * params.sharpen;
+        var color = mix(center, neighborhood, params.denoise);
+        color = color + (color - neighborhood) * params.sharpen;
         color = (color + vec3<f32>(params.lift) - vec3<f32>(128.0)) * params.contrast + vec3<f32>(128.0);
         if (params.protectColor < 0.5) {
           let gray = dot(color, vec3<f32>(0.2126, 0.7152, 0.0722));
@@ -449,13 +399,17 @@ async function enhance(
   protectColor: boolean,
   outputDimensions: { readonly width: number; readonly height: number },
 ): Promise<{ blob: Blob; provider: string }> {
-  // Optional restoration models intentionally run on bounded inputs for interactive latency.
-  // Render their result back at the capture dimensions so review/PDF export keeps its pixel budget.
+  // The classifier chooses a bounded classical chain; no restoration model is loaded here.
   const canvas = sampleCanvas(bitmap, outputDimensions.width, outputDimensions.height);
   const context = canvas.getContext('2d', { willReadFrequently: true });
   if (context === null) throw new Error('canvas-unavailable');
   let usedWebGpu = false;
-  if (stages.includes('deshadow') || stages.includes('appearance') || stages.includes('deblur')) {
+  if (
+    stages.includes('deshadow') ||
+    stages.includes('appearance') ||
+    stages.includes('demoire') ||
+    stages.includes('deblur')
+  ) {
     const image = context.getImageData(0, 0, canvas.width, canvas.height);
     try {
       const filtered = await webGpuAppearance(
@@ -474,38 +428,20 @@ async function enhance(
     }
   }
   const blob = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.96 });
-  return { blob, provider: usedWebGpu ? 'browser-ort-webgpu@1.27.0' : 'browser-ort-wasm@1.27.0' };
+  return {
+    blob,
+    provider: usedWebGpu ? 'browser-webgpu-classical@1' : 'browser-canvas-classical@1',
+  };
 }
 
 async function restore(request: RestoreRequest) {
-  let bitmap = await decode(request.source);
+  const bitmap = await decode(request.source);
   const outputDimensions = { width: bitmap.width, height: bitmap.height };
   try {
     const analysis = await analysisFor(request, bitmap);
     if (cancelled.has(request.id)) return;
-    const decision = decideRestorationPolicy(analysis);
-    const warnings: RestorationWarning[] = [];
-    if (analysis.scores.finger >= 0.75) warnings.push('retake-finger');
-    if (analysis.scores.moire >= 0.75) warnings.push('unsupported-moire');
-    const requestedStages =
-      decision.kind === 'enhance'
-        ? decision.stages.filter(
-            (stage): stage is AppliedRestorationStage =>
-              stage !== 'finger-segmentation' && stage !== 'demoire',
-          )
-        : [];
-    const stages = requestedStages.filter((stage) => {
-      if (stage === 'dewarp') return performanceProfile.allowNeuralDewarp;
-      if (stage === 'deblur') return performanceProfile.allowNeuralDeblur;
-      return performanceProfile.allowGpuAppearance;
-    });
-    for (const stage of stages) {
-      if (stage !== 'dewarp' && stage !== 'deblur') continue;
-      const next = await runImageModel(bitmap, stage);
-      bitmap.close();
-      bitmap = next;
-      if (cancelled.has(request.id)) return;
-    }
+    const plan = restorationPlan(analysis);
+    const { stages, warnings } = plan;
     if (stages.length === 0) {
       workerScope.postMessage({
         id: request.id,
@@ -520,7 +456,7 @@ async function restore(request: RestoreRequest) {
       });
       return;
     }
-    const output = await enhance(bitmap, stages, decision.protectColor, outputDimensions);
+    const output = await enhance(bitmap, stages, plan.protectColor, outputDimensions);
     workerScope.postMessage({
       id: request.id,
       kind: 'success',
@@ -555,7 +491,8 @@ workerScope.addEventListener('message', (event: MessageEvent<WorkerRequest>) => 
         cancelled.delete(request.id);
         return;
       }
-      await restore(request);
+      if (request.operation === 'analyze') await analyze(request);
+      else await restore(request);
     })
     .catch((error: unknown) => {
       if (!cancelled.has(request.id))

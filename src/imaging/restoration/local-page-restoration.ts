@@ -50,9 +50,6 @@ export async function restoreProcessedPage(
       ...persistentPage.variant,
       image: result.image,
       engineVersion: `${page.variant.engineVersion}+local-ai:${result.provider}`,
-      dewarp: result.stages.includes('dewarp')
-        ? { kind: 'applied', modelVersion: result.provider }
-        : persistentPage.variant.dewarp,
     },
     restoration: {
       kind: 'applied',

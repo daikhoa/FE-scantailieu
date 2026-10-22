@@ -77,6 +77,48 @@ describe('local restoration client', () => {
     await expect(operation).resolves.toMatchObject({ route: 'local' });
   });
 
+  it('classifies an unfiltered rough crop transferred from the render worker', async () => {
+    vi.stubGlobal('Worker', FakeWorker);
+    const client = createLocalRestorationClient();
+    const worker = FakeWorker.latest;
+    if (worker === null) throw new Error('Worker was not created.');
+    if (client.analyze === undefined) throw new Error('Analysis is unavailable.');
+    const pixels = new Uint8ClampedArray(720 * 512 * 4);
+    const source = {
+      kind: 'rgba-frame' as const,
+      dimensions: { width: 720, height: 512 },
+      pixels,
+    };
+
+    const operation = client.analyze(source, new AbortController().signal, {
+      analysisKey: 'page-1',
+    });
+
+    expect(worker.posted[0]).toEqual({
+      operation: 'analyze',
+      id: 1,
+      source,
+      analysisKey: 'page-1',
+    });
+    expect(worker.transfers[0]).toEqual([pixels.buffer]);
+    worker.emit({
+      id: 1,
+      kind: 'success',
+      result: {
+        kind: 'analysis',
+        stages: ['deshadow', 'appearance'],
+        classifierModel: 'classifier@test',
+        warnings: [],
+        protectColor: false,
+      },
+    });
+
+    await expect(operation).resolves.toMatchObject({
+      kind: 'analysis',
+      stages: ['deshadow', 'appearance'],
+    });
+  });
+
   it('cancels the worker job without exposing the abort reason', async () => {
     vi.stubGlobal('Worker', FakeWorker);
     const client = createLocalRestorationClient();

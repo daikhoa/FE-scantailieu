@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 import type { ScannerEngine } from '../../imaging/contracts/scanner-engine';
+import type { LocalRestorationClient } from '../../imaging/restoration/local-restoration-client';
 import type { ImageImporter } from '../camera/image-import';
 import { createBackgroundPageProcessor } from './background-page-processor';
 import type { ImageAssetFrameSource } from './image-asset-frame-source';
@@ -42,17 +43,27 @@ function fakeEngine() {
       ],
     }),
   );
-  const renderPage = vi.fn<ScannerEngine['render']>((request) =>
-    Promise.resolve({
+  const renderPage = vi.fn<ScannerEngine['render']>((request) => {
+    const rough = request.maximumOutputLongSide === 720;
+    const outputDimensions = rough ? { width: 540, height: 720 } : request.original.dimensions;
+    return Promise.resolve({
       recipeKey: 'ready-page',
       engineVersion: 'test',
       image: {
         blob: new Blob(['processed'], { type: 'image/png' }),
-        dimensions: request.original.dimensions,
+        dimensions: outputDimensions,
       },
+      ...(rough
+        ? {
+            transientRgba: {
+              dimensions: outputDimensions,
+              pixels: new Uint8ClampedArray(outputDimensions.width * outputDimensions.height * 4),
+            },
+          }
+        : {}),
       dewarp: { kind: 'not-requested' as const },
-    }),
-  );
+    });
+  });
   const engine: ScannerEngine = {
     lifecycle: { kind: 'uninitialized' },
     initialize: vi.fn(() => Promise.resolve()),
@@ -137,6 +148,7 @@ describe('background page processor', () => {
         original: result.original,
         orientation: 0,
         recipe: result.recipe,
+        maximumOutputLongSide: 3000,
         preserveOutputPixels: true,
       },
       expect.any(AbortSignal),
@@ -184,14 +196,9 @@ describe('background page processor', () => {
     await processor.dispose();
   });
 
-  it('falls back to the stable live crop when detection on the captured image is uncertain', async () => {
+  it('uses the stable corners visible at capture time without detecting the frozen image again', async () => {
     const source = new Blob(['page'], { type: 'image/jpeg' });
     const { engine, detectPage, renderPage } = fakeEngine();
-    detectPage.mockResolvedValueOnce({
-      kind: 'full-frame',
-      dimensions: { width: 600, height: 800 },
-      reason: 'low-confidence',
-    });
     const processor = createBackgroundPageProcessor({
       importer: () => Promise.resolve(imported(source)),
       engineFactory: () => engine,
@@ -225,9 +232,79 @@ describe('background page processor', () => {
         { x: 60, y: 1520 },
       ],
     });
-    expect(renderPage).toHaveBeenCalledOnce();
+    expect(detectPage).not.toHaveBeenCalled();
+    expect(renderPage).toHaveBeenCalledTimes(2);
     expect(renderPage.mock.calls[0]?.[0].recipe.crop).toEqual(result.crop);
     expect(renderPage.mock.calls[0]?.[1]).toBeInstanceOf(AbortSignal);
+
+    await processor.dispose();
+  });
+
+  it('classifies the rough crop before publishing a 1600 px preview and rendering the final', async () => {
+    const source = new Blob(['page'], { type: 'image/jpeg' });
+    const { engine, renderPage } = fakeEngine();
+    const analyze = vi.fn<NonNullable<LocalRestorationClient['analyze']>>(() =>
+      Promise.resolve({
+        kind: 'analysis' as const,
+        stages: ['deshadow' as const, 'appearance' as const],
+        classifierModel: 'classifier@test',
+        warnings: [],
+        protectColor: false,
+      }),
+    );
+    const onPreview = vi.fn();
+    const processor = createBackgroundPageProcessor({
+      importer: () => Promise.resolve(imported(source)),
+      engineFactory: () => engine,
+      frameSource: fakeFrameSource(),
+      restorationAnalyzer: { analyze },
+    });
+
+    const result = await processor.enqueue(source, new AbortController().signal, undefined, null, {
+      analysisKey: 'page-1',
+      onPreview,
+    });
+
+    expect(analyze).toHaveBeenCalledOnce();
+    const roughSource = analyze.mock.calls[0]?.[0];
+    if (roughSource === undefined || roughSource instanceof Blob) {
+      throw new Error('Expected a transferred rough RGBA crop.');
+    }
+    expect(roughSource).toMatchObject({
+      kind: 'rgba-frame',
+      dimensions: { width: 540, height: 720 },
+    });
+    expect(roughSource.pixels).toBeInstanceOf(Uint8ClampedArray);
+    expect(analyze.mock.calls[0]?.[2]).toEqual({ analysisKey: 'page-1' });
+    const roughRenderOrder = renderPage.mock.invocationCallOrder[0];
+    const analysisOrder = analyze.mock.invocationCallOrder[0];
+    const previewRenderOrder = renderPage.mock.invocationCallOrder[1];
+    if (
+      roughRenderOrder === undefined ||
+      analysisOrder === undefined ||
+      previewRenderOrder === undefined
+    ) {
+      throw new Error('Expected ordered rough, analysis and preview operations.');
+    }
+    expect(roughRenderOrder).toBeLessThan(analysisOrder);
+    expect(analysisOrder).toBeLessThan(previewRenderOrder);
+    expect(renderPage).toHaveBeenCalledTimes(3);
+    expect(renderPage.mock.calls[0]?.[0]).toMatchObject({
+      maximumOutputLongSide: 720,
+      preserveOutputPixels: true,
+      recipe: { filter: { mode: 'original' } },
+    });
+    expect(renderPage.mock.calls[1]?.[0]).toMatchObject({
+      maximumOutputLongSide: 1600,
+      preserveOutputPixels: false,
+    });
+    expect(renderPage.mock.calls[2]?.[0].maximumOutputLongSide).toBe(3000);
+    expect(renderPage.mock.calls[2]?.[0].preserveOutputPixels).toBe(true);
+    expect(onPreview).toHaveBeenCalledOnce();
+    expect(onPreview.mock.calls[0]?.[0]).toMatchObject({
+      restoration: { kind: 'processing' },
+    });
+    expect(result.restoration).toEqual({ kind: 'processing' });
 
     await processor.dispose();
   });

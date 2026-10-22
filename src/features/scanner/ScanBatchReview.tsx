@@ -28,6 +28,7 @@ type ReadyScanBatchPage = Extract<ScanBatchPage, { readonly kind: 'ready' }>;
 
 const RESTORATION_WARNING_LABELS: Record<RestorationWarning, string> = {
   'retake-finger': 'Tay đang che tài liệu — nên chụp lại trang này.',
+  'retake-curved': 'Trang bị cong mạnh — nên ép phẳng và chụp lại để OCR chính xác hơn.',
   'unsupported-moire': 'Có vân moiré — bộ xử lý hiện tại chưa khử hoàn toàn.',
 };
 
@@ -38,7 +39,13 @@ function pageWarnings(page: ReadyScanBatchPage): readonly RestorationWarning[] {
     : [];
 }
 
-function PagePreview({ page, number }: { readonly page: ReadyScanBatchPage; readonly number: number }) {
+function PagePreview({
+  page,
+  number,
+}: {
+  readonly page: ReadyScanBatchPage;
+  readonly number: number;
+}) {
   const url = useMemo(() => URL.createObjectURL(page.page.variant.image.blob), [page]);
   const { width, height } = page.page.variant.image.dimensions;
 
@@ -95,16 +102,19 @@ export function ScanBatchReview({
   const canExport = pages.length > 0 && readyPages.length === pages.length && pendingCount === 0;
   const effectiveSelectedPageId = pages.some((page) => page.id === selectedPageId)
     ? selectedPageId
-    : pages[0]?.id ?? null;
-  const selectedIndex = Math.max(0, pages.findIndex((page) => page.id === effectiveSelectedPageId));
+    : (pages[0]?.id ?? null);
+  const selectedIndex = Math.max(
+    0,
+    pages.findIndex((page) => page.id === effectiveSelectedPageId),
+  );
   const selectedPage = pages[selectedIndex] ?? null;
   const selectedNumber = selectedPage === null ? 0 : selectedIndex + 1;
   const croppingPage =
     croppingPageId === null
       ? null
-      : pages.find(
+      : (pages.find(
           (page): page is ReadyScanBatchPage => page.id === croppingPageId && page.kind === 'ready',
-        ) ?? null;
+        ) ?? null);
 
   useEffect(
     () => () => {
@@ -182,7 +192,11 @@ export function ScanBatchReview({
 
   if (croppingPage !== null) {
     return (
-      <main id="main-content" className="app-main batch-review batch-review--cropping" aria-label="Cắt trang tài liệu">
+      <main
+        id="main-content"
+        className="app-main batch-review batch-review--cropping"
+        aria-label="Cắt trang tài liệu"
+      >
         <ManualCropEditor
           original={croppingPage.page.original}
           initialCrop={croppingPage.page.recipe.crop}
@@ -191,9 +205,11 @@ export function ScanBatchReview({
             setCroppingPageId(null);
           }}
           onApply={(crop) => {
-            void applyRecipe(croppingPage, { ...croppingPage.page.recipe, crop }).then((applied) => {
-              if (applied) setCroppingPageId(null);
-            });
+            void applyRecipe(croppingPage, { ...croppingPage.page.recipe, crop }).then(
+              (applied) => {
+                if (applied) setCroppingPageId(null);
+              },
+            );
           }}
         />
       </main>
@@ -204,7 +220,12 @@ export function ScanBatchReview({
     <main id="main-content" className="app-main batch-review" aria-label="Tài liệu nhiều trang">
       <section className="batch-review__content" aria-labelledby="batch-review-title">
         <header className="batch-review__heading">
-          <button className="batch-review__add" type="button" aria-label="Chụp thêm trang" onClick={onCaptureMore}>
+          <button
+            className="batch-review__add"
+            type="button"
+            aria-label="Chụp thêm trang"
+            onClick={onCaptureMore}
+          >
             + Thêm
           </button>
           <div>
@@ -288,15 +309,27 @@ export function ScanBatchReview({
             </ol>
 
             <div className="batch-review__pager" aria-label="Điều hướng trang">
-              <button type="button" aria-label="Trang trước" disabled={selectedIndex === 0} onClick={() => {
-                selectIndex(selectedIndex - 1);
-              }}>
+              <button
+                type="button"
+                aria-label="Trang trước"
+                disabled={selectedIndex === 0}
+                onClick={() => {
+                  selectIndex(selectedIndex - 1);
+                }}
+              >
                 ‹
               </button>
-              <span aria-live="polite">{selectedNumber} / {pages.length}</span>
-              <button type="button" aria-label="Trang kế tiếp" disabled={selectedIndex >= pages.length - 1} onClick={() => {
-                selectIndex(selectedIndex + 1);
-              }}>
+              <span aria-live="polite">
+                {selectedNumber} / {pages.length}
+              </span>
+              <button
+                type="button"
+                aria-label="Trang kế tiếp"
+                disabled={selectedIndex >= pages.length - 1}
+                onClick={() => {
+                  selectIndex(selectedIndex + 1);
+                }}
+              >
                 ›
               </button>
             </div>
@@ -317,49 +350,88 @@ export function ScanBatchReview({
                       aria-pressed={selectedPage.page.recipe.filter.mode === option.mode}
                       disabled={busyPageId !== null}
                       onClick={() => {
-                        void applyRecipe(selectedPage, recipeWithFilter(selectedPage.page.recipe, option.mode));
+                        void applyRecipe(
+                          selectedPage,
+                          recipeWithFilter(selectedPage.page.recipe, option.mode),
+                        );
                       }}
                     >
-                      <span className={`batch-filter-strip__sample batch-filter-strip__sample--${option.mode}`} aria-hidden="true" />
+                      <span
+                        className={`batch-filter-strip__sample batch-filter-strip__sample--${option.mode}`}
+                        aria-hidden="true"
+                      />
                       <strong>{option.label}</strong>
                     </button>
                   ))}
                 </div>
               </>
             ) : selectedPage?.kind === 'failed' ? (
-              <button className="batch-review__retry" type="button" onClick={() => {
-                onRetryPage(selectedPage.id);
-              }}>
+              <button
+                className="batch-review__retry"
+                type="button"
+                onClick={() => {
+                  onRetryPage(selectedPage.id);
+                }}
+              >
                 Xử lý lại trang {selectedNumber}
               </button>
             ) : null}
 
             <div className="batch-action-bar" aria-label="Công cụ chỉnh trang">
-              <button type="button" aria-label={`Chụp lại trang ${String(selectedNumber)}`} disabled={selectedPage === null || selectedPage.kind === 'queued' || selectedPage.kind === 'processing'} onClick={() => {
-                if (selectedPage !== null) onRetakePage(selectedPage.id);
-              }}>
+              <button
+                type="button"
+                aria-label={`Chụp lại trang ${String(selectedNumber)}`}
+                disabled={
+                  selectedPage === null ||
+                  selectedPage.kind === 'queued' ||
+                  selectedPage.kind === 'processing'
+                }
+                onClick={() => {
+                  if (selectedPage !== null) onRetakePage(selectedPage.id);
+                }}
+              >
                 <span aria-hidden="true">↻</span>Chụp lại
               </button>
               <button
                 type="button"
                 disabled={selectedPage?.kind !== 'ready' || busyPageId !== null}
                 onClick={() => {
-                  if (selectedPage?.kind === 'ready') void applyRecipe(selectedPage, { ...selectedPage.page.recipe, rotation: rotateLeft(selectedPage.page.recipe.rotation) });
+                  if (selectedPage?.kind === 'ready')
+                    void applyRecipe(selectedPage, {
+                      ...selectedPage.page.recipe,
+                      rotation: rotateLeft(selectedPage.page.recipe.rotation),
+                    });
                 }}
               >
                 <span aria-hidden="true">↶</span>Xoay trái
               </button>
-              <button type="button" aria-label={`Cắt trang ${String(selectedNumber)}`} disabled={selectedPage?.kind !== 'ready' || busyPageId !== null} onClick={() => {
-                if (selectedPage?.kind === 'ready') setCroppingPageId(selectedPage.id);
-              }}>
+              <button
+                type="button"
+                aria-label={`Cắt trang ${String(selectedNumber)}`}
+                disabled={selectedPage?.kind !== 'ready' || busyPageId !== null}
+                onClick={() => {
+                  if (selectedPage?.kind === 'ready') setCroppingPageId(selectedPage.id);
+                }}
+              >
                 <span aria-hidden="true">⌗</span>Cắt
               </button>
-              <button type="button" disabled={selectedPage === null || busyPageId !== null} onClick={() => {
-                if (selectedPage !== null) onRemovePage(selectedPage.id);
-              }}>
+              <button
+                type="button"
+                disabled={selectedPage === null || busyPageId !== null}
+                onClick={() => {
+                  if (selectedPage !== null) onRemovePage(selectedPage.id);
+                }}
+              >
                 <span aria-hidden="true">⌫</span>Xóa trang {selectedNumber}
               </button>
-              <button className="batch-action-bar__done" type="button" aria-label={`Tải PDF ${String(pages.length)} trang`} aria-busy={exporting} disabled={!canExport || exporting || busyPageId !== null} onClick={() => void exportPdf()}>
+              <button
+                className="batch-action-bar__done"
+                type="button"
+                aria-label={`Tải PDF ${String(pages.length)} trang`}
+                aria-busy={exporting}
+                disabled={!canExport || exporting || busyPageId !== null}
+                onClick={() => void exportPdf()}
+              >
                 <span aria-hidden="true">✓</span>PDF
               </button>
             </div>
@@ -368,16 +440,31 @@ export function ScanBatchReview({
 
         {busyPageId !== null || pendingCount > 0 ? (
           <p className="editor__status" role="status" aria-live="polite">
-            {busyPageId !== null ? 'Đang áp dụng thay đổi…' : `Đang hoàn tất ${String(pendingCount)} trang…`}
+            {busyPageId !== null
+              ? 'Đang áp dụng thay đổi…'
+              : `Đang hoàn tất ${String(pendingCount)} trang…`}
           </p>
         ) : failedCount > 0 ? (
-          <p className="editor__error" role="alert">Có {failedCount} trang chưa xử lý được. Hãy xử lý lại hoặc xóa trang đó trước khi tạo PDF.</p>
+          <p className="editor__error" role="alert">
+            Có {failedCount} trang chưa xử lý được. Hãy xử lý lại hoặc xóa trang đó trước khi tạo
+            PDF.
+          </p>
         ) : pages.length > 0 ? (
-          <p className="editor__status" role="status">Tất cả trang đã sẵn sàng để tạo PDF.</p>
+          <p className="editor__status" role="status">
+            Tất cả trang đã sẵn sàng để tạo PDF.
+          </p>
         ) : null}
 
-        {operationFailed ? <p className="editor__error" role="alert">Không thể áp dụng thay đổi. Bản trang trước vẫn được giữ nguyên.</p> : null}
-        {exportFailed ? <p className="editor__error" role="alert">Không thể tạo PDF. Các trang vẫn được giữ nguyên và bạn có thể thử lại.</p> : null}
+        {operationFailed ? (
+          <p className="editor__error" role="alert">
+            Không thể áp dụng thay đổi. Bản trang trước vẫn được giữ nguyên.
+          </p>
+        ) : null}
+        {exportFailed ? (
+          <p className="editor__error" role="alert">
+            Không thể tạo PDF. Các trang vẫn được giữ nguyên và bạn có thể thử lại.
+          </p>
+        ) : null}
       </section>
     </main>
   );

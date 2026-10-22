@@ -57,6 +57,8 @@ export interface RenderPageRequest {
    */
   readonly orientation: QuarterTurn;
   readonly recipe: EditRecipe;
+  /** Optional long-side cap for fast rough/preview renders. Omit for the 3000 px final. */
+  readonly maximumOutputLongSide?: number;
   /** Keeps rendered pixels for one zero-copy handoff to the local restoration worker. */
   readonly preserveOutputPixels?: boolean;
 }

@@ -28,8 +28,8 @@ export function createScanicMainThreadBackend(): ClassicalBackend {
         detector: result.detector,
       };
     },
-    warp(input, corners, rotation, filter) {
-      const corrected = warpPerspectiveRgba(input, corners);
+    warp(input, corners, rotation, filter, maximumOutputLongSide) {
+      const corrected = warpPerspectiveRgba(input, corners, maximumOutputLongSide);
       const filtered = applyDocumentFilter(corrected, filter);
       return Promise.resolve(rotateOwnedRgba(filtered, rotation));
     },

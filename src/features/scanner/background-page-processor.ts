@@ -1,6 +1,7 @@
 import type { CropRegion, EditRecipe, ImageAsset, RenderedVariant } from '../../domain/document';
 import type { ScannerEngine } from '../../imaging/contracts/scanner-engine';
 import type { RestorationWarning } from '../../imaging/restoration/restoration-types';
+import type { LocalRestorationClient } from '../../imaging/restoration/local-restoration-client';
 import { createScanicEngine } from '../../imaging/engines/scanic-classical-engine';
 import { detectDocumentCrop } from '../editor/detect-document-crop';
 import { importImage, type ImageImporter } from '../camera/image-import';
@@ -48,8 +49,14 @@ export interface BackgroundPageProcessor {
     signal: AbortSignal,
     onStart?: () => void,
     liveDetection?: LiveDetectionResult | null,
+    options?: PageProcessingOptions,
   ): Promise<ProcessedScanPage>;
   dispose(): Promise<void>;
+}
+
+export interface PageProcessingOptions {
+  readonly analysisKey?: string;
+  readonly onPreview?: (page: ProcessedScanPage) => void;
 }
 
 export type ScanPageSource = Blob | CapturedRgbaFrame;
@@ -59,6 +66,7 @@ interface BackgroundPageProcessorOptions {
   readonly engineFactory?: () => ScannerEngine;
   readonly frameSource?: ImageAssetFrameSource;
   readonly codec?: RgbaImageCodec;
+  readonly restorationAnalyzer?: Pick<LocalRestorationClient, 'analyze'>;
 }
 
 export function createDefaultPageRecipe(crop: CropRegion): EditRecipe {
@@ -111,6 +119,7 @@ export function createBackgroundPageProcessor(
   const engineFactory = options.engineFactory ?? createScanicEngine;
   const frameSource = options.frameSource ?? createImageAssetFrameSource();
   const codec = options.codec ?? createBrowserRgbaCodec();
+  const restorationAnalyzer = options.restorationAnalyzer;
   const disposal = new AbortController();
   let engine: ScannerEngine | null = null;
   let tail: Promise<unknown> = Promise.resolve();
@@ -142,6 +151,7 @@ export function createBackgroundPageProcessor(
     source: ScanPageSource,
     signal: AbortSignal,
     liveDetection: LiveDetectionResult | null,
+    processingOptions: PageProcessingOptions,
   ): Promise<ProcessedScanPage> => {
     checkAbort(signal, disposal.signal);
     const imported =
@@ -161,33 +171,95 @@ export function createBackgroundPageProcessor(
     const currentEngine = await readyEngine(signal);
     try {
       const liveCrop = mapLiveDetectionToCrop(liveDetection, imported.original.dimensions);
-      const crop = await detectDocumentCrop(
-        currentEngine,
-        frameSource,
-        imported.original,
-        signal,
-        liveCrop,
-      );
+      const crop =
+        liveCrop.kind === 'document'
+          ? liveCrop
+          : await detectDocumentCrop(
+              currentEngine,
+              frameSource,
+              imported.original,
+              signal,
+              liveCrop,
+            );
       const recipe = createDefaultPageRecipe(crop);
+      const sourcePixels =
+        source instanceof Blob
+          ? {}
+          : {
+              sourcePixels: {
+                dimensions: source.dimensions,
+                pixels: source.pixels,
+              },
+            };
+      let restoration: PageRestorationState = { kind: 'local' };
+      if (restorationAnalyzer?.analyze !== undefined) {
+        try {
+          const roughVariant = await currentEngine.render(
+            {
+              original: imported.original,
+              orientation: 0,
+              recipe: {
+                ...recipe,
+                filter: {
+                  mode: 'original',
+                  presetVersion: 'classifier-rough-v1',
+                  parameters: {},
+                },
+              },
+              maximumOutputLongSide: 720,
+              preserveOutputPixels: true,
+              ...sourcePixels,
+            },
+            signal,
+          );
+          const roughSource =
+            roughVariant.transientRgba === undefined
+              ? roughVariant.image.blob
+              : { kind: 'rgba-frame' as const, ...roughVariant.transientRgba };
+          await restorationAnalyzer.analyze(roughSource, signal, {
+            ...(processingOptions.analysisKey === undefined
+              ? {}
+              : { analysisKey: processingOptions.analysisKey }),
+          });
+          restoration = { kind: 'processing' };
+        } catch (error) {
+          if (error instanceof Error && error.name === 'AbortError') throw error;
+          restoration = { kind: 'fallback', reason: 'failed' };
+        }
+      }
+      checkAbort(signal, disposal.signal);
+      const previewVariant = await currentEngine.render(
+        {
+          original: imported.original,
+          orientation: 0,
+          recipe,
+          maximumOutputLongSide: 1600,
+          preserveOutputPixels: false,
+          ...sourcePixels,
+        },
+        signal,
+      );
+      checkAbort(signal, disposal.signal);
+      processingOptions.onPreview?.({
+        original: imported.original,
+        crop,
+        recipe,
+        variant: previewVariant,
+        restoration,
+      });
       const variant = await currentEngine.render(
         {
           original: imported.original,
           orientation: 0,
           recipe,
+          maximumOutputLongSide: 3000,
           preserveOutputPixels: true,
-          ...(source instanceof Blob
-            ? {}
-            : {
-                sourcePixels: {
-                  dimensions: source.dimensions,
-                  pixels: source.pixels,
-                },
-              }),
+          ...sourcePixels,
         },
         signal,
       );
       checkAbort(signal, disposal.signal);
-      return { original: imported.original, crop, recipe, variant, restoration: { kind: 'local' } };
+      return { original: imported.original, crop, recipe, variant, restoration };
     } catch (error) {
       if (!(error instanceof Error && error.name === 'AbortError')) {
         await releaseEngine().catch(() => undefined);
@@ -197,14 +269,14 @@ export function createBackgroundPageProcessor(
   };
 
   return {
-    enqueue(source, signal, onStart, liveDetection = null) {
+    enqueue(source, signal, onStart, liveDetection = null, processingOptions = {}) {
       if (disposePromise !== null || disposal.signal.aborted) return Promise.reject(abortError());
       const result = tail.then(async () => {
         checkAbort(signal, disposal.signal);
         onStart?.();
         const linked = linkedSignal(signal, disposal.signal);
         try {
-          return await process(source, linked.signal, liveDetection);
+          return await process(source, linked.signal, liveDetection, processingOptions);
         } finally {
           linked.release();
         }

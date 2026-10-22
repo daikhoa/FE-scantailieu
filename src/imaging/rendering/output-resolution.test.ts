@@ -44,4 +44,19 @@ describe('high-quality perspective output resolution', () => {
       ),
     ).toEqual({ width: 4000, height: 3000 });
   });
+
+  it('caps a preview to the requested long side while preserving its aspect ratio', () => {
+    expect(
+      resolveHighQualityOutputDimensions(
+        [
+          { x: 0, y: 0 },
+          { x: 4000, y: 0 },
+          { x: 4000, y: 3000 },
+          { x: 0, y: 3000 },
+        ],
+        { width: 4000, height: 3000 },
+        1600,
+      ),
+    ).toEqual({ width: 1600, height: 1200 });
+  });
 });

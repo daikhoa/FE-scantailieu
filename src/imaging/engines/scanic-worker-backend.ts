@@ -19,6 +19,7 @@ export type ScanicWorkerRequest =
       readonly corners: DocumentCorners;
       readonly rotation: QuarterTurn;
       readonly filter: FilterMode;
+      readonly maximumOutputLongSide?: number;
     };
 
 export type ScanicWorkerResponse =
@@ -134,6 +135,7 @@ export function createScanicWorkerBackend(): ClassicalBackend {
     corners?: DocumentCorners,
     rotation?: QuarterTurn,
     filter?: FilterMode,
+    maximumOutputLongSide?: number,
   ): Promise<unknown> {
     if (closed || current !== null) return Promise.reject(new ScannerEngineError('unavailable'));
     const id = ++nextId;
@@ -150,7 +152,15 @@ export function createScanicWorkerBackend(): ClassicalBackend {
           rotation !== undefined &&
           filter !== undefined
         ) {
-          const message: ScanicWorkerRequest = { id, operation, input, corners, rotation, filter };
+          const message: ScanicWorkerRequest = {
+            id,
+            operation,
+            input,
+            corners,
+            rotation,
+            filter,
+            ...(maximumOutputLongSide === undefined ? {} : { maximumOutputLongSide }),
+          };
           worker.postMessage(message, [input.pixels.buffer]);
         } else if (operation === 'detect' && input !== undefined) {
           const message: ScanicWorkerRequest = { id, operation, input };
@@ -170,8 +180,8 @@ export function createScanicWorkerBackend(): ClassicalBackend {
       await request('initialize');
     },
     detect: (input) => request('detect', input),
-    async warp(input, corners, rotation, filter) {
-      const output = await request('warp', input, corners, rotation, filter);
+    async warp(input, corners, rotation, filter, maximumOutputLongSide) {
+      const output = await request('warp', input, corners, rotation, filter, maximumOutputLongSide);
       if (!isRgbaBackendInput(output)) throw new ScannerEngineError('failed');
       return output;
     },

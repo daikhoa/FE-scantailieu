@@ -85,6 +85,7 @@ function canonicalRequest(request: RenderPageRequest, imageDigest: string, engin
       height: request.original.dimensions.height,
     },
     orientation: request.orientation,
+    maximumOutputLongSide: request.maximumOutputLongSide ?? null,
     recipe: {
       version: request.recipe.version,
       crop,

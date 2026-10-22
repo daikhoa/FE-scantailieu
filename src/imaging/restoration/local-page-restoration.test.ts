@@ -101,7 +101,7 @@ describe('restoreProcessedPage', () => {
       restore: () =>
         Promise.resolve({
           route: 'enhanced',
-          stages: ['dewarp', 'deshadow'],
+          stages: ['deshadow', 'deblur'],
           classifierModel: 'defects@1',
           provider: 'browser-ort-webgpu@1.27.0',
           warnings: ['unsupported-moire'],
@@ -115,10 +115,7 @@ describe('restoreProcessedPage', () => {
     expect(result.crop).toBe(original.crop);
     expect(result.variant.image.blob).toBe(restoredBlob);
     expect(result.variant.engineVersion).toContain('browser-ort-webgpu@1.27.0');
-    expect(result.variant.dewarp).toEqual({
-      kind: 'applied',
-      modelVersion: 'browser-ort-webgpu@1.27.0',
-    });
+    expect(result.variant.dewarp).toEqual({ kind: 'not-requested' });
     expect(result.restoration).toMatchObject({
       kind: 'applied',
       warnings: ['unsupported-moire'],

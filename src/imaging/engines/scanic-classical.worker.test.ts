@@ -111,7 +111,9 @@ describe('Scanic ML worker runtime', () => {
 
   it('falls back to the guarded classical detector only when ML cannot run', async () => {
     await send({ id: 1, operation: 'initialize' });
-    vendor.scan.mockRejectedValueOnce(new Error('ML runtime unavailable'));
+    vendor.scan
+      .mockRejectedValueOnce(new Error('ML runtime unavailable'))
+      .mockRejectedValueOnce(new Error('ML runtime still unavailable'));
     await send({
       id: 2,
       operation: 'detect',

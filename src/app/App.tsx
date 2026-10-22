@@ -195,6 +195,9 @@ export function App({
       createBackgroundPageProcessor({
         ...(imageImporter === undefined ? {} : { importer: imageImporter }),
         ...(editorEngineFactory === undefined ? {} : { engineFactory: editorEngineFactory }),
+        ...(restorationClientRef.current === null
+          ? {}
+          : { restorationAnalyzer: restorationClientRef.current }),
       });
     const operations = pageOperations.current;
     pageProcessor.current = processor;
@@ -206,7 +209,7 @@ export function App({
       homeImportRequest.current = null;
       void processor.dispose().catch(() => undefined);
     };
-  }, [editorEngineFactory, imageImporter, pageProcessorFactory]);
+  }, [editorEngineFactory, imageImporter, pageProcessorFactory, restorationClient]);
 
   useEffect(
     () => () => {
@@ -273,6 +276,7 @@ export function App({
     const controller = new AbortController();
     pageOperations.current.get(id)?.abort();
     pageOperations.current.set(id, controller);
+    let publishedPreview: ProcessedScanPage | null = null;
     void processor
       .enqueue(
         source,
@@ -281,21 +285,38 @@ export function App({
           dispatchBatch({ type: 'started', id });
         },
         liveDetection,
+        {
+          analysisKey: id,
+          onPreview: (page) => {
+            if (pageOperations.current.get(id) !== controller) return;
+            const previewPage =
+              restorationClientRef.current === null
+                ? discardTransientRestorationPixels(page)
+                : { ...page, restoration: { kind: 'processing' as const } };
+            publishedPreview = previewPage;
+            dispatchBatch({ type: 'ready', id, page: previewPage });
+          },
+        },
       )
       .then(async (page) => {
+        if (pageOperations.current.get(id) !== controller) return;
         const resolvedRestorationClient = restorationClientRef.current;
         const shouldRestore = resolvedRestorationClient !== null;
         const readyPage: ProcessedScanPage = shouldRestore
           ? { ...page, restoration: { kind: 'processing' } }
           : discardTransientRestorationPixels(page);
-        dispatchBatch({ type: 'ready', id, page: readyPage });
+        dispatchBatch({
+          type: publishedPreview === null ? 'ready' : 'updated',
+          id,
+          page: readyPage,
+        });
         if (!shouldRestore || pageOperations.current.get(id) !== controller) return;
         try {
           const restored = await restoreProcessedPage(
             readyPage,
             resolvedRestorationClient,
             controller.signal,
-            { analysisKey: id },
+            { analysisKey: id, reuseAnalysis: true },
           );
           if (pageOperations.current.get(id) === controller) {
             dispatchBatch({ type: 'updated', id, page: restored });
@@ -322,9 +343,24 @@ export function App({
         }
       })
       .catch((error: unknown) => {
-        if (!(error instanceof Error && error.name === 'AbortError')) {
-          dispatchBatch({ type: 'failed', id });
+        if (
+          pageOperations.current.get(id) !== controller ||
+          (error instanceof Error && error.name === 'AbortError')
+        ) {
+          return;
         }
+        if (publishedPreview === null) {
+          dispatchBatch({ type: 'failed', id });
+          return;
+        }
+        dispatchBatch({
+          type: 'updated',
+          id,
+          page: {
+            ...publishedPreview,
+            restoration: { kind: 'fallback', reason: 'failed' },
+          },
+        });
       })
       .finally(() => {
         if (pageOperations.current.get(id) === controller) pageOperations.current.delete(id);

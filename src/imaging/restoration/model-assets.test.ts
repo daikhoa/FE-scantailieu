@@ -6,19 +6,14 @@ import { resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-const HOSTING_FILE_LIMIT = 25 * 1024 * 1024;
-const EXPECTED_UVDOC_SHA256 = '3f5ec09f1c6c5947ae7cc8db93ed7dd6dd2d164d3d99a6a70387c98848cfb00c';
+const CLASSIFIER_BYTE_LIMIT = 10 * 1024 * 1024;
+const EXPECTED_CLASSIFIER_SHA256 =
+  '9d42dd1121652dbc68c21b0cac13e40f3e7e57a04761ed380c7c99f2e5a6e4f7';
 
 describe('browser restoration model assets', () => {
-  it('keeps each UVDoc part deployable and reconstructs the licensed model exactly', () => {
-    const parts = [0, 1].map((index) =>
-      readFileSync(resolve(`public/models/local-restoration/uvdoc.onnx.part-${String(index)}`)),
-    );
-
-    for (const part of parts) expect(part.byteLength).toBeLessThanOrEqual(HOSTING_FILE_LIMIT);
-    const hash = createHash('sha256');
-    for (const part of parts) hash.update(part);
-    const digest = hash.digest('hex');
-    expect(digest).toBe(EXPECTED_UVDOC_SHA256);
+  it('keeps only the bounded classifier model used by the browser pipeline', () => {
+    const model = readFileSync(resolve('public/models/local-restoration/document-defects.onnx'));
+    expect(model.byteLength).toBeLessThanOrEqual(CLASSIFIER_BYTE_LIMIT);
+    expect(createHash('sha256').update(model).digest('hex')).toBe(EXPECTED_CLASSIFIER_SHA256);
   });
 });

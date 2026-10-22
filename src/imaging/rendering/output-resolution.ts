@@ -11,15 +11,24 @@ export const TARGET_SCAN_LONG_SIDE = 3000;
 export function resolveHighQualityOutputDimensions(
   corners: DocumentCorners,
   source: ImageDimensions,
+  maximumOutputLongSide?: number,
 ): ImageDimensions {
+  const targetLongSide = maximumOutputLongSide ?? TARGET_SCAN_LONG_SIDE;
   const base = getOutputDimensions(corners, source);
   const baseLongSide = Math.max(base.width, base.height);
   const sourceLongSide = Math.max(source.width, source.height);
-  if (baseLongSide >= TARGET_SCAN_LONG_SIDE || sourceLongSide < TARGET_SCAN_LONG_SIDE) return base;
+  if (maximumOutputLongSide !== undefined && baseLongSide > targetLongSide) {
+    const scale = targetLongSide / baseLongSide;
+    return {
+      width: Math.max(1, Math.floor(base.width * scale)),
+      height: Math.max(1, Math.floor(base.height * scale)),
+    };
+  }
+  if (baseLongSide >= targetLongSide || sourceLongSide < targetLongSide) return base;
 
   const sourcePixelBudget = Math.min(MAX_WORKING_IMAGE_PIXELS, source.width * source.height);
   const scale = Math.min(
-    TARGET_SCAN_LONG_SIDE / baseLongSide,
+    targetLongSide / baseLongSide,
     MAX_WORKING_IMAGE_SIDE / baseLongSide,
     Math.sqrt(sourcePixelBudget / (base.width * base.height)),
   );

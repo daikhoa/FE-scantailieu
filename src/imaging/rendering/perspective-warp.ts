@@ -64,7 +64,11 @@ function sampleBilinear(
   output[outputOffset + 3] = alpha * 255;
 }
 
-function validateInput(input: RgbaBackendInput, corners: DocumentCorners): ImageDimensions {
+function validateInput(
+  input: RgbaBackendInput,
+  corners: DocumentCorners,
+  maximumOutputLongSide?: number,
+): ImageDimensions {
   const [topLeft, topRight, bottomRight] = corners;
   const clockwiseTurn =
     (topRight.x - topLeft.x) * (bottomRight.y - topLeft.y) -
@@ -79,7 +83,11 @@ function validateInput(input: RgbaBackendInput, corners: DocumentCorners): Image
   ) {
     throw new ScannerEngineError('invalid-input');
   }
-  const output = resolveHighQualityOutputDimensions(corners, input.dimensions);
+  const output = resolveHighQualityOutputDimensions(
+    corners,
+    input.dimensions,
+    maximumOutputLongSide,
+  );
   if (
     Math.max(output.width, output.height) > MAX_WORKING_IMAGE_SIDE ||
     output.width * output.height > MAX_WORKING_IMAGE_PIXELS
@@ -90,8 +98,12 @@ function validateInput(input: RgbaBackendInput, corners: DocumentCorners): Image
 }
 
 /** Worker-safe inverse projective warp with bilinear, premultiplied-alpha sampling. */
-export function warpPerspectiveRgba(input: RgbaBackendInput, corners: DocumentCorners): RgbaImage {
-  const dimensions = validateInput(input, corners);
+export function warpPerspectiveRgba(
+  input: RgbaBackendInput,
+  corners: DocumentCorners,
+  maximumOutputLongSide?: number,
+): RgbaImage {
+  const dimensions = validateInput(input, corners, maximumOutputLongSide);
   const transform = getProjectiveTransform(corners);
   if (transform === null) throw new ScannerEngineError('invalid-input');
   const pixels = new Uint8ClampedArray(dimensions.width * dimensions.height * 4);

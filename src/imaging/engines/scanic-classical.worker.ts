@@ -18,7 +18,11 @@ async function execute(request: ScanicWorkerRequest): Promise<unknown> {
     return null;
   }
   if (request.operation === 'warp') {
-    const corrected = warpPerspectiveRgba(request.input, request.corners);
+    const corrected = warpPerspectiveRgba(
+      request.input,
+      request.corners,
+      request.maximumOutputLongSide,
+    );
     const filtered = applyDocumentFilter(corrected, request.filter);
     return rotateOwnedRgba(filtered, request.rotation);
   }

@@ -1,6 +1,14 @@
 import type { ImageAsset, ImageDimensions } from '../../domain/document';
 import type { AppliedRestorationStage, RestorationWarning } from './restoration-types';
 
+export interface LocalRestorationAnalysis {
+  readonly kind: 'analysis';
+  readonly stages: readonly AppliedRestorationStage[];
+  readonly classifierModel: string;
+  readonly warnings: readonly RestorationWarning[];
+  readonly protectColor: boolean;
+}
+
 export interface LocalRestorationResult {
   readonly route: 'local' | 'enhanced';
   readonly stages: readonly AppliedRestorationStage[];
@@ -12,6 +20,11 @@ export interface LocalRestorationResult {
 
 export interface LocalRestorationClient {
   warmup?(): void;
+  analyze?(
+    source: LocalRestorationSource,
+    signal: AbortSignal,
+    options?: Pick<LocalRestorationRequestOptions, 'analysisKey'>,
+  ): Promise<LocalRestorationAnalysis>;
   restore(
     source: LocalRestorationSource,
     signal: AbortSignal,
@@ -36,7 +49,7 @@ export interface LocalRestorationRequestOptions {
 interface WorkerSuccess {
   readonly id: number;
   readonly kind: 'success';
-  readonly result: LocalRestorationResult;
+  readonly result: LocalRestorationResult | LocalRestorationAnalysis;
 }
 interface WorkerFailure {
   readonly id: number;
@@ -60,7 +73,7 @@ export function createLocalRestorationClient(): LocalRestorationClient {
   const pending = new Map<
     number,
     {
-      readonly resolve: (value: LocalRestorationResult) => void;
+      readonly resolve: (value: LocalRestorationResult | LocalRestorationAnalysis) => void;
       readonly reject: (reason: Error) => void;
       readonly signal: AbortSignal;
       readonly abort: () => void;
@@ -90,6 +103,32 @@ export function createLocalRestorationClient(): LocalRestorationClient {
     warmup() {
       if (!closed) worker.postMessage({ operation: 'warmup' });
     },
+    analyze(source, signal, options = {}) {
+      if (closed) return Promise.reject(new Error('Local restoration worker is closed.'));
+      if (signal.aborted) return Promise.reject(abortError());
+      const id = ++sequence;
+      return new Promise((resolve, reject) => {
+        const abort = () => {
+          const job = pending.get(id);
+          if (job === undefined) return;
+          pending.delete(id);
+          worker.postMessage({ operation: 'cancel', id });
+          reject(abortError());
+        };
+        pending.set(id, {
+          resolve(value) {
+            if ('kind' in value) resolve(value);
+            else reject(new Error('Local restoration worker returned an invalid analysis.'));
+          },
+          reject,
+          signal,
+          abort,
+        });
+        signal.addEventListener('abort', abort, { once: true });
+        const transfer = source instanceof Blob ? [] : [source.pixels.buffer];
+        worker.postMessage({ operation: 'analyze', id, source, ...options }, transfer);
+      });
+    },
     restore(source, signal, options = {}) {
       if (closed) return Promise.reject(new Error('Local restoration worker is closed.'));
       if (signal.aborted) return Promise.reject(abortError());
@@ -102,7 +141,15 @@ export function createLocalRestorationClient(): LocalRestorationClient {
           worker.postMessage({ operation: 'cancel', id });
           reject(abortError());
         };
-        pending.set(id, { resolve, reject, signal, abort });
+        pending.set(id, {
+          resolve(value) {
+            if ('route' in value) resolve(value);
+            else reject(new Error('Local restoration worker returned an invalid result.'));
+          },
+          reject,
+          signal,
+          abort,
+        });
         signal.addEventListener('abort', abort, { once: true });
         const transfer = source instanceof Blob ? [] : [source.pixels.buffer];
         worker.postMessage({ operation: 'restore', id, source, ...options }, transfer);
