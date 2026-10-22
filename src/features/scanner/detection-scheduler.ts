@@ -28,6 +28,7 @@ export interface DetectionSmoother {
 
 export interface DetectionSmootherOptions {
   readonly stableFrames?: number;
+  readonly missTolerance?: number;
   readonly maxCornerDriftRatio?: number;
   readonly smoothingAlpha?: number;
 }
@@ -51,8 +52,9 @@ export type DetectionSchedulerConfiguration = DetectionSmootherOptions & {
   readonly intervalMs?: number;
 };
 
-const DEFAULT_STABLE_FRAMES = 3;
-const DEFAULT_MAX_CORNER_DRIFT_RATIO = 0.03;
+const DEFAULT_STABLE_FRAMES = 2;
+const DEFAULT_MISS_TOLERANCE = 1;
+const DEFAULT_MAX_CORNER_DRIFT_RATIO = 0.05;
 const DEFAULT_SMOOTHING_ALPHA = 0.5;
 const DEFAULT_INTERVAL_MS = 125;
 const FAILURE_CODES = new Set<ProcessingFailure['code']>([
@@ -103,6 +105,8 @@ function validSmootherOptions(options: Required<DetectionSmootherOptions>): void
   if (
     !Number.isSafeInteger(options.stableFrames) ||
     options.stableFrames < 1 ||
+    !Number.isSafeInteger(options.missTolerance) ||
+    options.missTolerance < 0 ||
     !Number.isFinite(options.maxCornerDriftRatio) ||
     options.maxCornerDriftRatio <= 0 ||
     options.maxCornerDriftRatio > 1 ||
@@ -117,6 +121,7 @@ function validSmootherOptions(options: Required<DetectionSmootherOptions>): void
 export function createDetectionSmoother(partial: DetectionSmootherOptions = {}): DetectionSmoother {
   const options: Required<DetectionSmootherOptions> = {
     stableFrames: partial.stableFrames ?? DEFAULT_STABLE_FRAMES,
+    missTolerance: partial.missTolerance ?? DEFAULT_MISS_TOLERANCE,
     maxCornerDriftRatio: partial.maxCornerDriftRatio ?? DEFAULT_MAX_CORNER_DRIFT_RATIO,
     smoothingAlpha: partial.smoothingAlpha ?? DEFAULT_SMOOTHING_ALPHA,
   };
@@ -128,6 +133,7 @@ export function createDetectionSmoother(partial: DetectionSmootherOptions = {}):
         corners: DocumentCorners;
         confidence: number;
         count: number;
+        misses: number;
       }
     | undefined;
 
@@ -139,6 +145,20 @@ export function createDetectionSmoother(partial: DetectionSmootherOptions = {}):
     reset,
     update(result) {
       if (result.kind === 'full-frame') {
+        if (
+          candidate !== undefined &&
+          candidate.count >= options.stableFrames &&
+          sameDimensions(candidate.dimensions, result.dimensions) &&
+          candidate.misses < options.missTolerance
+        ) {
+          candidate = { ...candidate, misses: candidate.misses + 1 };
+          return {
+            kind: 'document',
+            dimensions: candidate.dimensions,
+            corners: candidate.corners,
+            confidence: candidate.confidence,
+          };
+        }
         reset();
         return result;
       }
@@ -154,6 +174,7 @@ export function createDetectionSmoother(partial: DetectionSmootherOptions = {}):
           corners: result.corners.map((corner) => ({ ...corner })) as unknown as DocumentCorners,
           confidence: result.confidence,
           count: 1,
+          misses: 0,
         };
       } else {
         candidate = {
@@ -163,6 +184,7 @@ export function createDetectionSmoother(partial: DetectionSmootherOptions = {}):
             candidate.confidence +
             (result.confidence - candidate.confidence) * options.smoothingAlpha,
           count: candidate.count + 1,
+          misses: 0,
         };
       }
 

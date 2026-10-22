@@ -221,20 +221,28 @@ describe('detection smoothing', () => {
     }
   });
 
-  it('immediately returns to full-frame when a stable document jumps or disappears', () => {
-    const smoother = createDetectionSmoother({ stableFrames: 2, maxCornerDriftRatio: 0.02 });
+  it('keeps a stable document through one intermittent miss before releasing the overlay', () => {
+    const smoother = createDetectionSmoother({ stableFrames: 2, missTolerance: 1 });
     smoother.update(documentResult(0));
-    expect(smoother.update(documentResult(2)).kind).toBe('document');
+    const stable = smoother.update(documentResult(2));
+    expect(stable.kind).toBe('document');
 
-    expect(smoother.update(documentResult(200))).toMatchObject({
-      kind: 'full-frame',
-      reason: 'unstable-document',
-    });
+    expect(smoother.update(fullFrame('low-confidence'))).toEqual(stable);
     expect(smoother.update(fullFrame('low-confidence'))).toEqual(fullFrame('low-confidence'));
     expect(smoother.update(documentResult(0))).toMatchObject({
       kind: 'full-frame',
       reason: 'unstable-document',
     });
+  });
+
+  it('locks the default overlay after two similar detections', () => {
+    const smoother = createDetectionSmoother();
+
+    expect(smoother.update(documentResult(0))).toMatchObject({
+      kind: 'full-frame',
+      reason: 'unstable-document',
+    });
+    expect(smoother.update(documentResult(4)).kind).toBe('document');
   });
 
   it('resets stability when frame dimensions change', () => {

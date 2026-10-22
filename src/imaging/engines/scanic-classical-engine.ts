@@ -313,10 +313,14 @@ class ScanicEngine implements ScannerEngine {
         await backend.initialize();
         checkAbort(signal, this.disposal.signal);
         // Scanic.initialize swallows failures. A real scan must work before ready.
-        const warmupDimensions = { width: 8, height: 8 };
+        // The ML detector is trained around normal image inputs. An 8 px probe can make a valid
+        // runtime look broken and permanently select the weaker classical fallback.
+        const warmupDimensions = { width: 224, height: 224 };
         const output = await backend.detect({
           dimensions: warmupDimensions,
-          pixels: new Uint8ClampedArray(8 * 8 * 4),
+          pixels: new Uint8ClampedArray(
+            warmupDimensions.width * warmupDimensions.height * 4,
+          ),
         });
         checkAbort(signal, this.disposal.signal);
         detectionResult(output, warmupDimensions, this.minimumConfidence, this.mlMinimumConfidence);

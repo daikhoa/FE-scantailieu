@@ -118,6 +118,21 @@ describe('Scanic RGBA frames', () => {
 });
 
 describe('Scanic classical lifecycle', () => {
+  it('warms the detector with a realistic model input instead of an 8 px frame', async () => {
+    const backend = fakeBackend();
+    const engine = createScanicClassicalEngine({ createBackend: () => backend });
+
+    await engine.initialize(signal());
+
+    expect(backend.detect).toHaveBeenCalledOnce();
+    const warmupFrame = vi.mocked(backend.detect).mock.calls[0]?.[0];
+
+    expect(warmupFrame?.dimensions).toEqual({ width: 224, height: 224 });
+    expect(warmupFrame?.pixels).toBeInstanceOf(Uint8ClampedArray);
+    expect(warmupFrame?.pixels.byteLength).toBe(224 * 224 * 4);
+    await engine.dispose();
+  });
+
   it('does not report ready when upstream initialization resolves but detection warmup fails', async () => {
     const backend = fakeBackend();
     backend.detect = () => Promise.reject(new Error('private upstream diagnostics'));
