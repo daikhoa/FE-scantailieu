@@ -38,15 +38,15 @@ export interface ScanicDetectorResult extends ScannerResult {
 type ScanicScanner = Pick<Scanner, 'initialize' | 'scan'>;
 type ScanicScannerFactory = (options: DetectionOptions) => ScanicScanner;
 
-/** Uses Scanic classical first, retries once, then falls back to ML only on runtime failure. */
+/** Uses Scanic ML first, retries once, then falls back to classical only on runtime failure. */
 export class ScanicDetectorRuntime {
-  private detector: ScanicDetectorKind = 'classical';
+  private detector: ScanicDetectorKind = 'ml';
   private scanner: ScanicScanner;
 
   constructor(
     private readonly createScanner: ScanicScannerFactory = (options) => new Scanner(options),
   ) {
-    this.scanner = createScanner(detectorOptions('classical'));
+    this.scanner = createScanner(detectorOptions('ml'));
   }
 
   async initialize(): Promise<void> {
@@ -60,22 +60,22 @@ export class ScanicDetectorRuntime {
         detector: this.detector,
       };
     } catch (error) {
-      if (this.detector !== 'classical') throw error;
+      if (this.detector !== 'ml') throw error;
       try {
-        const recovered = this.createScanner(detectorOptions('classical'));
+        const recovered = this.createScanner(detectorOptions('ml'));
         await recovered.initialize();
-        const result = await recovered.scan(image, detectorOptions('classical'));
+        const result = await recovered.scan(image, detectorOptions('ml'));
         this.scanner = recovered;
-        return { ...result, detector: 'classical' };
+        return { ...result, detector: 'ml' };
       } catch {
-        // Two independent classical runtimes failed consecutively; use the bounded ML fallback.
+        // Two independent ML runtimes failed consecutively; use the bounded classical fallback.
       }
-      this.detector = 'ml';
-      this.scanner = this.createScanner(detectorOptions('ml'));
+      this.detector = 'classical';
+      this.scanner = this.createScanner(detectorOptions('classical'));
       await this.scanner.initialize();
       return {
-        ...(await this.scanner.scan(image, detectorOptions('ml'))),
-        detector: 'ml',
+        ...(await this.scanner.scan(image, detectorOptions('classical'))),
+        detector: 'classical',
       };
     }
   }
