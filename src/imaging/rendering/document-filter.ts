@@ -183,7 +183,9 @@ function normalizeIllumination(
   const { width, height } = input.dimensions;
   const illumination = createIlluminationGrid(gray, width, height);
   const paperLevel = profile.illumination.brightLevel;
-  const maximumGain = profile.stages.protectColor ? 1.8 : 2.25;
+  // A strong paper-shadow lift destroys dark artwork and colored covers. Color-rich pages still
+  // receive mild illumination correction, while neutral paper keeps the stronger scan treatment.
+  const maximumGain = profile.stages.protectColor ? 1.25 : 2.25;
   for (let y = 0, index = 0, offset = 0; y < height; y += 1) {
     for (let x = 0; x < width; x += 1, index += 1, offset += 4) {
       const estimatedLight = Math.max(

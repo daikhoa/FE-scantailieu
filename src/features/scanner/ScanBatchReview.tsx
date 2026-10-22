@@ -40,6 +40,7 @@ function pageWarnings(page: ReadyScanBatchPage): readonly RestorationWarning[] {
 
 function PagePreview({ page, number }: { readonly page: ReadyScanBatchPage; readonly number: number }) {
   const url = useMemo(() => URL.createObjectURL(page.page.variant.image.blob), [page]);
+  const { width, height } = page.page.variant.image.dimensions;
 
   useEffect(
     () => () => {
@@ -48,7 +49,16 @@ function PagePreview({ page, number }: { readonly page: ReadyScanBatchPage; read
     [url],
   );
 
-  return <img src={url} alt={`Bản xem trước trang ${String(number)}`} loading="eager" decoding="async" />;
+  return (
+    <img
+      src={url}
+      width={width}
+      height={height}
+      alt={`Bản xem trước trang ${String(number)}`}
+      loading="eager"
+      decoding="async"
+    />
+  );
 }
 
 function rotateLeft(rotation: QuarterTurn): QuarterTurn {

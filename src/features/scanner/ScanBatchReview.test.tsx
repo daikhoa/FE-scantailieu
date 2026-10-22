@@ -153,6 +153,10 @@ describe('ScanBatchReview', () => {
     expect(screen.getAllByAltText(/Bản xem trước trang/u)).toHaveLength(1);
     expect(createObjectUrl).toHaveBeenCalledOnce();
 
+    const preview = screen.getByAltText('Bản xem trước trang 1');
+    expect(preview).toHaveAttribute('width', '1200');
+    expect(preview).toHaveAttribute('height', '1600');
+
     fireEvent.click(screen.getByRole('button', { name: 'Chọn trang 3' }));
     fireEvent.click(screen.getByRole('button', { name: 'Xử lý lại trang 3' }));
     fireEvent.click(screen.getByRole('button', { name: 'Xóa trang 3' }));

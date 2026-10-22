@@ -171,9 +171,22 @@ describe('document post-capture filters', () => {
     const output = applyDocumentFilter(input, 'ocr-color');
     const [red = 0, green = 0, blue = 0] = rgbaAt(output, 2, 2);
 
-    expect(red).toBeLessThan(250);
+    expect(red).toBeLessThanOrEqual(225);
+    expect(green).toBeLessThanOrEqual(155);
+    expect(blue).toBeLessThanOrEqual(115);
     expect(red - blue).toBeGreaterThanOrEqual(100);
     expect(green - blue).toBeGreaterThanOrEqual(35);
+  });
+
+  it('limits shadow correction on color-rich documents instead of washing dark artwork', () => {
+    const input = image(64, 16, (x) => (x < 24 ? [100, 32, 20, 255] : [205, 108, 54, 255]));
+
+    const output = applyDocumentFilter(input, 'ocr-color');
+    const [red = 0, green = 0, blue = 0] = rgbaAt(output, 8, 8);
+
+    expect(red).toBeLessThanOrEqual(125);
+    expect(green).toBeLessThanOrEqual(40);
+    expect(blue).toBeLessThanOrEqual(25);
   });
 
   it('uses a local threshold to create an opaque black-and-white page', () => {
