@@ -1,3 +1,4 @@
+import { HomeScreen, type LibraryState } from './HomeScreen';
 import { renderAnalyzedPage } from '../imaging/restoration/analyzed-page-renderer';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 
@@ -31,10 +32,7 @@ import {
   type LocalRestorationClient,
 } from '../imaging/restoration/local-restoration-client';
 
-export type LibraryState =
-  | { readonly kind: 'empty' }
-  | { readonly kind: 'loading' }
-  | { readonly kind: 'error'; readonly message: string };
+export type { LibraryState } from './HomeScreen';
 
 interface AppProps {
   readonly libraryState?: LibraryState;
@@ -66,77 +64,6 @@ const HOME_IMPORT_ERROR_GUIDANCE: Readonly<Record<ImageImportFailureCode, string
   'decode-failed': 'Trình duyệt không thể đọc ảnh này. Hãy chọn ảnh khác.',
   unavailable: 'Trình duyệt này chưa hỗ trợ đọc ảnh từ thư viện.',
 };
-
-function PrivacyNotice() {
-  return (
-    <aside className="privacy-notice" aria-label="Quyền riêng tư">
-      <span className="privacy-notice__icon" aria-hidden="true">
-        ✓
-      </span>
-      <div>
-        <strong>Xử lý ngay trên thiết bị</strong>
-        <span>
-          Ảnh không được tải lên máy chủ. Nhận diện và hoàn thiện ảnh chạy trong trình duyệt.
-        </span>
-      </div>
-    </aside>
-  );
-}
-
-function LibraryContent({
-  state,
-  onRetry,
-}: {
-  readonly state: LibraryState;
-  readonly onRetry: (() => void) | undefined;
-}) {
-  if (state.kind === 'loading') {
-    return (
-      <div className="library-state library-state--loading" role="status" aria-live="polite">
-        <div className="document-placeholder" aria-hidden="true">
-          <span />
-          <span />
-          <span />
-        </div>
-        <p>Đang mở thư viện tài liệu…</p>
-      </div>
-    );
-  }
-
-  if (state.kind === 'error') {
-    return (
-      <div className="library-state library-state--error" role="alert">
-        <span className="library-state__symbol" aria-hidden="true">
-          !
-        </span>
-        <div>
-          <h3>Không thể mở thư viện</h3>
-          <p>{state.message}</p>
-          {onRetry === undefined ? null : (
-            <button className="text-button" type="button" onClick={onRetry}>
-              Thử mở lại thư viện
-            </button>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="library-state library-state--empty">
-      <div className="empty-document" aria-hidden="true">
-        <span className="empty-document__corner empty-document__corner--top" />
-        <span className="empty-document__line" />
-        <span className="empty-document__line empty-document__line--short" />
-        <span className="empty-document__corner empty-document__corner--bottom" />
-      </div>
-      <div>
-        <h3>Chưa có tài liệu nào</h3>
-        <p>Bản scan và ảnh gốc sẽ xuất hiện tại đây để bạn có thể tiếp tục chỉnh sửa.</p>
-      </div>
-    </div>
-  );
-}
 
 export function App({
   libraryState = EMPTY_LIBRARY,
@@ -395,7 +322,7 @@ export function App({
   const isLibrary = view === 'library';
 
   return (
-    <div className="app-shell">
+    <div className={`app-shell${isLibrary ? ' app-shell--home' : ''}`}>
       <a className="skip-link" href="#main-content">
         Chuyển đến nội dung chính
       </a>
@@ -415,87 +342,21 @@ export function App({
       </header>
 
       {isLibrary ? (
-        <main id="main-content" className="app-main" aria-label="clonecamscanner">
-          <section className="hero" aria-labelledby="library-page-title">
-            <p className="eyebrow">Tài liệu rõ hơn · OCR chính xác hơn</p>
-            <h1 id="library-page-title" ref={viewHeadingRef} tabIndex={-1}>
-              Scan rõ từng nét. <span>PDF sẵn sàng cho OCR.</span>
-            </h1>
-            <p className="hero__description">
-              Căn thẳng tài liệu, giữ nguyên tỷ lệ và tăng độ rõ mà không làm thay đổi nội dung gốc.
-            </p>
-            <div className="home-scan-actions" role="group" aria-label="Chọn cách quét tài liệu">
-              <button
-                className="primary-action"
-                type="button"
-                onClick={startNewCameraBatch}
-                aria-label="Quét bằng camera"
-              >
-                <span className="primary-action__icon" aria-hidden="true">
-                  <i />
-                </span>
-                <span>
-                  <strong>Quét bằng camera</strong>
-                  <small>Chụp liên tục nhiều trang</small>
-                </span>
-                <span className="primary-action__arrow" aria-hidden="true">
-                  →
-                </span>
-              </button>
-              <label
-                className={`home-import-action${homeImportState.kind === 'importing' ? ' home-import-action--disabled' : ''}`}
-                aria-busy={homeImportState.kind === 'importing'}
-              >
-                <span className="home-import-action__icon" aria-hidden="true">
-                  ▧
-                </span>
-                <span>
-                  <strong>
-                    {homeImportState.kind === 'importing'
-                      ? 'Đang kiểm tra ảnh…'
-                      : 'Dùng ảnh có sẵn'}
-                  </strong>
-                  <small>Chọn JPEG, PNG hoặc WebP trên thiết bị</small>
-                </span>
-                <span className="primary-action__arrow" aria-hidden="true">
-                  →
-                </span>
-                <input
-                  className="visually-hidden"
-                  aria-label="Dùng ảnh có sẵn"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  disabled={homeImportState.kind === 'importing'}
-                  onChange={(event) => {
-                    const source = event.currentTarget.files?.[0];
-                    event.currentTarget.value = '';
-                    if (source !== undefined) void openHomeImage(source);
-                  }}
-                />
-              </label>
-            </div>
-            {homeImportState.kind === 'error' ? (
-              <p className="home-import-error" role="alert">
-                {HOME_IMPORT_ERROR_GUIDANCE[homeImportState.code]}
-              </p>
-            ) : null}
-          </section>
-
-          <PrivacyNotice />
-
-          <section className="library" aria-labelledby="library-title">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">Thư viện của bạn</p>
-                <h2 id="library-title">Tài liệu gần đây</h2>
-              </div>
-              <span className="document-count" aria-label="Không có tài liệu">
-                0 tài liệu
-              </span>
-            </div>
-            <LibraryContent state={libraryState} onRetry={onRetryLibrary} />
-          </section>
-        </main>
+        <HomeScreen
+          headingRef={viewHeadingRef}
+          libraryState={libraryState}
+          onRetryLibrary={onRetryLibrary}
+          onCamera={startNewCameraBatch}
+          importing={homeImportState.kind === 'importing'}
+          importError={
+            homeImportState.kind === 'error'
+              ? HOME_IMPORT_ERROR_GUIDANCE[homeImportState.code]
+              : undefined
+          }
+          onImport={(source) => {
+            void openHomeImage(source);
+          }}
+        />
       ) : view === 'camera' ? (
         <CameraScreen
           service={resolvedCameraService}
@@ -593,13 +454,15 @@ export function App({
         />
       )}
 
-      <footer className="app-footer">
-        <span>Không tài khoản</span>
-        <span aria-hidden="true">·</span>
-        <span>Không cloud</span>
-        <span aria-hidden="true">·</span>
-        <span>PDF giữ đúng tỷ lệ</span>
-      </footer>
+      {isLibrary ? null : (
+        <footer className="app-footer">
+          <span>Không tài khoản</span>
+          <span aria-hidden="true">·</span>
+          <span>Không cloud</span>
+          <span aria-hidden="true">·</span>
+          <span>PDF giữ đúng tỷ lệ</span>
+        </footer>
+      )}
     </div>
   );
 }

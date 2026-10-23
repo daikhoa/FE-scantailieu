@@ -30,6 +30,12 @@ Tên dự án và bản test là **clonecamscanner**. Đây là tên nội bộ/
 - Nội dung tiếng Việt và tiếng Anh.
 - Phải bảo toàn chữ viết tay, chữ ký, con dấu, đường bảng và hình minh họa.
 
+## Trang chủ thử nghiệm (cập nhật 2026-10-23)
+
+Trang chủ nền tối có hai lối vào: chụp bằng camera và dùng ảnh JPEG/PNG/WebP. Thanh điều hướng dưới đưa về đầu trang, mở camera hoặc chuyển tới mục Gần đây. Luồng scan/chỉnh sửa/xuất PDF hiện có giữ nguyên.
+
+Mục Gần đây hiện là khung giao diện với vị trí thumbnail, tên tài liệu, ngày tạo và số trang. Các hàng nét mờ chỉ minh họa bố cục, không đại diện cho tài liệu đã lưu và không phải trạng thái đang tải. Chưa nối backend, lưu thư viện hoặc đăng nhập/đăng ký; ảnh trong phiên xử lý chưa được thêm vào danh sách này. Cần triển khai hợp đồng dữ liệu và lưu tài liệu ở giai đoạn sau trước khi hiển thị tài liệu thực.
+
 ## 3. Phạm vi chức năng
 
 ### 3.1. Mở camera

@@ -38,34 +38,37 @@ describe('App shell', () => {
     expect(screen.getByText('AI cục bộ')).toBeInTheDocument();
   });
 
-  it('offers camera and image entry points on the library and opens the camera directly', async () => {
-    const stream = { getTracks: () => [] } as unknown as MediaStream;
-    const start = vi.fn<CameraService['start']>(() => Promise.resolve({ stream, stop: vi.fn() }));
-    render(
-      <App
-        cameraService={{
-          lifecycle: { kind: 'idle' },
-          start,
-          stop: vi.fn(),
-        }}
-      />,
-    );
+  it.each(['Chụp tài liệu', 'Chụp tài liệu mới'])(
+    'opens the camera directly from %s',
+    async (cameraAction) => {
+      const stream = { getTracks: () => [] } as unknown as MediaStream;
+      const start = vi.fn<CameraService['start']>(() => Promise.resolve({ stream, stop: vi.fn() }));
+      render(
+        <App
+          cameraService={{
+            lifecycle: { kind: 'idle' },
+            start,
+            stop: vi.fn(),
+          }}
+        />,
+      );
 
-    expect(screen.getByRole('button', { name: 'Quét bằng camera' })).toBeInTheDocument();
-    expect(screen.getByLabelText('Dùng ảnh có sẵn')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Chụp tài liệu' })).toBeInTheDocument();
+      expect(screen.getByLabelText('Dùng ảnh có sẵn')).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Quét bằng camera' }));
+      fireEvent.click(screen.getByRole('button', { name: cameraAction }));
 
-    expect(await screen.findByRole('heading', { name: 'Camera đã sẵn sàng' })).toBeInTheDocument();
-    expect(start).toHaveBeenCalledOnce();
-    expect(screen.queryByRole('button', { name: 'Cho phép camera' })).not.toBeInTheDocument();
+      expect(
+        await screen.findByRole('heading', { name: 'Camera đã sẵn sàng' }),
+      ).toBeInTheDocument();
+      expect(start).toHaveBeenCalledOnce();
+      expect(screen.queryByRole('button', { name: 'Cho phép camera' })).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Thoát camera' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Thoát camera' }));
 
-    expect(
-      screen.getByRole('heading', { name: 'Scan rõ từng nét. PDF sẵn sàng cho OCR.' }),
-    ).toBeInTheDocument();
-  });
+      expect(screen.getByRole('heading', { name: 'Tài liệu của tôi' })).toBeInTheDocument();
+    },
+  );
 
   it('announces the library loading state', () => {
     render(<App libraryState={{ kind: 'loading' }} />);
@@ -97,6 +100,16 @@ describe('App shell', () => {
     render(<App />);
 
     expect(screen.getByText('Chưa có tài liệu nào')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Gần đây' })).toBeInTheDocument();
+    expect(screen.getByText('0 tài liệu')).toBeInTheDocument();
+    expect(screen.getByText(/Chức năng lưu tài liệu sẽ được bổ sung sau/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Tài liệu' })).toHaveAttribute(
+      'href',
+      '#library-title',
+    );
+    expect(
+      screen.queryByRole('button', { name: /Word|PDF|Đăng nhập|Đăng ký/ }),
+    ).not.toBeInTheDocument();
     expect(screen.getByText(/Ảnh không được tải lên máy chủ/)).toBeInTheDocument();
   });
 
@@ -163,9 +176,7 @@ describe('App shell', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'Chỉ hỗ trợ ảnh JPEG, PNG hoặc WebP.',
     );
-    expect(
-      screen.getByRole('heading', { name: 'Scan rõ từng nét. PDF sẵn sàng cho OCR.' }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Tài liệu của tôi' })).toBeInTheDocument();
   });
 
   it('captures multiple pages while background processing continues and opens one batch', async () => {
@@ -275,7 +286,7 @@ describe('App shell', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Quét bằng camera' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Chụp tài liệu' }));
     await screen.findByRole('heading', { name: 'Camera đã sẵn sàng' });
 
     fireEvent.click(screen.getByRole('button', { name: 'Chụp tài liệu' }));

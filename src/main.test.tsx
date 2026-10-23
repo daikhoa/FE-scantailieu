@@ -11,9 +11,7 @@ describe('application bootstrap', () => {
     await import('./main');
 
     expect(await screen.findByRole('main', { name: 'clonecamscanner' })).toBeInTheDocument();
-    expect(
-      screen.getByRole('heading', { name: 'Scan rõ từng nét. PDF sẵn sàng cho OCR.' }),
-    ).not.toHaveFocus();
+    expect(screen.getByRole('heading', { name: 'Tài liệu của tôi' })).not.toHaveFocus();
   });
 
   it('fails clearly when the application root is missing', async () => {
