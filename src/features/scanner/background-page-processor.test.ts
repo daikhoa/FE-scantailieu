@@ -83,6 +83,28 @@ function fakeFrameSource(): ImageAssetFrameSource {
 }
 
 describe('background page processor', () => {
+  it('owns and terminates an engine that is still initializing on disposal', async () => {
+    const initializing = deferred<undefined>();
+    const { engine } = fakeEngine();
+    const initialize = vi.fn(() => initializing.promise);
+    const dispose = vi.fn(() => {
+      initializing.resolve(undefined);
+      return Promise.resolve();
+    });
+    engine.initialize = initialize;
+    engine.dispose = dispose;
+    const processor = createBackgroundPageProcessor({ engineFactory: () => engine });
+    if (processor.warmup === undefined) throw new Error('Warmup must be available.');
+    const warming = processor.warmup().catch((error: unknown) => error);
+    await vi.waitFor(() => {
+      expect(initialize).toHaveBeenCalledOnce();
+    });
+    const disposing = processor.dispose();
+    expect(dispose).toHaveBeenCalledOnce();
+    await expect(warming).resolves.toMatchObject({ name: 'AbortError' });
+    await disposing;
+  });
+
   it('processes captured pages one at a time in capture order', async () => {
     const firstImport = deferred<ReturnType<typeof imported>>();
     const first = new Blob(['first'], { type: 'image/jpeg' });

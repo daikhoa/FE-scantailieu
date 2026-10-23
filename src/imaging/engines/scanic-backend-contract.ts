@@ -3,6 +3,7 @@ import type {
   DocumentCorners,
   FilterMode,
   ImageDimensions,
+  ImageAsset,
   QuarterTurn,
 } from '../../domain/document';
 
@@ -15,6 +16,15 @@ export interface RgbaBackendInput {
 }
 
 /** Internal adapter seam: no vendor/DOM image types escape the backend. */
+export interface RasterWarpRequest {
+  readonly asset: ImageAsset;
+  readonly corners: DocumentCorners;
+  readonly rotation: QuarterTurn;
+  readonly filter: FilterMode;
+  readonly maximumOutputLongSide?: number;
+  readonly analysis?: LocalRestorationAnalysis;
+}
+
 export interface ClassicalBackend {
   initialize: () => Promise<void>;
   detect: (input: RgbaBackendInput) => Promise<unknown>;
@@ -26,6 +36,7 @@ export interface ClassicalBackend {
     maximumOutputLongSide?: number,
     analysis?: LocalRestorationAnalysis,
   ) => Promise<RgbaBackendInput>;
+  warpAsset?: (request: RasterWarpRequest) => Promise<RgbaBackendInput>;
   /** Must settle outstanding work, including termination of its owned worker. */
   dispose: () => Promise<void>;
 }

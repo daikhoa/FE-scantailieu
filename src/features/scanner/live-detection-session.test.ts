@@ -52,6 +52,33 @@ afterEach(() => {
 });
 
 describe('live Scanic detection session', () => {
+  it('does not read and discard camera pixels while inference is busy', async () => {
+    const engine = engineFixture();
+    let finish: (() => void) | undefined;
+    engine.detect.mockImplementation(
+      (frame) =>
+        new Promise((resolve) => {
+          finish = () => {
+            resolve({ kind: 'full-frame', dimensions: frame.dimensions, reason: 'no-document' });
+          };
+        }),
+    );
+    const fixture = frames();
+    const session = startLiveDetectionSession({
+      engineFactory: () => engine.scanner,
+      source: fixture.source,
+      video: {} as HTMLVideoElement,
+      onResult: vi.fn(),
+    });
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(fixture.capture).toHaveBeenCalledOnce();
+    finish?.();
+    await vi.advanceTimersByTimeAsync(125);
+    expect(fixture.capture).toHaveBeenCalledTimes(2);
+    finish?.();
+    await session.stop();
+  });
+
   it('initializes once, samples bounded preview frames and publishes a stable quad', async () => {
     const engine = engineFixture();
     const fixture = frames();

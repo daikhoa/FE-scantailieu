@@ -1,4 +1,8 @@
 import { HomeScreen, type LibraryState } from './HomeScreen';
+import {
+  MAX_ENCODED_INPUT_BYTES,
+  MAX_ORIGINAL_IMAGE_PIXELS,
+} from '../imaging/original-image-limits';
 import { renderAnalyzedPage } from '../imaging/restoration/analyzed-page-renderer';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 
@@ -53,14 +57,23 @@ type CameraReturnView = Extract<AppView, 'library' | 'batch-review'>;
 type HomeImportState =
   | { readonly kind: 'idle' }
   | { readonly kind: 'importing' }
-  | { readonly kind: 'error'; readonly code: ImageImportFailureCode };
+  | {
+      readonly kind: 'error';
+      readonly code: ImageImportFailureCode | 'too-many-images' | 'selection-too-large';
+    };
 
 const EMPTY_LIBRARY: LibraryState = { kind: 'empty' };
-const HOME_IMPORT_ERROR_GUIDANCE: Readonly<Record<ImageImportFailureCode, string>> = {
-  'unsupported-type': 'Chỉ hỗ trợ ảnh JPEG, PNG hoặc WebP.',
-  'too-large': 'Tệp ảnh vượt quá giới hạn 64 MiB.',
-  'invalid-file': 'Tệp không phải là ảnh JPEG, PNG hoặc WebP hợp lệ.',
-  'image-too-large': 'Ảnh có kích thước quá lớn để xử lý an toàn trên thiết bị này.',
+const MAX_IMPORT_IMAGES = 20;
+const MAX_IMPORT_SELECTION_BYTES = 256 * 1024 * 1024;
+const HOME_IMPORT_ERROR_GUIDANCE: Readonly<
+  Record<Extract<HomeImportState, { kind: 'error' }>['code'], string>
+> = {
+  'too-many-images': `Tối đa ${String(MAX_IMPORT_IMAGES)} ảnh mỗi lần. Hãy chọn ít ảnh hơn.`,
+  'selection-too-large': `Tổng dung lượng ảnh vượt quá ${String(MAX_IMPORT_SELECTION_BYTES / (1024 * 1024))} MiB. Hãy chọn ít ảnh hơn.`,
+  'unsupported-type': 'Hỗ trợ JPEG, PNG, WebP, HEIC/HEIF và AVIF. RAW/DNG chưa được hỗ trợ.',
+  'too-large': `Tệp ảnh vượt quá giới hạn ${String(MAX_ENCODED_INPUT_BYTES / (1024 * 1024))} MiB.`,
+  'invalid-file': 'Tệp ảnh không hợp lệ hoặc thiếu thông tin kích thước. Hãy chọn ảnh khác.',
+  'image-too-large': `Ảnh vượt quá giới hạn ${String(MAX_ORIGINAL_IMAGE_PIXELS / 1_000_000)} megapixel hoặc cạnh dài 16384 pixel.`,
   'decode-failed': 'Trình duyệt không thể đọc ảnh này. Hãy chọn ảnh khác.',
   unavailable: 'Trình duyệt này chưa hỗ trợ đọc ảnh từ thư viện.',
 };
@@ -84,6 +97,7 @@ export function App({
   const [editorImage, setEditorImage] = useState<ImportedImage | null>(null);
   const [replacementPageId, setReplacementPageId] = useState<string | null>(null);
   const [batch, dispatchBatch] = useReducer(scanBatchReducer, { pages: [] });
+  const [processorGeneration, setProcessorGeneration] = useState(0);
   const [resolvedCameraService] = useState(() => cameraService ?? createCameraService());
   const restorationClientRef = useRef<LocalRestorationClient | null>(null);
   const editorAnalyzerFactory = useCallback(() => restorationClientRef.current, []);
@@ -133,7 +147,13 @@ export function App({
       homeImportRequest.current = null;
       void processor.dispose().catch(() => undefined);
     };
-  }, [editorEngineFactory, imageImporter, pageProcessorFactory, restorationClient]);
+  }, [
+    editorEngineFactory,
+    imageImporter,
+    pageProcessorFactory,
+    processorGeneration,
+    restorationClient,
+  ]);
 
   useEffect(
     () => () => {
@@ -276,7 +296,15 @@ export function App({
       dispatchBatch({
         type: 'updated',
         id,
-        page: { original: selected.page.original, crop: recipe.crop, recipe, ...output },
+        page: {
+          original: selected.page.original,
+          ...(selected.page.originalPreview === undefined
+            ? {}
+            : { originalPreview: selected.page.originalPreview }),
+          crop: recipe.crop,
+          recipe,
+          ...output,
+        },
       });
     } finally {
       if (pageOperations.current.get(id) === controller) pageOperations.current.delete(id);
@@ -319,6 +347,37 @@ export function App({
     }
   };
 
+  const openHomeImages = (sources: readonly File[]) => {
+    if (sources.length === 0) return;
+    const selectionFailure =
+      sources.length > MAX_IMPORT_IMAGES
+        ? 'too-many-images'
+        : sources.reduce((total, source) => total + source.size, 0) > MAX_IMPORT_SELECTION_BYTES
+          ? 'selection-too-large'
+          : null;
+    if (selectionFailure !== null) {
+      homeImportRequest.current?.abort();
+      homeImportRequest.current = null;
+      setHomeImportState({ kind: 'error', code: selectionFailure });
+      return;
+    }
+    const first = sources[0];
+    if (sources.length === 1 && first !== undefined) {
+      void openHomeImage(first);
+      return;
+    }
+    homeImportRequest.current?.abort();
+    homeImportRequest.current = null;
+    setHomeImportState({ kind: 'idle' });
+    resetBatch();
+    for (const source of sources) {
+      const id = `page-${String(++pageSequence.current)}`;
+      dispatchBatch({ type: 'captured', id, source });
+      processPage(id, source);
+    }
+    navigateTo('batch-review');
+  };
+
   const isLibrary = view === 'library';
 
   return (
@@ -353,9 +412,7 @@ export function App({
               ? HOME_IMPORT_ERROR_GUIDANCE[homeImportState.code]
               : undefined
           }
-          onImport={(source) => {
-            void openHomeImage(source);
-          }}
+          onImport={openHomeImages}
         />
       ) : view === 'camera' ? (
         <CameraScreen
@@ -410,6 +467,11 @@ export function App({
         <ScanBatchReview
           pages={batch.pages}
           headingRef={viewHeadingRef}
+          onBack={() => {
+            resetBatch();
+            setProcessorGeneration((generation) => generation + 1);
+            navigateTo('library');
+          }}
           onCaptureMore={() => {
             setCameraReturnView('batch-review');
             navigateTo('camera');

@@ -1,0 +1,58 @@
+HEIF decoder source, build and replacement
+
+Distributed library: heic-to 1.6.6, CSP/bitmap variant, LGPL-3.0-or-later,
+with one application patch: select the unique primary image instead of data[0].
+All copyright notices and vendor finally cleanup are retained. Exact source:
+  heic-to-1.6.6.tgz (includes generated JS, wrapper source and esbuild.mjs)
+  libheif-1.23.6.tar.gz (C/C++ source and Emscripten build scripts)
+  libde265-1.0.16.tar.gz (decoder source)
+
+Reproduce the shipped module:
+1. Use Node 22 in an empty folder and create a scripts/ directory.
+2. npm install --ignore-scripts heic-to@1.6.6 esbuild@0.28.2
+3. Copy the adjacent build-heif-decoder.mjs to scripts/ and run from the root:
+     node scripts/build-heif-decoder.mjs
+   The script checks the dependency version and exact source anchor, then changes
+     const image = data[0]
+   to
+     const primary = data.filter(image => image.is_primary());
+     if (primary.length !== 1) throw new Error('HEIF primary image not found');
+     const image = primary[0]
+   It bundles src/worker.js with libheif-without-unsafe-eval.js and embeds it in
+   the original src/index.js. The generated optional ES module is:
+     public/vendor/heif/decoder-1.6.6-primary-v1.js
+   SHA256 f254d8cfa3601cb2a17dcb9d913875166dc0a01aa4f0898d174cb3d78cd7cdf9
+
+Modify/relink:
+Edit the extracted wrapper/decoder source or the patch in the provided script,
+then rebuild. Replace /vendor/heif/decoder-1.6.6-primary-v1.js with the modified
+ES module exporting heicTo and isHeic. The app imports heicTo({ blob, type:
+'bitmap', options }) inside a temporary module Worker. No signature, runtime
+hash validation, application rebuild or proprietary tool prevents replacement.
+The versioned filename is only a cache key. With an application source checkout,
+you may instead replace/install the modified library and run npm run build.
+Application users may reverse engineer the combined work to debug modifications
+to these LGPL components, as also stated in NOTICE.txt.
+
+To change underlying C++ rather than the included generated JavaScript:
+Extract the included libheif/libde265 sources. Upstream heic-to README documents
+its Mac build dependencies (cmake, make, pkg-config, x265, libde265, libjpeg,
+libtool and emscripten), then:
+  mkdir buildjs; cd buildjs
+  LIBDE265_VERSION=1.0.16 USE_UNSAFE_EVAL=0 USE_WASM=0 ../build-emscripten.sh ..
+The upstream Mac build changes EXPORTED_FUNCTIONS in build-emscripten.sh to use
+/opt/homebrew/opt/llvm/bin/llvm-nm instead of $EMSDK/upstream/bin/llvm-nm. Put the
+generated module in src/lib/libheif-without-unsafe-eval.js before rebuilding.
+Upstream does not lock the full C++ toolchain; bit-for-bit C++ regeneration is not
+claimed. The exact distributed generated JS needed for the shipped build is
+included in the npm source archive. No unsafe-eval variant is shipped. The
+library creates a nested Blob Worker; termination of the containing module
+Worker stops its children.
+
+SHA-256 corresponding source archives:
+heic-to-1.6.6.tgz
+6dc4703e62048c372ebef9632ce8613d53598ceaccf0d891fbe0a533909cf1a5
+libheif-1.23.6.tar.gz
+c9a00b0452f5c16d72ef71e5e40c0e90fbe2ad37148d27a1b2f9bb21546f5f03
+libde265-1.0.16.tar.gz
+ed12c931759c1575848832f70db5071a001ac813db4e4f568ee08aef6e234d4e

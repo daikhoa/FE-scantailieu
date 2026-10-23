@@ -52,6 +52,33 @@ afterEach(() => {
 });
 
 describe('Scanic isolated worker backend', () => {
+  it('sends encoded originals as Blob references without transferring a full source RGBA buffer', async () => {
+    const backend = createScanicWorkerBackend();
+    const worker = latestWorker();
+    const initialized = backend.initialize();
+    worker.reply({ id: 1, kind: 'success', output: null });
+    await initialized;
+    if (backend.warpAsset === undefined) throw new Error('Missing encoded image renderer.');
+    const parameters = {
+      asset: {
+        blob: new Blob(['photo'], { type: 'image/jpeg' }),
+        dimensions: { width: 8000, height: 6000 },
+      },
+      corners,
+      rotation: 0 as const,
+      filter: 'original' as const,
+      maximumOutputLongSide: 3000,
+    };
+    const job = backend.warpAsset(parameters);
+    expect(worker.messages[1]).toEqual({
+      message: { id: 2, operation: 'warp-asset', ...parameters },
+      transfer: undefined,
+    });
+    worker.reply({ id: 2, kind: 'success', output: input });
+    await expect(job).resolves.toEqual(input);
+    await backend.dispose();
+  });
+
   it('reports unavailable without Worker support', () => {
     vi.stubGlobal('Worker', undefined);
     expect(createScanicWorkerBackend).toThrow(expect.objectContaining({ code: 'unavailable' }));

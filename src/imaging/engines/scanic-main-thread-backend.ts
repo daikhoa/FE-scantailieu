@@ -1,7 +1,7 @@
 import frameModuleUrl from './scanic-frame.ts?worker&url';
 import type { ClassicalBackend } from './scanic-backend-contract';
 import { ScannerEngineError } from './scanner-engine-error';
-import type { ScanicWorkerRequest, ScanicWorkerResponse } from './scanic-worker-backend';
+import type { ScanicWorkerCommand, ScanicWorkerResponse } from './scanic-worker-backend';
 
 /** Main-thread execution in an owned realm; removing it releases Scanic's global session cache. */
 export function createScanicMainThreadBackend(): ClassicalBackend {
@@ -79,12 +79,7 @@ export function createScanicMainThreadBackend(): ClassicalBackend {
   frame.src = 'about:blank';
   document.body.append(frame);
 
-  async function request(
-    message:
-      | Omit<Extract<ScanicWorkerRequest, { operation: 'warp' }>, 'id'>
-      | { operation: 'initialize' }
-      | Omit<Extract<ScanicWorkerRequest, { operation: 'detect' }>, 'id'>,
-  ): Promise<unknown> {
+  async function request(message: ScanicWorkerCommand): Promise<unknown> {
     await ready;
     if (disposed || current !== null) throw new ScannerEngineError('unavailable');
     const id = ++sequence;
@@ -133,6 +128,21 @@ export function createScanicMainThreadBackend(): ClassicalBackend {
         throw new ScannerEngineError('failed');
       return output as {
         dimensions: typeof input.dimensions;
+        pixels: Uint8ClampedArray<ArrayBuffer>;
+      };
+    },
+    async warpAsset(parameters) {
+      const output = await request({ operation: 'warp-asset', ...parameters });
+      if (
+        typeof output !== 'object' ||
+        output === null ||
+        !('dimensions' in output) ||
+        !('pixels' in output) ||
+        !(output.pixels instanceof Uint8ClampedArray)
+      )
+        throw new ScannerEngineError('failed');
+      return output as {
+        dimensions: typeof parameters.asset.dimensions;
         pixels: Uint8ClampedArray<ArrayBuffer>;
       };
     },

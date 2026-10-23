@@ -1,17 +1,11 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type PointerEvent,
-} from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
 
 import type { CropRegion, DocumentCorners, ImageAsset, Point } from '../../domain/document';
 import { validateQuad } from '../../imaging/geometry/quad';
 
 interface ManualCropEditorProps {
   readonly original: ImageAsset;
+  readonly preview?: ImageAsset;
   readonly initialCrop: CropRegion;
   readonly busy: boolean;
   readonly onCancel: () => void;
@@ -43,6 +37,7 @@ function clamp(value: number, maximum: number): number {
 
 export function ManualCropEditor({
   original,
+  preview,
   initialCrop,
   busy,
   onCancel,
@@ -54,7 +49,10 @@ export function ManualCropEditor({
   );
   const [activeCorner, setActiveCorner] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const originalUrl = useMemo(() => URL.createObjectURL(original.blob), [original.blob]);
+  const originalUrl = useMemo(
+    () => URL.createObjectURL(preview?.blob ?? original.blob),
+    [original.blob, preview?.blob],
+  );
   const validation = validateQuad(corners, original.dimensions, width * height * 0.005);
   const points = corners.map((point) => `${String(point.x)},${String(point.y)}`).join(' ');
 
@@ -130,7 +128,10 @@ export function ManualCropEditor({
             setActiveCorner(null);
           }}
         >
-          <polygon className="manual-crop__shade" points={`0,0 ${String(width)},0 ${String(width)},${String(height)} 0,${String(height)}`} />
+          <polygon
+            className="manual-crop__shade"
+            points={`0,0 ${String(width)},0 ${String(width)},${String(height)} 0,${String(height)}`}
+          />
           <polygon className="manual-crop__polygon" points={points} />
           {corners.map((point, index) => (
             <circle

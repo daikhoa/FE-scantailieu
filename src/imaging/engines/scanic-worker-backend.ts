@@ -7,14 +7,18 @@ import type {
 } from '../../domain/document';
 import { isValidImageDimensions } from '../geometry/coordinates';
 import { MAX_WORKING_IMAGE_PIXELS, MAX_WORKING_IMAGE_SIDE } from '../working-image-limits';
-import type { ClassicalBackend, RgbaBackendInput } from './scanic-backend-contract';
+import type {
+  ClassicalBackend,
+  RgbaBackendInput,
+  RasterWarpRequest,
+} from './scanic-backend-contract';
 import { ScannerEngineError } from './scanic-backend-contract';
 
-export type ScanicWorkerRequest =
-  | { readonly id: number; readonly operation: 'initialize' }
-  | { readonly id: number; readonly operation: 'detect'; readonly input: RgbaBackendInput }
+export type ScanicWorkerCommand =
+  | { readonly operation: 'initialize' }
+  | { readonly operation: 'detect'; readonly input: RgbaBackendInput }
+  | ({ readonly operation: 'warp-asset' } & RasterWarpRequest)
   | {
-      readonly id: number;
       readonly operation: 'warp';
       readonly input: RgbaBackendInput;
       readonly corners: DocumentCorners;
@@ -23,6 +27,7 @@ export type ScanicWorkerRequest =
       readonly maximumOutputLongSide?: number;
       readonly analysis?: LocalRestorationAnalysis;
     };
+export type ScanicWorkerRequest = ScanicWorkerCommand & { readonly id: number };
 
 export type ScanicWorkerResponse =
   | { readonly id: number; readonly kind: 'success'; readonly output: unknown }
@@ -105,7 +110,10 @@ export function createScanicWorkerBackend(): ClassicalBackend {
       close('failed');
       return;
     }
-    if (current.operation === 'warp' && !isRgbaBackendInput(reply.output)) {
+    if (
+      (current.operation === 'warp' || current.operation === 'warp-asset') &&
+      !isRgbaBackendInput(reply.output)
+    ) {
       close('failed');
       return;
     }
@@ -131,48 +139,18 @@ export function createScanicWorkerBackend(): ClassicalBackend {
     fail(code);
   }
 
-  function request(
-    operation: ScanicWorkerRequest['operation'],
-    input?: RgbaBackendInput,
-    corners?: DocumentCorners,
-    rotation?: QuarterTurn,
-    filter?: FilterMode,
-    maximumOutputLongSide?: number,
-    analysis?: LocalRestorationAnalysis,
-  ): Promise<unknown> {
+  function request(command: ScanicWorkerCommand): Promise<unknown> {
     if (closed || current !== null) return Promise.reject(new ScannerEngineError('unavailable'));
     const id = ++nextId;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         close('timeout');
       }, 30_000);
-      current = { id, operation, resolve, reject, timer };
+      current = { id, operation: command.operation, resolve, reject, timer };
       try {
-        if (
-          operation === 'warp' &&
-          input !== undefined &&
-          corners !== undefined &&
-          rotation !== undefined &&
-          filter !== undefined
-        ) {
-          const message: ScanicWorkerRequest = {
-            id,
-            operation,
-            input,
-            corners,
-            rotation,
-            filter,
-            ...(maximumOutputLongSide === undefined ? {} : { maximumOutputLongSide }),
-            ...(analysis === undefined ? {} : { analysis }),
-          };
-          worker.postMessage(message, [input.pixels.buffer]);
-        } else if (operation === 'detect' && input !== undefined) {
-          const message: ScanicWorkerRequest = { id, operation, input };
-          worker.postMessage(message, [input.pixels.buffer]);
-        } else {
-          const message: ScanicWorkerRequest = { id, operation: 'initialize' };
-          worker.postMessage(message);
-        }
+        const message: ScanicWorkerRequest = { ...command, id };
+        if ('input' in command) worker.postMessage(message, [command.input.pixels.buffer]);
+        else worker.postMessage(message);
       } catch {
         close('failed');
       }
@@ -181,19 +159,24 @@ export function createScanicWorkerBackend(): ClassicalBackend {
 
   return {
     async initialize() {
-      await request('initialize');
+      await request({ operation: 'initialize' });
     },
-    detect: (input) => request('detect', input),
+    detect: (input) => request({ operation: 'detect', input }),
     async warp(input, corners, rotation, filter, maximumOutputLongSide, analysis) {
-      const output = await request(
-        'warp',
+      const output = await request({
+        operation: 'warp',
         input,
         corners,
         rotation,
         filter,
-        maximumOutputLongSide,
-        analysis,
-      );
+        ...(maximumOutputLongSide === undefined ? {} : { maximumOutputLongSide }),
+        ...(analysis === undefined ? {} : { analysis }),
+      });
+      if (!isRgbaBackendInput(output)) throw new ScannerEngineError('failed');
+      return output;
+    },
+    async warpAsset(parameters) {
+      const output = await request({ operation: 'warp-asset', ...parameters });
       if (!isRgbaBackendInput(output)) throw new ScannerEngineError('failed');
       return output;
     },

@@ -4,6 +4,7 @@ import type { RgbaBackendInput } from './scanic-backend-contract';
 import type { ScanicWorkerRequest, ScanicWorkerResponse } from './scanic-worker-backend';
 import { warpPerspectiveRgba } from '../rendering/perspective-warp';
 import { ScanicDetectorRuntime } from './scanic-detector-runtime';
+import { warpRasterAsset } from '../rendering/raster-asset-warp';
 
 let detector: ScanicDetectorRuntime | null = null;
 
@@ -17,13 +18,12 @@ async function execute(request: ScanicWorkerRequest): Promise<unknown> {
     await detector.initialize();
     return null;
   }
-  if (request.operation === 'warp') {
+  if (request.operation === 'warp' || request.operation === 'warp-asset') {
     const started = performance.now();
-    const corrected = warpPerspectiveRgba(
-      request.input,
-      request.corners,
-      request.maximumOutputLongSide,
-    );
+    const corrected =
+      request.operation === 'warp-asset'
+        ? await warpRasterAsset(request.asset, request.corners, request.maximumOutputLongSide)
+        : warpPerspectiveRgba(request.input, request.corners, request.maximumOutputLongSide);
     const warped = performance.now();
     const filtered = applyDocumentFilter(corrected, request.filter, request.analysis);
     return {
@@ -53,7 +53,7 @@ globalThis.addEventListener('message', (event: MessageEvent<ScanicWorkerRequest>
           ? { id: request.id, kind: 'failure', code: 'unavailable' }
           : { id: request.id, kind: 'success', output };
       if (
-        request.operation === 'warp' &&
+        (request.operation === 'warp' || request.operation === 'warp-asset') &&
         typeof output === 'object' &&
         output !== null &&
         'pixels' in output &&

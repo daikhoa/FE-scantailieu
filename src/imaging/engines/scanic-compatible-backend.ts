@@ -107,6 +107,12 @@ export function createCompatibleScanicBackend(
         analysis,
       );
     },
+    warpAsset(request) {
+      const current = requireActive();
+      if (current.warpAsset === undefined)
+        return Promise.reject(new ScannerEngineError('unavailable'));
+      return current.warpAsset(request);
+    },
     async dispose() {
       disposed = true;
       initialized = false;

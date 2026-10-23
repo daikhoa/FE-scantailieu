@@ -7,7 +7,7 @@ import type { RestorationWarning } from '../../imaging/restoration/restoration-t
 import type { LocalRestorationClient } from '../../imaging/restoration/local-restoration-client';
 import { createScanicEngine } from '../../imaging/engines/scanic-classical-engine';
 import { detectDocumentCrop } from '../editor/detect-document-crop';
-import { importImage, type ImageImporter } from '../camera/image-import';
+import { importImage, type ImageImporter, type ImportedImage } from '../camera/image-import';
 import { mapLiveDetectionToCrop } from '../camera/live-capture-crop';
 import type { LiveDetectionResult } from './detection-scheduler';
 import type { CapturedRgbaFrame } from '../camera/camera-capture';
@@ -20,6 +20,7 @@ import {
 
 export interface ProcessedScanPage {
   readonly original: ImageAsset;
+  readonly originalPreview?: ImageAsset;
   readonly crop: CropRegion;
   readonly recipe: EditRecipe;
   readonly variant: RenderedVariant;
@@ -142,13 +143,14 @@ export function createBackgroundPageProcessor(
     if (engine?.lifecycle.kind === 'ready') return engine;
     await releaseEngine();
     const candidate = engineFactory();
+    // Own bootstrap immediately so disposal can terminate a still-loading worker.
+    engine = candidate;
     try {
       await candidate.initialize(signal);
       checkAbort(signal, disposal.signal);
-      engine = candidate;
       return candidate;
     } catch (error) {
-      await candidate.dispose().catch(() => undefined);
+      if (engine === candidate) await releaseEngine().catch(() => undefined);
       throw error;
     }
   };
@@ -161,7 +163,7 @@ export function createBackgroundPageProcessor(
   ): Promise<ProcessedScanPage> => {
     const totalStarted = performance.now();
     checkAbort(signal, disposal.signal);
-    const imported =
+    const imported: ImportedImage =
       source instanceof Blob
         ? await importer(source, signal)
         : {
@@ -215,7 +217,13 @@ export function createBackgroundPageProcessor(
         total: performance.now() - totalStarted,
         ...(source instanceof Blob ? {} : { capture: source.captureMs ?? 0 }),
       });
-      return { original: imported.original, crop, recipe, ...output };
+      return {
+        original: imported.original,
+        ...(imported.preview === undefined ? {} : { originalPreview: imported.preview }),
+        crop,
+        recipe,
+        ...output,
+      };
     } catch (error) {
       if (!(error instanceof Error && error.name === 'AbortError')) {
         await releaseEngine().catch(() => undefined);

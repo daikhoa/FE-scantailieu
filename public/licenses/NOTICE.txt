@@ -1,0 +1,26 @@
+HEIC/HEIF fallback decoder notices
+
+heic-to 1.6.6, Copyright Hopper Gee, LGPL-3.0-or-later (bundled LICENSE).
+The heic-to CSP bitmap decoder, modified to select the unique primary image, is loaded only when the
+browser cannot decode HEIF. It includes libheif 1.23.6 (LGPL-3.0-or-later)
+and libde265 1.0.16 (LGPL-3.0-or-later). See their copyright notices and
+COPYING files in the source archives. LGPL and GPL texts accompany this notice.
+
+Equivalent access to corresponding source, including the distributed generated
+JavaScript, build script, original C/C++ source and build instructions:
+  /licenses/heif-source/heic-to-1.6.6.tgz
+  /licenses/heif-source/libheif-1.23.6.tar.gz
+  /licenses/heif-source/libde265-1.0.16.tar.gz
+  /licenses/heif-source/BUILD.txt (includes patch/relink instructions)
+
+This application grants permission to reverse engineer the combined work for
+debugging modifications to these LGPL components. The library may be modified
+or replaced; no signature or integrity check prevents replacing its isolated
+ES module. Instructions for rebuilding/relinking are in BUILD.txt. This notice
+does not impose the LGPL on unrelated application code.
+
+Original exact source download locations:
+https://registry.npmjs.org/heic-to/-/heic-to-1.6.6.tgz
+https://codeload.github.com/strukturag/libheif/tar.gz/refs/tags/v1.23.6
+https://codeload.github.com/strukturag/libde265/tar.gz/refs/tags/v1.0.16
+

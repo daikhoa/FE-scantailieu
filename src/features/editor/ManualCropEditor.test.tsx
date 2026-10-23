@@ -63,6 +63,10 @@ describe('ManualCropEditor', () => {
     render(
       <ManualCropEditor
         original={original}
+        preview={{
+          blob: new Blob(['small-preview'], { type: 'image/png' }),
+          dimensions: { width: 300, height: 400 },
+        }}
         initialCrop={{ kind: 'full-frame' }}
         busy={false}
         onCancel={vi.fn()}
@@ -83,11 +87,15 @@ describe('ManualCropEditor', () => {
     });
   });
 
-  it('maps a dragged handle from the displayed image back to original-image coordinates', () => {
+  it('maps a dragged handle from a small preview back to original-image coordinates', () => {
     const onApply = vi.fn();
     const { container } = render(
       <ManualCropEditor
         original={original}
+        preview={{
+          blob: new Blob(['small-preview'], { type: 'image/png' }),
+          dimensions: { width: 300, height: 400 },
+        }}
         initialCrop={{ kind: 'full-frame' }}
         busy={false}
         onCancel={vi.fn()}

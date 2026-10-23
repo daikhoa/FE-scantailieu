@@ -1,0 +1,79 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Phone formats smoke</title>
+<pre id="result" data-status="running">Running…</pre>
+<script type="module">
+  import { importImage } from '/src/features/camera/image-import.ts';
+  import { createBackgroundPageProcessor } from '/src/features/scanner/background-page-processor.ts';
+  import { createImagePdf } from '/src/features/export/image-pdf.ts';
+  const output = document.querySelector('#result');
+  async function run() {
+    const processor = createBackgroundPageProcessor();
+    const signal = new AbortController().signal;
+    try {
+      const results = [];
+      let firstHeicPreview;
+      let firstHeicJpeg;
+      for (const format of ['heic', 'avif']) {
+        const response = await fetch(`/tests/fixtures/example.${format}`);
+        if (!response.ok) throw new Error(`Missing public ${format} fixture`);
+        const blob = new Blob([await response.arrayBuffer()], { type: `image/${format}` });
+        const started = performance.now();
+        const imported = await importImage(blob, signal);
+        if (imported.original.blob !== blob) throw new Error('HEIC original was replaced');
+        if (format === 'heic' && imported.preview?.blob.type !== 'image/png')
+          throw new Error('Missing HEIC display preview');
+        const page = await processor.enqueue(blob, signal);
+        if (format === 'heic') {
+          firstHeicPreview = new Uint8Array(await page.originalPreview.blob.arrayBuffer());
+          firstHeicJpeg = new Uint8Array(await page.variant.image.blob.arrayBuffer());
+          // Pinned libheif example has two full-size top-level images, both 1280x854.
+          // Switch pitm from item 20004 to 20006; data[0] would silently keep the first.
+          const secondBytes = new Uint8Array(await blob.arrayBuffer());
+          const view = new DataView(secondBytes.buffer);
+          if (view.getUint16(85) !== 20004) throw new Error('Unexpected HEIC fixture primary');
+          view.setUint16(85, 20006);
+          const second = await processor.enqueue(
+            new Blob([secondBytes], { type: 'image/heic' }),
+            signal,
+          );
+          const secondPreview = new Uint8Array(await second.originalPreview.blob.arrayBuffer());
+          const secondJpeg = new Uint8Array(await second.variant.image.blob.arrayBuffer());
+          const equal = (a, b) => a.length === b.length && a.every((value, i) => value === b[i]);
+          if (equal(firstHeicPreview, secondPreview) || equal(firstHeicJpeg, secondJpeg))
+            throw new Error('HEIF primary item was ignored in preview or rendered image');
+          const secondPdf = await createImagePdf([second.variant.image], signal);
+          if (secondPdf.size < second.variant.image.blob.size)
+            throw new Error('Missing primary PDF image');
+          results.push({
+            primarySecondItem: true,
+            dimensions: second.original.dimensions,
+            pdfBytes: secondPdf.size,
+          });
+        }
+        const pdf = await createImagePdf([page.variant.image], signal);
+        results.push({
+          format,
+          sourceBytes: blob.size,
+          originalDimensions: imported.original.dimensions,
+          outputDimensions: page.variant.image.dimensions,
+          pdfBytes: pdf.size,
+          totalMs: performance.now() - started,
+        });
+      }
+      return results;
+    } finally {
+      await processor.dispose();
+    }
+  }
+  async function smoke() {
+    try {
+      output.textContent = JSON.stringify(await run(), null, 2);
+      output.dataset.status = 'complete';
+    } catch (error) {
+      output.textContent = JSON.stringify({ error: error.message });
+      output.dataset.status = 'failed';
+    }
+  }
+  void smoke();
+</script>

@@ -1,4 +1,5 @@
 import type { Ref } from 'react';
+import { RASTER_MIME_TYPES } from '../imaging/codecs/raster-metadata';
 import './HomeScreen.css';
 
 export type LibraryState =
@@ -101,7 +102,7 @@ interface HomeScreenProps {
   readonly libraryState: LibraryState;
   readonly onRetryLibrary: (() => void) | undefined;
   readonly onCamera: () => void;
-  readonly onImport: (source: File) => void;
+  readonly onImport: (sources: readonly File[]) => void;
   readonly importing: boolean;
   readonly importError: string | undefined;
 }
@@ -151,17 +152,18 @@ export function HomeScreen({
                 <HomeIcon name="image" />
               </span>
               <strong>{importing ? 'Đang kiểm tra ảnh…' : 'Dùng ảnh có sẵn'}</strong>
-              <small>JPEG, PNG hoặc WebP</small>
+              <small>Chọn một hoặc nhiều ảnh</small>
               <input
                 className="visually-hidden"
                 type="file"
                 aria-label="Dùng ảnh có sẵn"
-                accept="image/jpeg,image/png,image/webp"
+                accept={RASTER_MIME_TYPES.join(',')}
+                multiple
                 disabled={importing}
                 onChange={(event) => {
-                  const source = event.currentTarget.files?.[0];
+                  const sources = Array.from(event.currentTarget.files ?? []);
                   event.currentTarget.value = '';
-                  if (source !== undefined) onImport(source);
+                  if (sources.length > 0) onImport(sources);
                 }}
               />
             </label>
@@ -173,7 +175,12 @@ export function HomeScreen({
           )}
           <aside className="home-privacy" aria-label="Quyền riêng tư">
             <HomeIcon name="shield" />
-            <p>Ảnh không được tải lên máy chủ. Xử lý ngay trên thiết bị.</p>
+            <p>
+              Ảnh không được tải lên máy chủ. Xử lý ngay trên thiết bị.{' '}
+              <a href="/licenses/" target="_blank" rel="noreferrer">
+                Giấy phép phần mềm
+              </a>
+            </p>
           </aside>
         </section>
         <section className="home-recent" aria-labelledby="library-title">

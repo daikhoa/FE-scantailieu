@@ -3,6 +3,7 @@ import type { DocumentCorners, EditRecipe } from '../../domain/document';
 import type { RgbaImageCodec } from '../codecs/rgba-image-codec';
 import {
   createRgbaScannerFrame,
+  createOneShotScannerFrame,
   createScanicClassicalEngine,
   type ClassicalBackend,
 } from './scanic-classical-engine';
@@ -67,6 +68,56 @@ async function ready(backend = fakeBackend()) {
 }
 
 describe('Scanic RGBA frames', () => {
+  it('hands newly captured pixels directly to the backend once, without source copies', async () => {
+    const pixels = new Uint8ClampedArray(800);
+    const input = createOneShotScannerFrame(dimensions, pixels);
+    const { engine, backend } = await ready();
+    await engine.detect(input, signal());
+    const detect = vi.mocked(backend.detect);
+    expect(detect.mock.calls.at(-1)?.[0].pixels === pixels).toBe(true);
+    await expect(engine.detect(input, signal())).rejects.toMatchObject({ code: 'invalid-input' });
+    input.close();
+    await engine.dispose();
+  });
+
+  it('renders a 48MP encoded original through the asset backend without full RGBA decoding', async () => {
+    const backend = fakeBackend();
+    const codec = fakeCodec();
+    const decode = vi.spyOn(codec, 'decode');
+    const warpAsset = vi.fn<NonNullable<ClassicalBackend['warpAsset']>>(() =>
+      Promise.resolve({ dimensions, pixels: new Uint8ClampedArray(800) }),
+    );
+    backend.warpAsset = warpAsset;
+    const engine = createScanicClassicalEngine({ createBackend: () => backend, codec });
+    await engine.initialize(signal());
+    const original = {
+      blob: new Blob(['photo'], { type: 'image/jpeg' }),
+      dimensions: { width: 8000, height: 6000 },
+    };
+    const recipe: EditRecipe = {
+      version: 1,
+      crop: { kind: 'full-frame' },
+      rotation: 0,
+      dewarp: { mode: 'perspective-only' },
+      filter: { mode: 'original', presetVersion: 'original-v1', parameters: {} },
+    };
+    await engine.render(
+      { original, orientation: 0, recipe, maximumOutputLongSide: 3000 },
+      signal(),
+    );
+    expect(decode).not.toHaveBeenCalled();
+    expect(warpAsset).toHaveBeenCalledWith(
+      expect.objectContaining({ asset: original, maximumOutputLongSide: 3000 }),
+    );
+    await engine.dispose();
+  });
+
+  it('still bounds raw RGBA frames even when byte length matches oversized dimensions', () => {
+    expect(() =>
+      createRgbaScannerFrame({ width: 8193, height: 1 }, new Uint8ClampedArray(8193 * 4)),
+    ).toThrow();
+  });
+
   it.each([
     [{ width: 0, height: 10 }, 0],
     [{ width: 1.5, height: 10 }, 60],
@@ -570,7 +621,7 @@ describe('Scanic serialized work, cancellation and cleanup', () => {
     );
     expect(result.recipeKey).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(result).toMatchObject({
-      engineVersion: 'scanic-1.6.0+ml-only-perspective-v2-filter-v8',
+      engineVersion: 'scanic-1.6.0+ml-only-perspective-v2-filter-v9',
       image: { dimensions: warped.dimensions },
       dewarp: { kind: 'not-requested' },
     });

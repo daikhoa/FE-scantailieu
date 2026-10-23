@@ -33,7 +33,7 @@ export interface ScanicEngineOptions {
   readonly codec?: RgbaImageCodec;
 }
 
-const ENGINE_VERSION = 'scanic-1.6.0+ml-only-perspective-v2-filter-v8';
+const ENGINE_VERSION = 'scanic-1.6.0+ml-only-perspective-v2-filter-v9';
 const FILTER_MODES: readonly FilterMode[] = [
   'original',
   'ocr-color',
@@ -45,12 +45,29 @@ const FILTER_MODES: readonly FilterMode[] = [
 interface FrameStorage {
   pixels: Uint8ClampedArray<ArrayBuffer> | null;
   borrows: number;
+  readonly ownership: 'reusable' | 'single-use';
 }
 
 const frames = new WeakMap<ScannerFrame, FrameStorage>();
 export function createRgbaScannerFrame(
   dimensions: ImageDimensions,
   pixels: Uint8ClampedArray,
+): ScannerFrame {
+  return createFrame(dimensions, pixels, 'reusable');
+}
+
+/** Consumes newly captured pixels. The frame can be detected once, then must be closed. */
+export function createOneShotScannerFrame(
+  dimensions: ImageDimensions,
+  pixels: Uint8ClampedArray,
+): ScannerFrame {
+  return createFrame(dimensions, pixels, 'single-use');
+}
+
+function createFrame(
+  dimensions: ImageDimensions,
+  pixels: Uint8ClampedArray,
+  ownership: FrameStorage['ownership'],
 ): ScannerFrame {
   if (
     !isValidImageDimensions(dimensions) ||
@@ -60,7 +77,13 @@ export function createRgbaScannerFrame(
   ) {
     throw new ScannerEngineError('invalid-input');
   }
-  const storage: FrameStorage = { pixels: pixels.slice(), borrows: 0 };
+  const ownedPixels = ownership === 'reusable' ? pixels.slice() : pixels;
+  if (!(ownedPixels.buffer instanceof ArrayBuffer)) throw new ScannerEngineError('invalid-input');
+  const storage: FrameStorage = {
+    pixels: ownedPixels as Uint8ClampedArray<ArrayBuffer>,
+    borrows: 0,
+    ownership,
+  };
   const frame: ScannerFrame = Object.freeze({
     dimensions: Object.freeze({ width: dimensions.width, height: dimensions.height }),
     close() {
@@ -171,8 +194,6 @@ function renderCorners(request: RenderPageRequest): DocumentCorners {
   validateRasterAsset(request.original);
   if (
     !isValidImageDimensions(dimensions) ||
-    Math.max(dimensions.width, dimensions.height) > MAX_WORKING_IMAGE_SIDE ||
-    dimensions.width * dimensions.height > MAX_WORKING_IMAGE_PIXELS ||
     !Number.isSafeInteger(request.recipe.version) ||
     request.recipe.version <= 0 ||
     !isQuarterTurn(request.orientation) ||
@@ -185,7 +206,9 @@ function renderCorners(request: RenderPageRequest): DocumentCorners {
         request.maximumOutputLongSide <= 0 ||
         request.maximumOutputLongSide > MAX_WORKING_IMAGE_SIDE)) ||
     (sourcePixels !== undefined &&
-      (sourcePixels.dimensions.width !== dimensions.width ||
+      (Math.max(dimensions.width, dimensions.height) > MAX_WORKING_IMAGE_SIDE ||
+        dimensions.width * dimensions.height > MAX_WORKING_IMAGE_PIXELS ||
+        sourcePixels.dimensions.width !== dimensions.width ||
         sourcePixels.dimensions.height !== dimensions.height ||
         !(sourcePixels.pixels instanceof Uint8ClampedArray) ||
         sourcePixels.pixels.byteLength !== dimensions.width * dimensions.height * 4))
@@ -371,12 +394,15 @@ class ScanicEngine implements ScannerEngine {
       }
       storage.borrows++;
       try {
-        // Backend owns this copy; worker transfer cannot detach caller-owned frame storage.
+        // Fresh live frames transfer directly. Reusable caller frames retain their own copy.
         let output: unknown;
         try {
+          const pixels =
+            storage.ownership === 'single-use' ? storage.pixels : storage.pixels.slice();
+          if (storage.ownership === 'single-use') storage.pixels = null;
           output = await backend.detect({
             dimensions: frame.dimensions,
-            pixels: storage.pixels.slice(),
+            pixels,
           });
         } catch (error) {
           return await this.failBackendOperation(error, signal);
@@ -405,6 +431,24 @@ class ScanicEngine implements ScannerEngine {
       corners = renderCorners(request);
     } catch (error) {
       throw operationFailure(error, signal);
+    }
+    if (request.sourcePixels === undefined && backend.warpAsset !== undefined) {
+      try {
+        const output = await backend.warpAsset({
+          asset: request.original,
+          corners,
+          rotation: totalRotation(request),
+          filter: request.recipe.filter.mode,
+          ...(request.maximumOutputLongSide === undefined
+            ? {}
+            : { maximumOutputLongSide: request.maximumOutputLongSide }),
+          ...(request.analysis === undefined ? {} : { analysis: request.analysis }),
+        });
+        checkAbort(signal, this.disposal.signal);
+        return output;
+      } catch (error) {
+        return await this.failBackendOperation(error, signal);
+      }
     }
     let input;
     try {

@@ -34,6 +34,8 @@ export interface DetectionSmootherOptions {
 }
 
 export interface DetectionScheduler {
+  /** Check before allocating/readback of the next live camera frame. */
+  readonly canAcceptFrame: boolean;
   /** Transfers ownership of the frame to the scheduler, including when already disposed. */
   submit(frame: ScannerFrame): void;
   /** Idempotently cancels work and settles after every owned frame has been released. */
@@ -307,6 +309,9 @@ export function createDetectionScheduler(options: DetectionSchedulerOptions): De
   };
 
   return {
+    get canAcceptFrame() {
+      return !lifecycle.disposed && active === undefined && pending === null && timer === undefined;
+    },
     submit(frame) {
       if (lifecycle.disposed) {
         closeFrame(frame);

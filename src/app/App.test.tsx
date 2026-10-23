@@ -174,7 +174,7 @@ describe('App shell', () => {
     });
 
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Chỉ hỗ trợ ảnh JPEG, PNG hoặc WebP.',
+      'Hỗ trợ JPEG, PNG, WebP, HEIC/HEIF và AVIF.',
     );
     expect(screen.getByRole('heading', { name: 'Tài liệu của tôi' })).toBeInTheDocument();
   });

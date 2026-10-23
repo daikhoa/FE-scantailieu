@@ -86,7 +86,9 @@ export function DocumentEditor({
   const [exporting, setExporting] = useState(false);
   const [exportFailed, setExportFailed] = useState(false);
   const [originalUrl] = useState(() =>
-    initialPage === undefined ? URL.createObjectURL(image.original.blob) : null,
+    initialPage === undefined
+      ? URL.createObjectURL(image.preview?.blob ?? image.original.blob)
+      : null,
   );
   const [detectionSource] = useState(() => frameSource ?? createImageAssetFrameSource());
   const engine = useRef<ScannerEngine | null>(null);

@@ -15,7 +15,7 @@ function pixelOffset(width: number, x: number, y: number): number {
   return (y * width + x) * 4;
 }
 
-function sampleBilinear(
+export function sampleBilinear(
   input: RgbaBackendInput,
   sourceEdgeX: number,
   sourceEdgeY: number,

@@ -13,6 +13,7 @@ interface ScanBatchReviewProps {
   readonly pages: readonly ScanBatchPage[];
   readonly headingRef: RefObject<HTMLHeadingElement | null> | null;
   readonly onCaptureMore: () => void;
+  readonly onBack?: () => void;
   readonly onApplyRecipe: (id: string, recipe: EditRecipe) => Promise<void>;
   readonly onRetakePage: (id: string) => void;
   readonly onRetryPage: (id: string) => void;
@@ -83,6 +84,7 @@ export function ScanBatchReview({
   pages,
   headingRef,
   onCaptureMore,
+  onBack,
   onApplyRecipe,
   onRetakePage,
   onRetryPage,
@@ -206,6 +208,9 @@ export function ScanBatchReview({
       >
         <ManualCropEditor
           original={croppingPage.page.original}
+          {...(croppingPage.page.originalPreview === undefined
+            ? {}
+            : { preview: croppingPage.page.originalPreview })}
           initialCrop={croppingPage.page.recipe.crop}
           busy={busyPageId === croppingPage.id}
           onCancel={() => {
@@ -226,6 +231,11 @@ export function ScanBatchReview({
   return (
     <main id="main-content" className="app-main batch-review" aria-label="Tài liệu nhiều trang">
       <section className="batch-review__content" aria-labelledby="batch-review-title">
+        {onBack === undefined ? null : (
+          <button className="back-button" type="button" onClick={onBack}>
+            <span aria-hidden="true">←</span> Trang chủ
+          </button>
+        )}
         <header className="batch-review__heading">
           <button
             className="batch-review__add"
@@ -257,7 +267,7 @@ export function ScanBatchReview({
             <ol
               ref={carouselRef}
               className="batch-page-list"
-              aria-label="Các trang đã chụp"
+              aria-label="Các trang tài liệu"
               onScroll={selectClosestVisiblePage}
             >
               {pages.map((page, index) => {

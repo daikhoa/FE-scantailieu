@@ -1,6 +1,6 @@
 import type { ProcessingFailure } from '../../domain/document';
 import type { ScannerFrame } from '../../imaging/contracts/scanner-engine';
-import { createRgbaScannerFrame } from '../../imaging/engines/scanic-classical-engine';
+import { createOneShotScannerFrame } from '../../imaging/engines/scanic-classical-engine';
 import { isValidImageDimensions } from '../../imaging/geometry/coordinates';
 import {
   MAX_WORKING_IMAGE_PIXELS,
@@ -106,7 +106,7 @@ export function createVideoFrameSource(options: VideoFrameSourceOptions = {}): V
         checkAbort(signal);
         const pixels = activeContext.getImageData(0, 0, dimensions.width, dimensions.height).data;
         checkAbort(signal);
-        return createRgbaScannerFrame(dimensions, pixels);
+        return createOneShotScannerFrame(dimensions, pixels);
       } catch (error) {
         if (signal.aborted) throw abortError();
         if (error instanceof PreviewFrameError) throw error;

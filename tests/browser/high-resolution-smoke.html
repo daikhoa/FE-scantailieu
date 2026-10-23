@@ -1,0 +1,114 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>High resolution original smoke</title>
+<pre id="result" data-status="running">Running…</pre>
+<script type="module">
+  import { createBackgroundPageProcessor } from '/src/features/scanner/background-page-processor.ts';
+  import { createScanicEngine } from '/src/imaging/engines/scanic-classical-engine.ts';
+  import { createCompatibleScanicBackend } from '/src/imaging/engines/scanic-compatible-backend.ts';
+  import { ScannerEngineError } from '/src/imaging/engines/scanner-engine-error.ts';
+  import { createBrowserRgbaCodec } from '/src/imaging/codecs/browser-rgba-codec.ts';
+  import { warpRasterAsset } from '/src/imaging/rendering/raster-asset-warp.ts';
+  import { warpPerspectiveRgba } from '/src/imaging/rendering/perspective-warp.ts';
+  import { createImagePdf } from '/src/features/export/image-pdf.ts';
+  const output = document.querySelector('#result');
+  const signal = new AbortController().signal;
+  function fixture(width, height) {
+    const canvas = new OffscreenCanvas(width, height);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#e9e5db';
+    ctx.fillRect(0, 0, width, height);
+    ctx.fillStyle = '#27312b';
+    ctx.font = `${height / 30}px sans-serif`;
+    ctx.fillText('HIGH RESOLUTION ORIGINAL', width * 0.08, height * 0.12);
+    for (let y = height * 0.2; y < height * 0.8; y += height * 0.025)
+      ctx.fillRect(width * 0.08, y, width * 0.8, Math.max(1, height / 1500));
+    ctx.fillStyle = '#b53348';
+    ctx.fillRect(width * 0.7, height * 0.85, width * 0.2, height * 0.08);
+    return canvas;
+  }
+  async function run() {
+    let canvas = fixture(2000, 1500);
+    const comparison = {
+      blob: await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.97 }),
+      dimensions: { width: 2000, height: 1500 },
+    };
+    canvas.width = 1;
+    canvas.height = 1;
+    const corners = [
+      { x: 30, y: 20 },
+      { x: 1970, y: 90 },
+      { x: 1900, y: 1480 },
+      { x: 10, y: 1400 },
+    ];
+    let started = performance.now();
+    const raw = await createBrowserRgbaCodec().decode(comparison, signal);
+    const legacy = warpPerspectiveRgba(raw, corners, 1600);
+    const legacyMs = performance.now() - started;
+    started = performance.now();
+    const regions = await warpRasterAsset(comparison, corners, 1600);
+    const regionMs = performance.now() - started;
+    let maxPixelDifference = 0;
+    for (let i = 0; i < regions.pixels.length; i++)
+      maxPixelDifference = Math.max(
+        maxPixelDifference,
+        Math.abs(regions.pixels[i] - legacy.pixels[i]),
+      );
+    if (maxPixelDifference > 1) throw new Error('Pixel parity failed');
+    canvas = fixture(8000, 6000);
+    const encoded = await canvas.convertToBlob({ type: 'image/jpeg', quality: 0.97 });
+    canvas.width = 1;
+    canvas.height = 1;
+    const source = new Blob(
+      [encoded, new Uint8Array(Math.max(0, 65 * 1024 * 1024 - encoded.size))],
+      { type: 'image/jpeg' },
+    );
+    const processor = createBackgroundPageProcessor(
+      location.search.includes('fallback')
+        ? {
+            engineFactory: () =>
+              createScanicEngine({
+                createBackend: () =>
+                  createCompatibleScanicBackend({
+                    createWorker: () => {
+                      throw new ScannerEngineError('unavailable');
+                    },
+                  }),
+              }),
+          }
+        : {},
+    );
+    try {
+      started = performance.now();
+      const page = await processor.enqueue(source, signal);
+      const processingMs = performance.now() - started;
+      const dimensions = page.variant.image.dimensions;
+      if (page.original.blob !== source || Math.max(dimensions.width, dimensions.height) !== 3000)
+        throw new Error('Original/output contract failed');
+      const pdf = await createImagePdf([page.variant.image], signal);
+      return {
+        legacyMs,
+        regionMs,
+        maxPixelDifference,
+        originalBytes: source.size,
+        originalDimensions: page.original.dimensions,
+        finalDimensions: dimensions,
+        jpegBytes: page.variant.image.blob.size,
+        pdfBytes: pdf.size,
+        processingMs,
+      };
+    } finally {
+      await processor.dispose();
+    }
+  }
+  async function smoke() {
+    try {
+      output.textContent = JSON.stringify(await run(), null, 2);
+      output.dataset.status = 'complete';
+    } catch (error) {
+      output.textContent = JSON.stringify({ error: error.message });
+      output.dataset.status = 'failed';
+    }
+  }
+  void smoke();
+</script>

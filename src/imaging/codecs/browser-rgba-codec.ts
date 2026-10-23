@@ -4,11 +4,18 @@ import { ScannerEngineError } from '../engines/scanner-engine-error';
 import { isValidImageDimensions } from '../geometry/coordinates';
 import { MAX_WORKING_IMAGE_PIXELS, MAX_WORKING_IMAGE_SIDE } from '../working-image-limits';
 import type { RgbaEncodeOptions, RgbaImageCodec } from './rgba-image-codec';
+import { SUPPORTED_RASTER_TYPES } from './raster-metadata';
+import { decodeRasterBitmap } from './decode-raster-bitmap';
+import {
+  MAX_ENCODED_INPUT_BYTES,
+  MAX_ORIGINAL_IMAGE_PIXELS,
+  MAX_ORIGINAL_IMAGE_SIDE,
+} from '../original-image-limits';
+export { MAX_ENCODED_INPUT_BYTES } from '../original-image-limits';
 
 type RasterSurface = HTMLCanvasElement | OffscreenCanvas;
 type RasterContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
-export const MAX_ENCODED_INPUT_BYTES = 64 * 1024 * 1024;
 const SUPPORTED_INPUT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 function abortError(): Error {
@@ -34,8 +41,10 @@ export function validateRasterAsset(asset: ImageAsset): void {
     !(asset.blob instanceof Blob) ||
     asset.blob.size <= 0 ||
     asset.blob.size > MAX_ENCODED_INPUT_BYTES ||
-    !SUPPORTED_INPUT_TYPES.has(asset.blob.type) ||
-    !validWorkingDimensions(asset.dimensions)
+    !SUPPORTED_RASTER_TYPES.has(asset.blob.type) ||
+    !isValidImageDimensions(asset.dimensions) ||
+    Math.max(asset.dimensions.width, asset.dimensions.height) > MAX_ORIGINAL_IMAGE_SIDE ||
+    asset.dimensions.width * asset.dimensions.height > MAX_ORIGINAL_IMAGE_PIXELS
   ) {
     throw new ScannerEngineError('invalid-input');
   }
@@ -112,13 +121,14 @@ export function createBrowserRgbaCodec(): RgbaImageCodec {
     async decode(asset, signal) {
       checkAbort(signal);
       validateRasterAsset(asset);
+      if (!validWorkingDimensions(asset.dimensions)) throw new ScannerEngineError('out-of-memory');
       if (typeof createImageBitmap !== 'function') {
         throw new ScannerEngineError('unavailable');
       }
       let bitmap: ImageBitmap | null = null;
       let surface: RasterSurface | null = null;
       try {
-        bitmap = await createImageBitmap(asset.blob, { imageOrientation: 'none' });
+        bitmap = await decodeRasterBitmap(asset.blob, { imageOrientation: 'none' }, signal);
         checkAbort(signal);
         if (bitmap.width !== asset.dimensions.width || bitmap.height !== asset.dimensions.height) {
           throw new ScannerEngineError('invalid-input');

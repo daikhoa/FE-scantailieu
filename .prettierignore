@@ -5,3 +5,5 @@ node_modules/
 package-lock.json
 tasks/
 tests/fixtures/smartdoc15/**/manifest.json
+public/vendor/
+public/licenses/**/*.txt

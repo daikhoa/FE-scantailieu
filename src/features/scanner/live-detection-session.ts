@@ -106,7 +106,7 @@ export function startLiveDetectionSession(
   };
 
   const sample = () => {
-    if (stopped || scheduler === null) return;
+    if (stopped || !scheduler?.canAcceptFrame) return;
     try {
       scheduler.submit(options.source.capture(options.video, controller.signal));
     } catch (error) {

@@ -1,10 +1,13 @@
+import { readRasterMetadata, SUPPORTED_RASTER_TYPES } from '../../imaging/codecs/raster-metadata';
+import { decodeRasterBitmap } from '../../imaging/codecs/decode-raster-bitmap';
+import { createImagePreview } from '../../imaging/codecs/image-preview';
 import type { CropRegion, ImageAsset, ImageDimensions } from '../../domain/document';
 import { MAX_ENCODED_INPUT_BYTES } from '../../imaging/codecs/browser-rgba-codec';
 import { isValidImageDimensions } from '../../imaging/geometry/coordinates';
 import {
-  MAX_WORKING_IMAGE_PIXELS,
-  MAX_WORKING_IMAGE_SIDE,
-} from '../../imaging/working-image-limits';
+  MAX_ORIGINAL_IMAGE_PIXELS,
+  MAX_ORIGINAL_IMAGE_SIDE,
+} from '../../imaging/original-image-limits';
 
 export type ImageImportFailureCode =
   | 'unsupported-type'
@@ -24,8 +27,6 @@ const SAFE_MESSAGES: Readonly<Record<ImageImportFailureCode, string>> = {
 };
 
 const HEADER_READ_LIMIT = 1024 * 1024;
-const SUPPORTED_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
-type SupportedType = 'image/jpeg' | 'image/png' | 'image/webp';
 
 export class ImageImportError extends Error {
   override readonly name = 'ImageImportError';
@@ -37,6 +38,7 @@ export class ImageImportError extends Error {
 
 export interface ImportedImage {
   readonly original: ImageAsset;
+  readonly preview?: ImageAsset;
   /** Present for camera captures: the live guide frozen at shutter time in original axes. */
   readonly captureCrop?: CropRegion;
 }
@@ -53,140 +55,11 @@ function checkAbort(signal: AbortSignal): void {
   if (signal.aborted) throw abortError();
 }
 
-function matches(bytes: Uint8Array, offset: number, expected: readonly number[]): boolean {
-  return expected.every((value, index) => bytes[offset + index] === value);
-}
-
-function detectedType(bytes: Uint8Array): SupportedType | null {
-  if (matches(bytes, 0, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])) {
-    return 'image/png';
-  }
-  if (matches(bytes, 0, [0xff, 0xd8, 0xff])) return 'image/jpeg';
-  if (matches(bytes, 0, [0x52, 0x49, 0x46, 0x46]) && matches(bytes, 8, [0x57, 0x45, 0x42, 0x50])) {
-    return 'image/webp';
-  }
-  return null;
-}
-
-function pngDimensions(bytes: Uint8Array): ImageDimensions | null {
-  if (bytes.byteLength < 24 || !matches(bytes, 12, [0x49, 0x48, 0x44, 0x52])) return null;
-  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  return { width: view.getUint32(16), height: view.getUint32(20) };
-}
-
-const JPEG_START_OF_FRAME = new Set([
-  0xc0, 0xc1, 0xc2, 0xc3, 0xc5, 0xc6, 0xc7, 0xc9, 0xca, 0xcb, 0xcd, 0xce, 0xcf,
-]);
-
-function jpegDimensions(bytes: Uint8Array): ImageDimensions | null {
-  let offset = 2;
-  while (offset + 3 < bytes.byteLength) {
-    if (bytes[offset] !== 0xff) return null;
-    while (bytes[offset] === 0xff) offset++;
-    const marker = bytes[offset];
-    offset++;
-    if (marker === undefined || marker === 0xd9 || marker === 0xda) return null;
-    if (marker === 0x01 || (marker >= 0xd0 && marker <= 0xd8)) continue;
-    const lengthHigh = bytes[offset];
-    const lengthLow = bytes[offset + 1];
-    if (lengthHigh === undefined || lengthLow === undefined) return null;
-    const segmentLength = (lengthHigh << 8) | lengthLow;
-    if (segmentLength < 2 || offset + segmentLength > bytes.byteLength) return null;
-    if (JPEG_START_OF_FRAME.has(marker)) {
-      if (segmentLength < 7) return null;
-      const heightHigh = bytes[offset + 3];
-      const heightLow = bytes[offset + 4];
-      const widthHigh = bytes[offset + 5];
-      const widthLow = bytes[offset + 6];
-      if (
-        heightHigh === undefined ||
-        heightLow === undefined ||
-        widthHigh === undefined ||
-        widthLow === undefined
-      ) {
-        return null;
-      }
-      return {
-        width: (widthHigh << 8) | widthLow,
-        height: (heightHigh << 8) | heightLow,
-      };
-    }
-    offset += segmentLength;
-  }
-  return null;
-}
-
-function readUint24LittleEndian(bytes: Uint8Array, offset: number): number | null {
-  const first = bytes[offset];
-  const second = bytes[offset + 1];
-  const third = bytes[offset + 2];
-  return first === undefined || second === undefined || third === undefined
-    ? null
-    : first | (second << 8) | (third << 16);
-}
-
-function webpDimensions(bytes: Uint8Array): ImageDimensions | null {
-  if (bytes.byteLength < 30) return null;
-  if (matches(bytes, 12, [0x56, 0x50, 0x38, 0x58])) {
-    const width = readUint24LittleEndian(bytes, 24);
-    const height = readUint24LittleEndian(bytes, 27);
-    return width === null || height === null ? null : { width: width + 1, height: height + 1 };
-  }
-  if (matches(bytes, 12, [0x56, 0x50, 0x38, 0x4c]) && bytes[20] === 0x2f) {
-    const first = bytes[21];
-    const second = bytes[22];
-    const third = bytes[23];
-    const fourth = bytes[24];
-    if (
-      first === undefined ||
-      second === undefined ||
-      third === undefined ||
-      fourth === undefined
-    ) {
-      return null;
-    }
-    return {
-      width: 1 + first + ((second & 0x3f) << 8),
-      height: 1 + (second >> 6) + (third << 2) + ((fourth & 0x0f) << 10),
-    };
-  }
-  if (matches(bytes, 12, [0x56, 0x50, 0x38, 0x20]) && matches(bytes, 23, [0x9d, 0x01, 0x2a])) {
-    const widthLow = bytes[26];
-    const widthHigh = bytes[27];
-    const heightLow = bytes[28];
-    const heightHigh = bytes[29];
-    if (
-      widthLow === undefined ||
-      widthHigh === undefined ||
-      heightLow === undefined ||
-      heightHigh === undefined
-    ) {
-      return null;
-    }
-    return {
-      width: (widthLow | (widthHigh << 8)) & 0x3fff,
-      height: (heightLow | (heightHigh << 8)) & 0x3fff,
-    };
-  }
-  return null;
-}
-
-function headerDimensions(bytes: Uint8Array, type: SupportedType): ImageDimensions | null {
-  switch (type) {
-    case 'image/png':
-      return pngDimensions(bytes);
-    case 'image/jpeg':
-      return jpegDimensions(bytes);
-    case 'image/webp':
-      return webpDimensions(bytes);
-  }
-}
-
 function validateDimensions(dimensions: ImageDimensions): void {
   if (!isValidImageDimensions(dimensions)) throw new ImageImportError('invalid-file');
   if (
-    Math.max(dimensions.width, dimensions.height) > MAX_WORKING_IMAGE_SIDE ||
-    dimensions.width * dimensions.height > MAX_WORKING_IMAGE_PIXELS
+    Math.max(dimensions.width, dimensions.height) > MAX_ORIGINAL_IMAGE_SIDE ||
+    dimensions.width * dimensions.height > MAX_ORIGINAL_IMAGE_PIXELS
   ) {
     throw new ImageImportError('image-too-large');
   }
@@ -209,24 +82,33 @@ export async function importImage(source: Blob, signal: AbortSignal): Promise<Im
   checkAbort(signal);
   if (!(source instanceof Blob) || source.size <= 0) throw new ImageImportError('invalid-file');
   if (source.size > MAX_ENCODED_INPUT_BYTES) throw new ImageImportError('too-large');
-  if (source.type !== '' && !SUPPORTED_TYPES.has(source.type)) {
+  if (source.type !== '' && !SUPPORTED_RASTER_TYPES.has(source.type)) {
     throw new ImageImportError('unsupported-type');
   }
 
   const header = await readHeader(source, signal);
-  const type = detectedType(header);
-  if (type === null || (source.type !== '' && source.type !== type)) {
+  const metadata = readRasterMetadata(header);
+  const type = metadata?.type;
+  if (
+    type === undefined ||
+    (source.type !== '' &&
+      source.type !== type &&
+      !(
+        ['image/heic', 'image/heif'].includes(source.type) &&
+        ['image/heic', 'image/heif'].includes(type)
+      ))
+  ) {
     throw new ImageImportError('invalid-file');
   }
-  const dimensions = headerDimensions(header, type);
-  if (dimensions === null) throw new ImageImportError('invalid-file');
+  const dimensions = metadata?.dimensions;
+  if (dimensions === undefined) throw new ImageImportError('invalid-file');
   validateDimensions(dimensions);
   const normalized = source.type === '' ? source.slice(0, source.size, type) : source;
   if (typeof createImageBitmap !== 'function') throw new ImageImportError('unavailable');
 
   let decoded: ImageBitmap | null = null;
   try {
-    decoded = await createImageBitmap(normalized, { imageOrientation: 'none' });
+    decoded = await decodeRasterBitmap(normalized, { imageOrientation: 'none' }, signal);
     checkAbort(signal);
     const decodedDimensions = { width: decoded.width, height: decoded.height };
     validateDimensions(decodedDimensions);
@@ -236,10 +118,22 @@ export async function importImage(source: Blob, signal: AbortSignal): Promise<Im
     const orientationSwap =
       decodedDimensions.width === dimensions.height &&
       decodedDimensions.height === dimensions.width;
-    if (!exactMatch && !orientationSwap) {
+    // ISO metadata preflight conservatively uses the largest item, which may be auxiliary.
+    // The decoder's primary item dimensions remain authoritative after bounded preflight.
+    if (
+      !exactMatch &&
+      !orientationSwap &&
+      !['image/heic', 'image/heif', 'image/avif'].includes(type)
+    ) {
       throw new ImageImportError('invalid-file');
     }
+    const preview =
+      decoded.width * decoded.height > 4_000_000 || ['image/heic', 'image/heif'].includes(type)
+        ? await createImagePreview(decoded)
+        : undefined;
+    checkAbort(signal);
     return {
+      ...(preview === undefined ? {} : { preview }),
       original: {
         blob: normalized,
         dimensions: decodedDimensions,

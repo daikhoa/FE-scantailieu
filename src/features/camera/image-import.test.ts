@@ -102,10 +102,10 @@ describe('image import', () => {
 
   it.each([
     [new Blob([], { type: 'image/png' }), 'invalid-file'],
-    [new Blob(['heic'], { type: 'image/heic' }), 'unsupported-type'],
+    [new Blob(['heic'], { type: 'image/heic' }), 'invalid-file'],
     [png(0, 10), 'invalid-file'],
-    [png(8193, 1), 'image-too-large'],
-    [png(5000, 5000), 'image-too-large'],
+    [png(16385, 1), 'image-too-large'],
+    [png(8001, 8000), 'image-too-large'],
   ])('rejects invalid or excessive input before decode', async (source, code) => {
     const create = vi.fn();
     vi.stubGlobal('createImageBitmap', create);
@@ -125,6 +125,28 @@ describe('image import', () => {
       code: 'too-large',
     });
     expect(arrayBuffer).not.toHaveBeenCalled();
+  });
+
+  it('accepts a 48MP photo larger than the old 64MiB limit without replacing original bytes', async () => {
+    vi.stubGlobal(
+      'OffscreenCanvas',
+      class {
+        getContext() {
+          return null;
+        }
+      },
+    );
+    const source = jpeg(8000, 6000);
+    Object.defineProperty(source, 'size', { value: 65 * 1024 * 1024 });
+    const decoded = bitmap(8000, 6000);
+    vi.stubGlobal(
+      'createImageBitmap',
+      vi.fn(() => Promise.resolve(decoded)),
+    );
+    const result = await importImage(source, new AbortController().signal);
+    expect(result.original.blob).toBe(source);
+    expect(result.original.dimensions).toEqual({ width: 8000, height: 6000 });
+    expect(decoded.close).toHaveBeenCalledOnce();
   });
 
   it('rejects a decoder dimension mismatch and closes the bitmap', async () => {

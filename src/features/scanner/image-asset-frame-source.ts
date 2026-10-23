@@ -2,7 +2,8 @@ import type { RgbaBackendInput } from '../../imaging/engines/scanic-backend-cont
 import type { ImageAsset } from '../../domain/document';
 import { validateRasterAsset } from '../../imaging/codecs/browser-rgba-codec';
 import type { ScannerFrame } from '../../imaging/contracts/scanner-engine';
-import { createRgbaScannerFrame } from '../../imaging/engines/scanic-classical-engine';
+import { createOneShotScannerFrame } from '../../imaging/engines/scanic-classical-engine';
+import { decodeRasterBitmap } from '../../imaging/codecs/decode-raster-bitmap';
 import { ScannerEngineError } from '../../imaging/engines/scanner-engine-error';
 import { MAX_WORKING_IMAGE_SIDE } from '../../imaging/working-image-limits';
 
@@ -36,7 +37,7 @@ function browserDecoder(blob: Blob, options?: ImageBitmapOptions): Promise<Image
   if (typeof createImageBitmap !== 'function') {
     return Promise.reject(new ScannerEngineError('unavailable'));
   }
-  return createImageBitmap(blob, options);
+  return decodeRasterBitmap(blob, options);
 }
 
 function browserCanvas(): HTMLCanvasElement {
@@ -89,7 +90,7 @@ export function createImageAssetFrameSource(
         checkAbort(signal);
         const pixels = context.getImageData(0, 0, dimensions.width, dimensions.height).data;
         checkAbort(signal);
-        return createRgbaScannerFrame(dimensions, pixels);
+        return createOneShotScannerFrame(dimensions, pixels);
       } catch (error) {
         if (signal.aborted) throw abortError();
         if (error instanceof ScannerEngineError) throw error;
