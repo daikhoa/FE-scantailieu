@@ -233,6 +233,28 @@ describe('live Scanic detection session', () => {
     expect(engineFactory).not.toHaveBeenCalled();
   });
 
+  it('stops automatic bootstrap retries after three consecutive failures', async () => {
+    const fixture = frames();
+    const engineFactory = vi.fn(() => {
+      const engine = engineFixture();
+      engine.initialize.mockRejectedValue(new Error('bootstrap failed'));
+      return engine.scanner;
+    });
+    const session = startLiveDetectionSession({
+      engineFactory,
+      source: fixture.source,
+      video: {} as HTMLVideoElement,
+      onResult: vi.fn(),
+      onError: vi.fn(),
+      retryDelayMs: 50,
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(engineFactory).toHaveBeenCalledTimes(3);
+    expect(fixture.capture).not.toHaveBeenCalled();
+    await session.stop();
+    expect(fixture.dispose).toHaveBeenCalledOnce();
+  });
+
   it('still recovers when an error observer throws', async () => {
     const failed = engineFixture();
     failed.detect.mockRejectedValueOnce(new Error('transient worker failure'));

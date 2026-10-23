@@ -12,11 +12,7 @@ async function loadMainThreadFallback(): Promise<ClassicalBackend> {
   return module.createScanicMainThreadBackend();
 }
 
-function failureCode(error: unknown): string | null {
-  return typeof error === 'object' && error !== null && 'code' in error ? String(error.code) : null;
-}
-
-/** Prefers the worker and lazy-loads a main-thread fallback only for missing browser capability. */
+/** Try one owned DOM realm if worker bootstrap cannot run the ML model on this browser. */
 export function createCompatibleScanicBackend(
   options: CompatibleBackendOptions = {},
 ): ClassicalBackend {
@@ -27,6 +23,7 @@ export function createCompatibleScanicBackend(
   let initializing = false;
   let disposed = false;
   let usingWorker = true;
+  let workerVerified = false;
   const cleanup = new WeakMap<ClassicalBackend, Promise<void>>();
   const isDisposed = () => disposed;
   const release = (backend: ClassicalBackend): Promise<void> => {
@@ -65,7 +62,7 @@ export function createCompatibleScanicBackend(
         try {
           await activate(createWorker());
         } catch (error) {
-          if (isDisposed() || failureCode(error) !== 'unavailable') throw error;
+          if (isDisposed()) throw error;
           usingWorker = false;
           await activate(await createFallback());
         }
@@ -78,12 +75,17 @@ export function createCompatibleScanicBackend(
       // Retain only the reduced detection frame for one retry; warp never makes this copy.
       const retryInput = { dimensions: input.dimensions, pixels: input.pixels.slice() };
       try {
-        return await current.detect(input);
+        const output = await current.detect(input);
+        if (usingWorker) workerVerified = true;
+        return output;
       } catch (error) {
         if (isDisposed()) throw error;
         initialized = false;
         await release(current);
         if (isDisposed()) throw new ScannerEngineError('unavailable');
+        // Scanner.initialize() swallows vendor errors. Its first real inference is the
+        // bootstrap check; recreating an incompatible worker cannot repair that failure.
+        if (usingWorker && !workerVerified) usingWorker = false;
         const recovered = usingWorker ? createWorker() : await createFallback();
         try {
           await activate(recovered);

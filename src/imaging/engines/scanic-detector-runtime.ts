@@ -1,3 +1,4 @@
+import { SCANIC_ML_ASSET_BASE } from './scanic-ml-assets';
 import { Scanner, type DetectionOptions, type ScannerResult } from 'scanic';
 
 export type ScanicDetectorKind = 'ml';
@@ -17,7 +18,8 @@ function detectorOptions(): DetectionOptions {
     ...COMMON_OPTIONS,
     detector: 'ml',
     ml: {
-      assetBaseUrl: '/scanic-ml/',
+      assetBaseUrl: SCANIC_ML_ASSET_BASE,
+      numThreads: 1,
       minScore: SCANIC_ML_MIN_SCORE,
       modelFetchTimeoutMs: 30_000,
     },

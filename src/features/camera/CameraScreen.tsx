@@ -62,6 +62,7 @@ export function CameraScreen({
   const [state, setState] = useState<CameraViewState>({ kind: 'idle' });
   const [liveDetection, setLiveDetection] = useState<LiveDetectionResult | null>(null);
   const [detectionFailed, setDetectionFailed] = useState(false);
+  const [detectionAttempt, setDetectionAttempt] = useState(0);
   const [capturing, setCapturing] = useState(false);
   const [captureFailed, setCaptureFailed] = useState(false);
   const [activationRequest, setActivationRequest] = useState(0);
@@ -69,6 +70,7 @@ export function CameraScreen({
   const request = useRef<AbortController | null>(null);
   const video = useRef<HTMLVideoElement>(null);
   const mounted = useRef(true);
+  const detectionCleanup = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
     mounted.current = true;
@@ -112,36 +114,48 @@ export function CameraScreen({
   }, [state]);
 
   useEffect(() => {
-    if (state.kind !== 'active' || video.current === null) return;
+    const preview = video.current;
+    if (state.kind !== 'active' || preview === null) return;
     setLiveDetection(null);
     setDetectionFailed(false);
-    const session = startLiveDetectionSession({
-      engineFactory,
-      source: frameSourceFactory(),
-      video: video.current,
-      onResult: (result) => {
-        if (!mounted.current) return;
-        setDetectionFailed(false);
-        setLiveDetection(result);
-      },
-      onError: () => {
-        if (!mounted.current) return;
-        setLiveDetection((current) =>
-          current === null
-            ? null
-            : {
-                kind: 'full-frame',
-                dimensions: current.dimensions,
-                reason: 'unstable-document',
-              },
-        );
-        setDetectionFailed(true);
-      },
-    });
+    let cancelled = false;
+    let session: ReturnType<typeof startLiveDetectionSession> | undefined;
+    // Retire the previous WASM realm before starting another, including manual retries.
+    void detectionCleanup.current
+      .then(() => {
+        if (cancelled) return;
+        session = startLiveDetectionSession({
+          engineFactory,
+          source: frameSourceFactory(),
+          video: preview,
+          onResult: (result) => {
+            if (cancelled || !mounted.current) return;
+            setDetectionFailed(false);
+            setLiveDetection(result);
+          },
+          onError: () => {
+            if (cancelled || !mounted.current) return;
+            setLiveDetection((current) =>
+              current === null
+                ? null
+                : {
+                    kind: 'full-frame',
+                    dimensions: current.dimensions,
+                    reason: 'unstable-document',
+                  },
+            );
+            setDetectionFailed(true);
+          },
+        });
+      })
+      .catch(() => {
+        if (!cancelled && mounted.current) setDetectionFailed(true);
+      });
     return () => {
-      void session.stop().catch(() => undefined);
+      cancelled = true;
+      if (session !== undefined) detectionCleanup.current = session.stop().catch(() => undefined);
     };
-  }, [engineFactory, frameSourceFactory, state]);
+  }, [detectionAttempt, engineFactory, frameSourceFactory, state]);
 
   const closeCamera = useCallback(() => {
     request.current?.abort();
@@ -236,6 +250,9 @@ export function CameraScreen({
         title={title}
         canFinish={onFinishCapture !== undefined && batchStatus !== undefined}
         onCapture={() => void capturePhoto()}
+        onRetryDetection={() => {
+          setDetectionAttempt((current) => current + 1);
+        }}
         onClose={exitCamera}
         onExit={exitCamera}
         onFinish={() => {

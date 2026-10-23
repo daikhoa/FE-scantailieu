@@ -21,6 +21,7 @@ interface ActiveCameraViewProps {
   readonly title: string;
   readonly canFinish: boolean;
   readonly onCapture: () => void;
+  readonly onRetryDetection: () => void;
   readonly onClose: () => void;
   readonly onExit: () => void;
   readonly onFinish: () => void;
@@ -58,6 +59,7 @@ export function ActiveCameraView({
   title,
   canFinish,
   onCapture,
+  onRetryDetection,
   onClose,
   onExit,
   onFinish,
@@ -101,13 +103,16 @@ export function ActiveCameraView({
             muted
             playsInline
           />
-          <DocumentOverlay result={liveDetection} />
+          <DocumentOverlay result={liveDetection} unavailable={detectionFailed} />
         </div>
         {detectionFailed || captureFailed ? (
           <div className="camera-capture-screen__errors">
             {detectionFailed ? (
               <p className="camera-error camera-error--overlay" role="alert">
-                Scanic tạm thời không nhận diện được; ảnh chụp vẫn được giữ toàn khung.
+                Scanic tạm thời không nhận diện được; bạn vẫn có thể chụp toàn khung.
+                <button className="camera-detection-retry" type="button" onClick={onRetryDetection}>
+                  Thử nhận diện lại
+                </button>
               </p>
             ) : null}
             {captureFailed ? (

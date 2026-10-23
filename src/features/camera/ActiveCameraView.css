@@ -258,3 +258,17 @@ html.camera-active body {
   background: #f7faf9;
   box-shadow: inset 0 0 0 0.1875rem #050706;
 }
+
+.camera-detection-retry {
+  display: block;
+  min-height: 2.75rem;
+  margin-top: 0.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid currentColor;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: var(--color-accent-strong);
+  font-weight: 700;
+  cursor: pointer;
+  pointer-events: auto;
+}

@@ -30,7 +30,7 @@ See [numeric results](../benchmarks/ml-only-pipeline-2026-10-23.json). Chrome he
 
 SmartDoc development/holdout mean IoU is 0.9779/0.9523, with 15/15 passing IoU ≥ 0.90. Synthetic smoke detects 2/2 documents and avoids 2/2 negative fixtures. Page/Worker/iframe network audits report zero requests outside the local origin. No image data is logged.
 
-The classifier explicitly references the installed ORT 1.27 asyncify WASM. A trial adding 26.8 MB JSEP was discarded; the final build keeps the existing 24.3 MB asyncify binary (about 6 MB gzip) and Scanic's 1.52 MB WASM. Dependency and model versions are unchanged. The adaptive pixel path uses bounded CPU operations in the Scanic Worker; no performance advantage over GPU processing on phones is claimed.
+The detector runtime assets and bootstrap recovery were subsequently corrected in [decision 004](004-detector-runtime-compatibility.md); the original measurements below describe the earlier build. The classifier explicitly references the installed ORT 1.27 asyncify WASM. A trial adding 26.8 MB JSEP was discarded; the final build keeps the existing 24.3 MB asyncify binary (about 6 MB gzip) and Scanic's 1.52 MB WASM. Dependency and model versions are unchanged. The adaptive pixel path uses bounded CPU operations in the Scanic Worker; no performance advantage over GPU processing on phones is claimed.
 
 Numeric timing collection is capped at 24 measurements and disabled in production unless `VITE_SCAN_TIMINGS=true`. Phone latency, prolonged camera thermals, long-session memory, real OCR accuracy and classifier calibration remain device-validation work. Synthetic fixtures and this small SmartDoc sample do not qualify every lighting, stamp or handwriting case.
 

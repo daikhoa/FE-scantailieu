@@ -2,6 +2,7 @@ import type { LiveDetectionResult } from './detection-scheduler';
 
 interface DocumentOverlayProps {
   readonly result: LiveDetectionResult | null;
+  readonly unavailable?: boolean;
 }
 
 function statusText(result: LiveDetectionResult | null): string {
@@ -25,8 +26,8 @@ function polygonPoints(result: LiveDetectionResult): string {
   return `0,0 ${String(width)},0 ${String(width)},${String(height)} 0,${String(height)}`;
 }
 
-export function DocumentOverlay({ result }: DocumentOverlayProps) {
-  const detection = result?.kind ?? 'searching';
+export function DocumentOverlay({ result, unavailable = false }: DocumentOverlayProps) {
+  const detection = unavailable ? 'unavailable' : (result?.kind ?? 'searching');
   return (
     <div className="document-overlay" data-detection={detection}>
       {result === null ? null : (
@@ -50,7 +51,7 @@ export function DocumentOverlay({ result }: DocumentOverlayProps) {
         </svg>
       )}
       <p className="document-overlay__status" role="status" aria-live="polite">
-        {statusText(result)}
+        {unavailable ? 'Nhận diện đang lỗi — bạn vẫn có thể chụp toàn khung.' : statusText(result)}
       </p>
     </div>
   );

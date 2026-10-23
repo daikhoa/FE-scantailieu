@@ -260,7 +260,37 @@ describe('CameraScreen', () => {
       'Scanic tạm thời không nhận diện được',
     );
     expect(screen.queryByText('Đã định khung tài liệu.')).not.toBeInTheDocument();
-    expect(screen.getByText('Giữ máy ổn định để định khung tài liệu.')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Nhận diện đang lỗi');
+  });
+
+  it('can retry failed detection without reopening the camera or blocking capture', async () => {
+    const stream = { getTracks: () => [] } as unknown as MediaStream;
+    const start = vi.fn(() => Promise.resolve({ stream, stop: vi.fn() }));
+    const released = deferred<undefined>();
+    const initialize = vi.fn<ScannerEngine['initialize']>(() =>
+      Promise.reject(new Error('private runtime detail')),
+    );
+    const dispose = vi.fn<ScannerEngine['dispose']>(() => released.promise);
+    const failed = { ...detectionEngine(vi.fn()), initialize, dispose };
+    const recovered = detectionEngine((frame) =>
+      Promise.resolve({ kind: 'full-frame', dimensions: frame.dimensions, reason: 'no-document' }),
+    );
+    const engineFactory = vi.fn().mockReturnValueOnce(failed).mockReturnValue(recovered);
+    renderCamera(fakeService(start), vi.fn(), {
+      engineFactory,
+      frameSourceFactory: videoFrameSource,
+    });
+    await screen.findByRole('alert');
+    expect(screen.getByRole('status')).toHaveTextContent('Nhận diện đang lỗi');
+    expect(screen.queryByText('Đang tìm tài liệu…')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Chụp tài liệu' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Thử nhận diện lại' }));
+    expect(engineFactory).toHaveBeenCalledOnce();
+    released.resolve(undefined);
+    await screen.findByText('Chưa thấy tài liệu — ảnh sẽ giữ toàn bộ khung.');
+    expect(start).toHaveBeenCalledOnce();
+    expect(dispose).toHaveBeenCalledOnce();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('captures a high-resolution photo and queues the original without closing the camera', async () => {

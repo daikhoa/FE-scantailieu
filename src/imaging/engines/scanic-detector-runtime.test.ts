@@ -38,7 +38,10 @@ describe('Scanic detector runtime recovery', () => {
       detector: 'ml',
       success: true,
     });
-    expect(createScanner.mock.calls[0]?.[0]).toMatchObject({ detector: 'ml' });
+    expect(createScanner.mock.calls[0]?.[0]).toMatchObject({
+      detector: 'ml',
+      ml: { numThreads: 1, assetBaseUrl: '/scanic-ml/ort-1.27.0/' },
+    });
   });
 
   it('propagates ML failure without ever constructing a classical detector', async () => {

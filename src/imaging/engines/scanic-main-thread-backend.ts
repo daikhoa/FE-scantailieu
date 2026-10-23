@@ -48,11 +48,35 @@ export function createScanicMainThreadBackend(): ClassicalBackend {
   });
   // Attach the rejection handler before asynchronous iframe loading or caller cancellation.
   void ready.catch(() => undefined);
+  let moduleScript: HTMLScriptElement | null = null;
   frame.onload = () => {
-    if (!disposed)
-      frame.contentWindow?.postMessage('scanic-connect', window.location.origin, [channel.port2]);
+    if (disposed || moduleScript !== null) return;
+    const frameDocument = frame.contentDocument;
+    if (frameDocument === null) {
+      readyReject?.(new ScannerEngineError('unavailable'));
+      return;
+    }
+    const script = frameDocument.createElement('script');
+    moduleScript = script;
+    script.type = 'module';
+    script.src = url.href;
+    script.onload = () => {
+      if (disposed) return;
+      try {
+        if (frame.contentWindow === null) throw new ScannerEngineError('unavailable');
+        frame.contentWindow.postMessage('scanic-connect', window.location.origin, [channel.port2]);
+      } catch {
+        readyReject?.(new ScannerEngineError('unavailable'));
+      }
+    };
+    script.onerror = () => {
+      readyReject?.(new ScannerEngineError('unavailable'));
+    };
+    // Build tools can escape closing script tags inside HTML strings twice.
+    // DOM insertion also lets us wait for module evaluation before transferring the port.
+    frameDocument.head.append(script);
   };
-  frame.srcdoc = `<!doctype html><script type="module" src="${url.href}"></script>`;
+  frame.src = 'about:blank';
   document.body.append(frame);
 
   async function request(
@@ -123,6 +147,10 @@ export function createScanicMainThreadBackend(): ClassicalBackend {
         current = null;
       }
       frame.onload = null;
+      if (moduleScript !== null) {
+        moduleScript.onload = null;
+        moduleScript.onerror = null;
+      }
       channel.port1.close();
       channel.port2.close();
       frame.remove();

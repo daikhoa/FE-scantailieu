@@ -1,14 +1,26 @@
+import { SCANIC_ML_ASSET_BASE, SCANIC_ORT_VERSION } from './src/imaging/engines/scanic-ml-assets';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const SCANIC_ML_ASSETS = [
-  'doccornernet_lean.ort',
-  'ort-wasm-simd-threaded.mjs',
-  'ort-wasm-simd-threaded.wasm',
-] as const;
-const SCANIC_ML_ASSET_DIRECTORY = resolve('node_modules/scanic-ml/dist');
+const installedOrt = JSON.parse(
+  readFileSync(resolve('node_modules/onnxruntime-web/package.json'), 'utf8'),
+) as { version: string };
+if (installedOrt.version !== SCANIC_ORT_VERSION)
+  throw new Error('Update the versioned Scanic asset path when changing ONNX Runtime.');
+
+// Scanic 1.6 bundles ORT 1.27 JS. Its optional minimal WASM is built with
+// ORT 1.23.2; use our pinned matching CPU runtime rather than mixing ABIs.
+const SCANIC_ML_ASSETS = {
+  'doccornernet_lean.ort': resolve('node_modules/scanic-ml/dist/doccornernet_lean.ort'),
+  'ort-wasm-simd-threaded.mjs': resolve(
+    'node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.mjs',
+  ),
+  'ort-wasm-simd-threaded.wasm': resolve(
+    'node_modules/onnxruntime-web/dist/ort-wasm-simd-threaded.wasm',
+  ),
+} as const;
 
 function scanicMlContentType(fileName: string): string {
   if (fileName.endsWith('.wasm')) return 'application/wasm';
@@ -22,23 +34,23 @@ export default defineConfig({
     {
       name: 'self-host-scanic-ml',
       configureServer(server) {
-        server.middlewares.use('/scanic-ml', (request, response, next) => {
+        server.middlewares.use(SCANIC_ML_ASSET_BASE.slice(0, -1), (request, response, next) => {
           const fileName = new URL(request.url ?? '/', 'http://localhost').pathname.slice(1);
-          if (!SCANIC_ML_ASSETS.includes(fileName as (typeof SCANIC_ML_ASSETS)[number])) {
+          if (!Object.hasOwn(SCANIC_ML_ASSETS, fileName)) {
             next();
             return;
           }
           response.setHeader('Content-Type', scanicMlContentType(fileName));
           response.setHeader('Cache-Control', 'no-store');
-          response.end(readFileSync(resolve(SCANIC_ML_ASSET_DIRECTORY, fileName)));
+          response.end(readFileSync(SCANIC_ML_ASSETS[fileName as keyof typeof SCANIC_ML_ASSETS]));
         });
       },
       generateBundle() {
-        for (const fileName of SCANIC_ML_ASSETS) {
+        for (const fileName of Object.keys(SCANIC_ML_ASSETS)) {
           this.emitFile({
             type: 'asset',
-            fileName: `scanic-ml/${fileName}`,
-            source: readFileSync(resolve(SCANIC_ML_ASSET_DIRECTORY, fileName)),
+            fileName: `${SCANIC_ML_ASSET_BASE.slice(1)}${fileName}`,
+            source: readFileSync(SCANIC_ML_ASSETS[fileName as keyof typeof SCANIC_ML_ASSETS]),
           });
         }
       },

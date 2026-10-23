@@ -16,6 +16,7 @@ const FAILURE_CODES = new Set<ProcessingFailure['code']>([
   'failed',
 ]);
 const MINIMUM_RETRY_DELAY_MS = 50;
+const MAX_CONSECUTIVE_FAILURES = 3;
 
 interface LiveDetectionSessionOptions extends DetectionSmootherOptions {
   readonly engineFactory: () => ScannerEngine;
@@ -83,6 +84,12 @@ export function startLiveDetectionSession(
   let endCycle: (() => void) | null = null;
   let stopping: Promise<void> | null = null;
   let cleanupFailure = false;
+  const stopSampling = () => {
+    if (timer !== null) {
+      clearInterval(timer);
+      timer = null;
+    }
+  };
   const aborted = () => controller.signal.aborted;
   const notifyFailure = (failure: ProcessingFailure) => {
     try {
@@ -114,6 +121,7 @@ export function startLiveDetectionSession(
 
   const manager = (async () => {
     let retryDelayMs = initialRetryDelayMs;
+    let consecutiveFailures = 0;
     while (!aborted()) {
       let cycleEngine: ScannerEngine | null = null;
       let activeScheduler: ReturnType<typeof createDetectionScheduler> | null = null;
@@ -140,6 +148,7 @@ export function startLiveDetectionSession(
           engine: cycleEngine,
           onResult: (result) => {
             retryDelayMs = initialRetryDelayMs;
+            consecutiveFailures = 0;
             try {
               options.onResult(result);
             } catch {
@@ -188,10 +197,12 @@ export function startLiveDetectionSession(
         }
       }
 
-      if (aborted() || cycleCleanupFailed) break;
+      consecutiveFailures++;
+      if (aborted() || cycleCleanupFailed || consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) break;
       await waitForRetry(retryDelayMs, controller.signal);
       retryDelayMs = Math.min(initialRetryDelayMs * 8, retryDelayMs * 2);
     }
+    stopSampling();
   })();
 
   timer = setInterval(sample, intervalMs);

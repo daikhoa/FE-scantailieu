@@ -82,20 +82,25 @@
         };
       }
 
-      try {
-        const result = await run();
-        resultElement.dataset.status = 'complete';
-        resultElement.textContent = JSON.stringify(result, null, 2);
-      } catch (error) {
-        resultElement.dataset.status = 'failed';
-        resultElement.textContent = JSON.stringify(
-          { error: error instanceof Error ? error.name : 'UnknownError' },
-          null,
-          2,
-        );
-      } finally {
-        await engine.dispose().catch(() => undefined);
+      // Keep the entry module synchronous: the lazy fallback imports shared symbols
+      // from this chunk, so top-level await would deadlock that dynamic import.
+      async function runSmoke() {
+        try {
+          const result = await run();
+          resultElement.dataset.status = 'complete';
+          resultElement.textContent = JSON.stringify(result, null, 2);
+        } catch (error) {
+          resultElement.dataset.status = 'failed';
+          resultElement.textContent = JSON.stringify(
+            { error: error instanceof Error ? error.name : 'UnknownError' },
+            null,
+            2,
+          );
+        } finally {
+          await engine.dispose().catch(() => undefined);
+        }
       }
+      void runSmoke();
     </script>
   </body>
 </html>

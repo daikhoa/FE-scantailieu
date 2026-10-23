@@ -78,7 +78,8 @@ describe('Scanic document detector worker runtime', () => {
         debug: false,
         maxProcessingDimension: 8192,
         ml: {
-          assetBaseUrl: '/scanic-ml/',
+          assetBaseUrl: '/scanic-ml/ort-1.27.0/',
+          numThreads: 1,
           minScore: 0.5,
           modelFetchTimeoutMs: 30_000,
         },
@@ -97,7 +98,8 @@ describe('Scanic document detector worker runtime', () => {
       debug: false,
       maxProcessingDimension: 8192,
       ml: {
-        assetBaseUrl: '/scanic-ml/',
+        assetBaseUrl: '/scanic-ml/ort-1.27.0/',
+        numThreads: 1,
         minScore: 0.5,
         modelFetchTimeoutMs: 30_000,
       },
