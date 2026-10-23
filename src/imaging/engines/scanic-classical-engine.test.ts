@@ -606,36 +606,39 @@ describe('Scanic serialized work, cancellation and cleanup', () => {
     await engine.dispose();
   });
 
-  it('passes supported document filters to the worker and honors cancellation', async () => {
-    const codec = fakeCodec();
-    const decode = vi.spyOn(codec, 'decode');
-    const backend = fakeBackend();
-    backend.warp = vi.fn((input) => Promise.resolve(input));
-    const engine = createScanicClassicalEngine({ createBackend: () => backend, codec });
-    await engine.initialize(signal());
-    const request = {
-      original: { blob: new Blob(['original'], { type: 'image/png' }), dimensions },
-      orientation: 0 as const,
-      recipe: {
-        version: 1,
-        crop: { kind: 'full-frame' as const },
-        rotation: 0 as const,
-        dewarp: { mode: 'perspective-only' as const },
-        filter: { mode: 'ocr-color' as const, presetVersion: '1', parameters: {} },
-      },
-    };
+  it.each(['ocr-color', 'enhanced-color'] as const)(
+    'passes %s to the worker and honors cancellation',
+    async (mode) => {
+      const codec = fakeCodec();
+      const decode = vi.spyOn(codec, 'decode');
+      const backend = fakeBackend();
+      backend.warp = vi.fn((input) => Promise.resolve(input));
+      const engine = createScanicClassicalEngine({ createBackend: () => backend, codec });
+      await engine.initialize(signal());
+      const request = {
+        original: { blob: new Blob(['original'], { type: 'image/png' }), dimensions },
+        orientation: 0 as const,
+        recipe: {
+          version: 1,
+          crop: { kind: 'full-frame' as const },
+          rotation: 0 as const,
+          dewarp: { mode: 'perspective-only' as const },
+          filter: { mode, presetVersion: '1', parameters: {} },
+        },
+      };
 
-    await expect(engine.render(request, signal())).resolves.toBeDefined();
-    expect(decode).toHaveBeenCalledOnce();
-    expect(backend.warp).toHaveBeenCalledWith(expect.anything(), expect.anything(), 0, 'ocr-color');
-    const controller = new AbortController();
-    controller.abort('private document metadata');
-    await expect(engine.render(request, controller.signal)).rejects.toMatchObject({
-      name: 'AbortError',
-      message: 'Scanner operation cancelled.',
-    });
-    await engine.dispose();
-  });
+      await expect(engine.render(request, signal())).resolves.toBeDefined();
+      expect(decode).toHaveBeenCalledOnce();
+      expect(backend.warp).toHaveBeenCalledWith(expect.anything(), expect.anything(), 0, mode);
+      const controller = new AbortController();
+      controller.abort('private document metadata');
+      await expect(engine.render(request, controller.signal)).rejects.toMatchObject({
+        name: 'AbortError',
+        message: 'Scanner operation cancelled.',
+      });
+      await engine.dispose();
+    },
+  );
 
   it('rejects unknown runtime filters before decoding', async () => {
     const codec = fakeCodec();

@@ -877,6 +877,12 @@ button.batch-page__preview {
   filter: grayscale(1);
 }
 
+.batch-filter-strip__sample--enhanced-color {
+  background:
+    linear-gradient(140deg, rgb(31 209 164 / 60%), transparent 55%),
+    repeating-linear-gradient(#fff 0 6px, #344e45 7px 8px);
+}
+
 .batch-filter-strip__sample--black-and-white {
   background: repeating-linear-gradient(#fff 0 6px, #111 7px 9px);
 }

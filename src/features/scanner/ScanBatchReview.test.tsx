@@ -110,6 +110,15 @@ describe('ScanBatchReview', () => {
       parameters: {},
     });
 
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng cường' }));
+    await waitFor(() => {
+      expect(onApplyRecipe).toHaveBeenCalledTimes(2);
+    });
+    expect(onApplyRecipe.mock.calls[1]?.[1]).toEqual({
+      ...page.page.recipe,
+      filter: { mode: 'enhanced-color', presetVersion: 'enhanced-color-v1', parameters: {} },
+    });
+
     fireEvent.click(screen.getByRole('button', { name: 'Cắt trang 1' }));
     expect(screen.getByRole('heading', { name: 'Điều chỉnh 4 góc' })).toBeInTheDocument();
     expect(screen.getAllByRole('slider')).toHaveLength(4);

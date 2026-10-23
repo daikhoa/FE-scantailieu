@@ -37,6 +37,7 @@ const ENGINE_VERSION = 'scanic-1.6.0+ml-only-perspective-v2-filter-v8';
 const FILTER_MODES: readonly FilterMode[] = [
   'original',
   'ocr-color',
+  'enhanced-color',
   'grayscale',
   'black-and-white',
 ];

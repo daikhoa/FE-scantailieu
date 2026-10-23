@@ -8,12 +8,14 @@ export interface DocumentFilterOption {
 
 export const DOCUMENT_FILTERS: readonly DocumentFilterOption[] = [
   { mode: 'original', label: 'Gốc', description: 'Chỉ cắt và làm thẳng' },
+  { mode: 'enhanced-color', label: 'Tăng cường', description: 'Màu đậm, tương phản rõ hơn' },
   { mode: 'ocr-color', label: 'Tự động', description: 'Làm nét chữ, giữ màu' },
   { mode: 'grayscale', label: 'Xám', description: 'Nền trung tính, chữ rõ' },
   { mode: 'black-and-white', label: 'Đen trắng', description: 'Tách chữ khỏi nền' },
 ];
 
 function presetVersion(mode: FilterMode): string {
+  if (mode === 'enhanced-color') return 'enhanced-color-v1';
   return mode === 'original'
     ? 'original-v1'
     : mode === 'black-and-white'

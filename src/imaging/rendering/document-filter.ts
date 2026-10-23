@@ -1,4 +1,5 @@
 import { applyClaheLightness } from './clahe-lightness';
+import { enhanceColorContrast } from './enhanced-color';
 import { adjustLabLightness } from './lab-lightness';
 import type { LocalRestorationAnalysis } from '../restoration/local-restoration-client';
 import type { FilterMode } from '../../domain/document';
@@ -12,6 +13,7 @@ import type { RgbaImage } from './perspective-warp';
 const FILTER_MODES: readonly FilterMode[] = [
   'original',
   'ocr-color',
+  'enhanced-color',
   'grayscale',
   'black-and-white',
 ];
@@ -459,6 +461,10 @@ export function applyDocumentFilter(
 ): RgbaImage {
   validateInput(input, mode);
   if (mode === 'original') return input;
+  if (mode === 'enhanced-color') {
+    enhanceColorContrast(input, (analysis?.quality ?? analyzeDocumentQuality(input)).brightness);
+    return input;
+  }
   if (
     mode === 'ocr-color' &&
     analysis?.strengths !== undefined &&

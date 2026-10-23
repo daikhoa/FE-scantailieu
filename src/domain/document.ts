@@ -38,7 +38,8 @@ export type CropRegion =
   /** Recipe crop points always use the original stored image's axes and dimensions. */
   | { readonly kind: 'document'; readonly corners: DocumentCorners };
 
-export type FilterMode = 'original' | 'ocr-color' | 'grayscale' | 'black-and-white';
+export type FilterMode =
+  'original' | 'ocr-color' | 'enhanced-color' | 'grayscale' | 'black-and-white';
 
 export interface EditRecipe {
   readonly version: number;
