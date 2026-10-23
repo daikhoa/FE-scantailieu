@@ -1,3 +1,5 @@
+import type { LocalRestorationAnalysis } from '../restoration/local-restoration-client';
+import type { RgbaBackendInput } from '../engines/scanic-backend-contract';
 import type {
   DocumentCorners,
   EditRecipe,
@@ -61,6 +63,10 @@ export interface RenderPageRequest {
   readonly maximumOutputLongSide?: number;
   /** Keeps rendered pixels for one zero-copy handoff to the local restoration worker. */
   readonly preserveOutputPixels?: boolean;
+  readonly analysis?: LocalRestorationAnalysis;
+  readonly createThumbnail?: boolean;
+  /** Transfers captured storage only after its durable original has been saved. */
+  readonly consumeSourcePixels?: boolean;
 }
 
 /**
@@ -76,6 +82,8 @@ export interface ScannerEngine {
   detect(frame: ScannerFrame, signal: AbortSignal): Promise<DetectionResult>;
   /** Returned blobs belong to the caller; any object URLs it creates must be revoked by it. */
   render(request: RenderPageRequest, signal: AbortSignal): Promise<RenderedVariant>;
+  /** Unencoded rough crop for analysis; production adapters implement this path. */
+  renderPixels?(request: RenderPageRequest, signal: AbortSignal): Promise<RgbaBackendInput>;
   /** Idempotently cancel/settle in-flight jobs and free engine resources; cleanup cannot abort. */
   dispose(): Promise<void>;
 }

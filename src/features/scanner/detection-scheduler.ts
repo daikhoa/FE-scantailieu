@@ -134,6 +134,8 @@ export function createDetectionSmoother(partial: DetectionSmootherOptions = {}):
         confidence: number;
         count: number;
         misses: number;
+        locked: boolean;
+        minimumConfidence: number;
       }
     | undefined;
 
@@ -147,7 +149,7 @@ export function createDetectionSmoother(partial: DetectionSmootherOptions = {}):
       if (result.kind === 'full-frame') {
         if (
           candidate !== undefined &&
-          candidate.count >= options.stableFrames &&
+          candidate.locked &&
           sameDimensions(candidate.dimensions, result.dimensions) &&
           candidate.misses < options.missTolerance
         ) {
@@ -175,6 +177,8 @@ export function createDetectionSmoother(partial: DetectionSmootherOptions = {}):
           confidence: result.confidence,
           count: 1,
           misses: 0,
+          locked: false,
+          minimumConfidence: result.confidence,
         };
       } else {
         candidate = {
@@ -185,16 +189,23 @@ export function createDetectionSmoother(partial: DetectionSmootherOptions = {}):
             (result.confidence - candidate.confidence) * options.smoothingAlpha,
           count: candidate.count + 1,
           misses: 0,
+          locked: candidate.locked,
+          minimumConfidence: Math.min(candidate.minimumConfidence, result.confidence),
         };
       }
 
-      if (candidate.count < options.stableFrames) {
+      const requiredFrames =
+        partial.stableFrames === undefined && candidate.minimumConfidence >= 0.85
+          ? 2
+          : options.stableFrames;
+      if (!candidate.locked && candidate.count < requiredFrames) {
         return {
           kind: 'full-frame',
           dimensions: result.dimensions,
           reason: 'unstable-document',
         };
       }
+      candidate.locked = true;
       return {
         kind: 'document',
         dimensions: candidate.dimensions,

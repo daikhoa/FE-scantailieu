@@ -1,3 +1,5 @@
+import { createRgbaThumbnail } from '../rendering/rgba-thumbnail';
+import { recordPipelineTiming } from '../pipeline-timing';
 import type {
   DocumentCorners,
   FilterMode,
@@ -31,7 +33,7 @@ export interface ScanicEngineOptions {
   readonly codec?: RgbaImageCodec;
 }
 
-const ENGINE_VERSION = 'scanic-1.6.0+ml-retry-classical-fallback-perspective-v2-filter-v7';
+const ENGINE_VERSION = 'scanic-1.6.0+ml-only-perspective-v2-filter-v8';
 const FILTER_MODES: readonly FilterMode[] = [
   'original',
   'ocr-color',
@@ -137,7 +139,16 @@ function detectionResult(
     point(output.corners.bottomRight),
     point(output.corners.bottomLeft),
   ];
-  if (!validateQuad(corners, dimensions, 1).valid) throw new ScannerEngineError('failed');
+  const geometry = validateQuad(
+    corners,
+    dimensions,
+    Math.max(1, dimensions.width * dimensions.height * 0.02),
+  );
+  if (!geometry.valid) {
+    if (geometry.reason === 'area-too-small')
+      return { kind: 'full-frame', dimensions, reason: 'low-confidence' };
+    throw new ScannerEngineError('failed');
+  }
   const [a, b, c] = corners;
   if ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x) <= 0) {
     throw new ScannerEngineError('failed');
@@ -386,6 +397,53 @@ class ScanicEngine implements ScannerEngine {
     });
   }
 
+  private async renderPixelsInJob(request: RenderPageRequest, signal: AbortSignal) {
+    const backend = this.assertReady(signal);
+    let corners: DocumentCorners;
+    try {
+      corners = renderCorners(request);
+    } catch (error) {
+      throw operationFailure(error, signal);
+    }
+    let input;
+    try {
+      input =
+        request.sourcePixels === undefined
+          ? await this.codec.decode(request.original, signal)
+          : {
+              dimensions: { ...request.sourcePixels.dimensions },
+              pixels: request.consumeSourcePixels
+                ? request.sourcePixels.pixels
+                : request.sourcePixels.pixels.slice(),
+            };
+      checkAbort(signal, this.disposal.signal);
+    } catch (error) {
+      throw operationFailure(error, signal);
+    }
+    let output;
+    try {
+      output =
+        request.analysis === undefined && request.maximumOutputLongSide === undefined
+          ? await backend.warp(input, corners, totalRotation(request), request.recipe.filter.mode)
+          : await backend.warp(
+              input,
+              corners,
+              totalRotation(request),
+              request.recipe.filter.mode,
+              request.maximumOutputLongSide,
+              request.analysis,
+            );
+      checkAbort(signal, this.disposal.signal);
+    } catch (error) {
+      return await this.failBackendOperation(error, signal);
+    }
+    return output;
+  }
+
+  renderPixels(request: RenderPageRequest, signal: AbortSignal) {
+    return this.schedule(() => this.renderPixelsInJob(request, signal));
+  }
+
   render(request: RenderPageRequest, signal: AbortSignal): Promise<RenderedVariant> {
     try {
       this.assertReady(signal);
@@ -393,43 +451,9 @@ class ScanicEngine implements ScannerEngine {
       return Promise.reject(error instanceof Error ? error : new ScannerEngineError('failed'));
     }
     return this.schedule(async () => {
-      const backend = this.assertReady(signal);
-      let corners: DocumentCorners;
-      try {
-        corners = renderCorners(request);
-      } catch (error) {
-        throw operationFailure(error, signal);
-      }
       const recipeKey = await createRenderRecipeKey(request, ENGINE_VERSION, signal);
-      let input;
-      try {
-        input =
-          request.sourcePixels === undefined
-            ? await this.codec.decode(request.original, signal)
-            : {
-                dimensions: { ...request.sourcePixels.dimensions },
-                pixels: request.sourcePixels.pixels.slice(),
-              };
-        checkAbort(signal, this.disposal.signal);
-      } catch (error) {
-        throw operationFailure(error, signal);
-      }
-      let output;
-      try {
-        output =
-          request.maximumOutputLongSide === undefined
-            ? await backend.warp(input, corners, totalRotation(request), request.recipe.filter.mode)
-            : await backend.warp(
-                input,
-                corners,
-                totalRotation(request),
-                request.recipe.filter.mode,
-                request.maximumOutputLongSide,
-              );
-        checkAbort(signal, this.disposal.signal);
-      } catch (error) {
-        return await this.failBackendOperation(error, signal);
-      }
+      const output = await this.renderPixelsInJob(request, signal);
+      const encodeStarted = performance.now();
       let blob: Blob;
       try {
         blob = await this.codec.encode(output, { type: 'image/jpeg', quality: 0.96 }, signal);
@@ -437,10 +461,21 @@ class ScanicEngine implements ScannerEngine {
       } catch (error) {
         throw operationFailure(error, signal);
       }
+      const jpegEncode = performance.now() - encodeStarted;
+      let thumbnail;
+      if (request.createThumbnail) {
+        const preview = createRgbaThumbnail(output, 192);
+        thumbnail = {
+          dimensions: preview.dimensions,
+          blob: await this.codec.encode(preview, { type: 'image/jpeg', quality: 0.8 }, signal),
+        };
+      }
+      recordPipelineTiming({ ...output.timings, jpegEncode });
       return {
         recipeKey,
         engineVersion: ENGINE_VERSION,
         image: { blob, dimensions: { ...output.dimensions } },
+        ...(thumbnail === undefined ? {} : { thumbnail }),
         ...(request.preserveOutputPixels ? { transientRgba: output } : {}),
         dewarp:
           request.recipe.dewarp.mode === 'perspective-only'

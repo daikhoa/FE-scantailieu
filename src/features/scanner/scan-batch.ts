@@ -1,8 +1,10 @@
+import type { RgbaBackendInput } from '../../imaging/engines/scanic-backend-contract';
 import type { ProcessedScanPage, ScanPageSource } from './background-page-processor';
 
 interface ScanPageIdentity {
   readonly id: string;
   readonly source: ScanPageSource;
+  readonly preview?: RgbaBackendInput;
 }
 
 export type ScanBatchPage = ScanPageIdentity &
@@ -30,6 +32,7 @@ export type ScanBatchEvent =
       readonly source: ScanPageSource;
     }
   | { readonly type: 'started'; readonly id: string }
+  | { readonly type: 'source-saved'; readonly id: string; readonly source: Blob }
   | { readonly type: 'ready'; readonly id: string; readonly page: ProcessedScanPage }
   | { readonly type: 'updated'; readonly id: string; readonly page: ProcessedScanPage }
   | { readonly type: 'failed'; readonly id: string }
@@ -50,6 +53,8 @@ function updatePage(
 
 export function scanBatchReducer(state: ScanBatchState, event: ScanBatchEvent): ScanBatchState {
   switch (event.type) {
+    case 'source-saved':
+      return updatePage(state, event.id, (page) => ({ ...page, source: event.source }));
     case 'captured':
       if (event.id.length === 0 || state.pages.some((page) => page.id === event.id)) return state;
       return {
@@ -58,6 +63,9 @@ export function scanBatchReducer(state: ScanBatchState, event: ScanBatchEvent): 
           {
             id: event.id,
             source: event.source,
+            ...(!(event.source instanceof Blob) && event.source.preview !== undefined
+              ? { preview: event.source.preview }
+              : {}),
             kind: 'queued',
           },
         ],
@@ -72,6 +80,9 @@ export function scanBatchReducer(state: ScanBatchState, event: ScanBatchEvent): 
       return updatePage(state, event.id, () => ({
         id: event.replacementId,
         source: event.source,
+        ...(!(event.source instanceof Blob) && event.source.preview !== undefined
+          ? { preview: event.source.preview }
+          : {}),
         kind: 'queued',
       }));
     case 'started':
@@ -81,6 +92,7 @@ export function scanBatchReducer(state: ScanBatchState, event: ScanBatchEvent): 
               id: page.id,
               source: page.source,
               kind: 'processing',
+              ...(page.preview === undefined ? {} : { preview: page.preview }),
             }
           : page,
       );

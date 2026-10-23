@@ -1,5 +1,9 @@
 # Kế hoạch triển khai: clonecamscanner v1
 
+## Bổ sung 2026-10-23 — pipeline ML-only
+
+Tiếp tục đúng Site version 25: khóa detector/recovery bằng regression test; gộp rough analysis và render cuối; nối UI/PDF; chạy quality gates và model thật trước triển khai. Quyết định và giới hạn đo đạc: [ADR 003](../docs/decisions/003-ml-only-final-image-pipeline.md). Giữ nguyên Site và audience.
+
 ## 1. Mục tiêu và nguyên tắc giao hàng
 
 Xây dựng web scan tài liệu mobile-first chạy tốt trên Safari iPhone/iPad và Chrome Android, xử lý ảnh hoàn toàn trên thiết bị, lưu cục bộ và xuất PDF ảnh giữ tỷ lệ tự nhiên của từng trang để hệ thống OCR phía sau đạt độ chính xác cao. Việc triển khai bám theo [đặc tả đã duyệt](../docs/specs/mobile-document-scanner.md), đi theo lát dọc nhỏ, test trước cho logic có hành vi và đo trước khi tối ưu.

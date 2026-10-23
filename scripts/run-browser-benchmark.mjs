@@ -70,7 +70,7 @@ async function waitForPage(port, timeoutMs) {
       if (response.ok) {
         const targets = await response.json();
         const page = targets.find(
-          (candidate) => candidate.type === 'page' && candidate.url === targetUrl,
+          (candidate) => candidate.type === 'page' && candidate.url === 'about:blank',
         );
         if (page) return page;
       }
@@ -86,6 +86,7 @@ function connectDevTools(webSocketUrl) {
   const socket = new WebSocket(webSocketUrl);
   const pending = new Map();
   let nextId = 0;
+  const listeners = new Set();
 
   const opened = new Promise((resolve, reject) => {
     socket.addEventListener('open', resolve, { once: true });
@@ -96,7 +97,10 @@ function connectDevTools(webSocketUrl) {
 
   socket.addEventListener('message', (event) => {
     const message = JSON.parse(event.data);
-    if (!message.id) return;
+    if (!message.id) {
+      for (const listener of listeners) listener(message);
+      return;
+    }
     const request = pending.get(message.id);
     if (!request) return;
     pending.delete(message.id);
@@ -110,13 +114,16 @@ function connectDevTools(webSocketUrl) {
   });
 
   return {
-    async send(method, params = {}) {
+    async send(method, params = {}, sessionId) {
       await opened;
       const id = ++nextId;
       return new Promise((resolve, reject) => {
         pending.set(id, { resolve, reject });
-        socket.send(JSON.stringify({ id, method, params }));
+        socket.send(JSON.stringify({ id, method, params, ...(sessionId ? { sessionId } : {}) }));
       });
+    },
+    onEvent(listener) {
+      listeners.add(listener);
     },
     close() {
       socket.close();
@@ -155,7 +162,7 @@ const child = spawn(
     '--remote-debugging-address=127.0.0.1',
     '--remote-allow-origins=*',
     `--user-data-dir=${profileDirectory}`,
-    targetUrl,
+    'about:blank',
   ],
   { stdio: 'ignore', windowsHide: true },
 );
@@ -180,10 +187,54 @@ try {
     throw new Error('Chrome exposed an invalid browser endpoint.');
   }
   browserClient = connectDevTools(`ws://127.0.0.1:${port}${browserPath}`);
+  const externalRequests = [];
+  const networkTasks = new Set();
+  const intercept = async (message) => {
+    const sessionId = message.params?.sessionId ?? message.sessionId;
+    if (message.method === 'Target.attachedToTarget') {
+      try {
+        await browserClient.send('Network.enable', {}, sessionId);
+        await browserClient
+          .send(
+            'Target.setAutoAttach',
+            { autoAttach: true, waitForDebuggerOnStart: true, flatten: true },
+            sessionId,
+          )
+          .catch(() => undefined);
+      } finally {
+        await browserClient.send('Runtime.runIfWaitingForDebugger', {}, sessionId);
+      }
+    }
+    if (message.method === 'Network.requestWillBeSent') {
+      const url = new URL(message.params.request.url);
+      if (['http:', 'https:'].includes(url.protocol) && url.origin !== parsedTargetUrl.origin)
+        externalRequests.push(url.origin);
+    }
+  };
+  browserClient.onEvent((message) => {
+    const task = intercept(message)
+      .catch(() => undefined)
+      .finally(() => networkTasks.delete(task));
+    networkTasks.add(task);
+  });
+  await browserClient.send('Target.setAutoAttach', {
+    autoAttach: true,
+    waitForDebuggerOnStart: true,
+    flatten: true,
+  });
   const page = await waitForPage(port, 10_000);
   client = connectDevTools(page.webSocketDebuggerUrl);
   await client.send('Runtime.enable');
+  await client.send('Page.navigate', { url: targetUrl });
   const result = await waitForResult(client, 120_000);
+  await Promise.all([...networkTasks]);
+  result.networkAudit = {
+    allRealms: true,
+    externalRequests: externalRequests.length,
+    externalOrigins: [...new Set(externalRequests)],
+  };
+  if (externalRequests.length > 0)
+    throw new Error('Benchmark attempted requests outside the local origin.');
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
 } finally {
   client?.close();

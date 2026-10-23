@@ -19,6 +19,33 @@ function dependencies(result: Awaited<ReturnType<ScannerEngine['detect']>>) {
 }
 
 describe('post-capture document detection', () => {
+  it('uses the last live ML corners when frozen-frame ML throws and releases the frame', async () => {
+    const fixture = dependencies({
+      kind: 'full-frame',
+      dimensions: { width: 400, height: 600 },
+      reason: 'no-document',
+    });
+    fixture.engine.detect = vi.fn(() => Promise.reject(new Error('ML runtime failed')));
+    const fallback = {
+      kind: 'document' as const,
+      corners: [
+        { x: 100, y: 100 },
+        { x: 1900, y: 100 },
+        { x: 1900, y: 2900 },
+        { x: 100, y: 2900 },
+      ] as const,
+    };
+    await expect(
+      detectDocumentCrop(
+        fixture.engine,
+        fixture.source,
+        original,
+        new AbortController().signal,
+        fallback,
+      ),
+    ).resolves.toBe(fallback);
+    expect(fixture.close).toHaveBeenCalledOnce();
+  });
   it('maps Scanic preview corners back to exact original image coordinates', async () => {
     const fixture = dependencies({
       kind: 'document',
@@ -121,7 +148,7 @@ describe('post-capture document detection', () => {
     });
   });
 
-  it('rejects mismatched engine coordinates and still releases the frame', async () => {
+  it('keeps full-frame on invalid frozen coordinates and still releases the frame', async () => {
     const fixture = dependencies({
       kind: 'full-frame',
       dimensions: { width: 401, height: 600 },
@@ -130,7 +157,7 @@ describe('post-capture document detection', () => {
 
     await expect(
       detectDocumentCrop(fixture.engine, fixture.source, original, new AbortController().signal),
-    ).rejects.toMatchObject({ code: 'failed' });
+    ).resolves.toEqual({ kind: 'full-frame' });
     expect(fixture.close).toHaveBeenCalledOnce();
   });
 });

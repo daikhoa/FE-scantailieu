@@ -1,3 +1,4 @@
+import type { LocalRestorationAnalysis } from '../restoration/local-restoration-client';
 import type {
   DocumentCorners,
   FilterMode,
@@ -20,6 +21,7 @@ export type ScanicWorkerRequest =
       readonly rotation: QuarterTurn;
       readonly filter: FilterMode;
       readonly maximumOutputLongSide?: number;
+      readonly analysis?: LocalRestorationAnalysis;
     };
 
 export type ScanicWorkerResponse =
@@ -136,6 +138,7 @@ export function createScanicWorkerBackend(): ClassicalBackend {
     rotation?: QuarterTurn,
     filter?: FilterMode,
     maximumOutputLongSide?: number,
+    analysis?: LocalRestorationAnalysis,
   ): Promise<unknown> {
     if (closed || current !== null) return Promise.reject(new ScannerEngineError('unavailable'));
     const id = ++nextId;
@@ -160,6 +163,7 @@ export function createScanicWorkerBackend(): ClassicalBackend {
             rotation,
             filter,
             ...(maximumOutputLongSide === undefined ? {} : { maximumOutputLongSide }),
+            ...(analysis === undefined ? {} : { analysis }),
           };
           worker.postMessage(message, [input.pixels.buffer]);
         } else if (operation === 'detect' && input !== undefined) {
@@ -180,8 +184,16 @@ export function createScanicWorkerBackend(): ClassicalBackend {
       await request('initialize');
     },
     detect: (input) => request('detect', input),
-    async warp(input, corners, rotation, filter, maximumOutputLongSide) {
-      const output = await request('warp', input, corners, rotation, filter, maximumOutputLongSide);
+    async warp(input, corners, rotation, filter, maximumOutputLongSide, analysis) {
+      const output = await request(
+        'warp',
+        input,
+        corners,
+        rotation,
+        filter,
+        maximumOutputLongSide,
+        analysis,
+      );
       if (!isRgbaBackendInput(output)) throw new ScannerEngineError('failed');
       return output;
     },

@@ -1,3 +1,8 @@
+import { renderAnalyzedPage } from '../../imaging/restoration/analyzed-page-renderer';
+import type {
+  LocalRestorationAnalysis,
+  LocalRestorationClient,
+} from '../../imaging/restoration/local-restoration-client';
 import { useEffect, useRef, useState, type RefObject } from 'react';
 
 import type { CropRegion, EditRecipe, FilterMode, RenderedVariant } from '../../domain/document';
@@ -25,6 +30,8 @@ type EditorStatus =
   | { readonly kind: 'error' };
 
 interface DocumentEditorProps {
+  readonly analyzer?: LocalRestorationClient;
+  readonly analyzerFactory?: () => LocalRestorationClient | null;
   readonly image: ImportedImage;
   readonly initialPage?: {
     readonly variant: RenderedVariant;
@@ -46,6 +53,8 @@ function isAbort(error: unknown): boolean {
 }
 
 export function DocumentEditor({
+  analyzer,
+  analyzerFactory,
   image,
   initialPage,
   onBack,
@@ -81,6 +90,7 @@ export function DocumentEditor({
   );
   const [detectionSource] = useState(() => frameSource ?? createImageAssetFrameSource());
   const engine = useRef<ScannerEngine | null>(null);
+  const analysis = useRef<LocalRestorationAnalysis | undefined>(undefined);
   const activeOperation = useRef<AbortController | null>(null);
   const exportOperation = useRef<AbortController | null>(null);
   const mounted = useRef(true);
@@ -126,14 +136,16 @@ export function DocumentEditor({
           ));
         crop.current = detectedCrop;
         const initialRecipe = createDocumentRecipe(detectedCrop, 'ocr-color');
-        const variant = await localEngine.render(
-          {
-            original: image.original,
-            orientation: 0,
-            recipe: initialRecipe,
-          },
+        const activeAnalyzer = analyzer ?? analyzerFactory?.() ?? undefined;
+        const result = await renderAnalyzedPage(
+          localEngine,
+          image.original,
+          initialRecipe,
           controller.signal,
+          activeAnalyzer === undefined ? {} : { analyzer: activeAnalyzer },
         );
+        const { variant } = result;
+        analysis.current = result.analysis;
         if (!mounted.current || activeOperation.current !== controller) return;
         ready.current = true;
         setCropKind(detectedCrop.kind);
@@ -161,7 +173,16 @@ export function DocumentEditor({
       void localEngine.dispose().catch(() => undefined);
       engine.current = null;
     };
-  }, [detectionSource, engineFactory, image.captureCrop, image.original, initialPage, originalUrl]);
+  }, [
+    analyzer,
+    analyzerFactory,
+    detectionSource,
+    engineFactory,
+    image.captureCrop,
+    image.original,
+    initialPage,
+    originalUrl,
+  ]);
 
   const chooseFilter = async (option: DocumentFilterOption) => {
     const localEngine = engine.current;
@@ -172,9 +193,16 @@ export function DocumentEditor({
     setStatus({ kind: 'processing', label: option.label });
     try {
       const nextRecipe = createDocumentRecipe(crop.current, option.mode);
-      const variant = await localEngine.render(
-        { original: image.original, orientation: 0, recipe: nextRecipe },
+      const activeAnalyzer = analyzer ?? analyzerFactory?.() ?? undefined;
+      const { variant } = await renderAnalyzedPage(
+        localEngine,
+        image.original,
+        nextRecipe,
         controller.signal,
+        {
+          ...(activeAnalyzer === undefined ? {} : { analyzer: activeAnalyzer }),
+          ...(analysis.current === undefined ? {} : { analysis: analysis.current }),
+        },
       );
       if (!mounted.current || activeOperation.current !== controller) return;
       showVariant(variant, nextRecipe);

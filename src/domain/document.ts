@@ -69,6 +69,7 @@ export interface RenderedVariant {
   readonly recipeKey: string;
   readonly engineVersion: string;
   readonly image: ImageAsset;
+  readonly thumbnail?: ImageAsset;
   readonly dewarp: DewarpOutcome;
   /** Ephemeral worker handoff; consumers must drop it after local restoration starts. */
   readonly transientRgba?: {

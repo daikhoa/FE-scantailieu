@@ -1,14 +1,20 @@
 /* eslint-disable @typescript-eslint/no-non-null-assertion -- Pixel and tensor indices are bounded by validated dimensions and loop limits. */
 import * as ort from 'onnxruntime-web/webgpu';
+import ortWasmBinary from 'onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url';
 
-import { createClassicalRestorationPlan } from './classical-restoration-plan';
-import { decideRestorationPolicy, type DocumentDefectScores } from './restoration-policy';
+import { createClassifierRuntime } from './classifier-runtime';
+import { createAdaptiveRestorationPlan } from './adaptive-restoration-plan';
+import { analyzeDocumentQuality } from '../analysis/document-quality';
+import { type DocumentDefectScores } from './restoration-policy';
 import type { AppliedRestorationStage } from './restoration-types';
 import type { LocalRestorationAnalysis, LocalRestorationSource } from './local-restoration-client';
 import { isValidImageDimensions } from '../geometry/coordinates';
 import { MAX_WORKING_IMAGE_PIXELS, MAX_WORKING_IMAGE_SIDE } from '../working-image-limits';
 
 const CLASSIFIER_URL = '/models/local-restoration/document-defects.onnx';
+ort.env.wasm.wasmPaths = { wasm: ortWasmBinary };
+ort.env.wasm.numThreads = 1;
+ort.env.wasm.initTimeout = 15_000;
 const CLASSIFIER_MODEL = 'document-defects@cord-v2-bootstrap-2026-10-18';
 const GPU_BUFFER_USAGE = { mapRead: 1, copySrc: 4, copyDst: 8, uniform: 64, storage: 128 } as const;
 const LABELS = [
@@ -26,7 +32,7 @@ const workerScope = globalThis as unknown as {
   postMessage(message: unknown): void;
   addEventListener(type: 'message', listener: (event: MessageEvent<WorkerRequest>) => void): void;
 };
-let classifierPromise: Promise<ort.InferenceSession> | null = null;
+
 let restorationQueue: Promise<void> = Promise.resolve();
 
 interface RestoreRequest {
@@ -48,21 +54,17 @@ type WorkerRequest =
   | { readonly operation: 'warmup' }
   | { readonly operation: 'cancel'; readonly id: number };
 
-function providers(): ort.InferenceSession.ExecutionProviderConfig[] {
-  return browserGpu() === undefined ? ['wasm'] : ['webgpu', 'wasm'];
-}
-
 function browserGpu(): GPU | undefined {
   return Reflect.get(navigator, 'gpu');
 }
-
-function classifier(): Promise<ort.InferenceSession> {
-  classifierPromise ??= ort.InferenceSession.create(CLASSIFIER_URL, {
-    executionProviders: providers(),
-    graphOptimizationLevel: 'all',
-  });
-  return classifierPromise;
-}
+const classifierRuntime = createClassifierRuntime(
+  (providers) =>
+    ort.InferenceSession.create(CLASSIFIER_URL, {
+      executionProviders: providers,
+      graphOptimizationLevel: 'all',
+    }),
+  browserGpu() !== undefined,
+);
 
 async function decode(source: LocalRestorationSource): Promise<ImageBitmap> {
   if (source instanceof Blob) return await createImageBitmap(source, { imageOrientation: 'none' });
@@ -113,53 +115,45 @@ function sigmoid(value: number): number {
   return 1 / (1 + Math.exp(-value));
 }
 
-function evidence(pixels: Uint8ClampedArray) {
-  const cells = new Float32Array(64);
-  let highlights = 0;
-  let detail = 0;
-  for (let y = 0; y < 224; y++) {
-    for (let x = 0; x < 224; x++) {
-      const offset = (y * 224 + x) * 4;
-      const luminance =
-        0.2126 * pixels[offset]! + 0.7152 * pixels[offset + 1]! + 0.0722 * pixels[offset + 2]!;
-      cells[Math.min(7, Math.floor(y / 28)) * 8 + Math.min(7, Math.floor(x / 28))]! +=
-        luminance / (28 * 28);
-      if (luminance > 245) highlights++;
-      if (x > 0) {
-        const previous = offset - 4;
-        const previousLuminance =
-          0.2126 * pixels[previous]! +
-          0.7152 * pixels[previous + 1]! +
-          0.0722 * pixels[previous + 2]!;
-        detail += Math.abs(luminance - previousLuminance);
-      }
+async function classify(bitmap: ImageBitmap) {
+  const started = performance.now();
+  const input = classifierInput(bitmap);
+  let output: ort.InferenceSession.ReturnType | undefined;
+  let sample: OffscreenCanvas | undefined;
+  try {
+    output = await classifierRuntime.run({ image: input.tensor });
+    const classified = performance.now();
+    const logits = output.logits?.data;
+    if (logits?.length !== LABELS.length) throw new Error('classifier-output');
+    const scores = {} as Record<(typeof LABELS)[number], number>;
+    LABELS.forEach((label, index) => {
+      const value = Number(logits[index]);
+      if (!Number.isFinite(value)) throw new Error('classifier-output');
+      scores[label] = sigmoid(value);
+    });
+    sample = sampleCanvas(bitmap, bitmap.width, bitmap.height);
+    const context = sample.getContext('2d', { willReadFrequently: true });
+    if (context === null) throw new Error('canvas-unavailable');
+    const quality = analyzeDocumentQuality({
+      dimensions: { width: bitmap.width, height: bitmap.height },
+      pixels: context.getImageData(0, 0, bitmap.width, bitmap.height).data,
+    });
+    return {
+      scores: scores as DocumentDefectScores,
+      quality,
+      timings: { classifier: classified - started, qualityMetrics: performance.now() - classified },
+    };
+  } finally {
+    input.tensor.dispose();
+    if (output !== undefined)
+      Object.values(output).forEach((tensor) => {
+        tensor.dispose();
+      });
+    if (sample !== undefined) {
+      sample.width = 1;
+      sample.height = 1;
     }
   }
-  const range = Math.max(...cells) - Math.min(...cells);
-  const averageDetail = detail / (223 * 224);
-  return {
-    illuminationRange: range,
-    highlightRatio: highlights / (224 * 224),
-    detail:
-      averageDetail < 6
-        ? ('low' as const)
-        : averageDetail < 12
-          ? ('medium' as const)
-          : ('high' as const),
-  };
-}
-
-async function classify(bitmap: ImageBitmap) {
-  const input = classifierInput(bitmap);
-  const session = await classifier();
-  const output = await session.run({ image: input.tensor });
-  const logits = output.logits?.data;
-  if (logits === undefined || logits.length < LABELS.length) throw new Error('classifier-output');
-  const scores = {} as Record<(typeof LABELS)[number], number>;
-  LABELS.forEach((label, index) => {
-    scores[label] = sigmoid(Number(logits[index]));
-  });
-  return { scores: scores as DocumentDefectScores, evidence: evidence(input.pixels) };
 }
 
 type ClassificationAnalysis = Awaited<ReturnType<typeof classify>>;
@@ -190,14 +184,9 @@ async function analysisFor(
 }
 
 function restorationPlan(analysis: ClassificationAnalysis): LocalRestorationAnalysis {
-  const decision = decideRestorationPolicy(analysis);
-  const plan = createClassicalRestorationPlan(decision, analysis.scores);
   return {
-    kind: 'analysis',
-    stages: plan.stages,
-    classifierModel: CLASSIFIER_MODEL,
-    warnings: plan.warnings,
-    protectColor: plan.protectColor,
+    ...createAdaptiveRestorationPlan(analysis.scores, analysis.quality),
+    timings: analysis.timings,
   };
 }
 
@@ -213,6 +202,7 @@ async function analyze(request: AnalyzeRequest): Promise<void> {
     });
   } finally {
     sample.close();
+    if (cancelled.has(request.id)) workerScope.postMessage({ id: request.id, kind: 'cancelled' });
     cancelled.delete(request.id);
   }
 }
@@ -471,14 +461,41 @@ async function restore(request: RestoreRequest) {
     });
   } finally {
     bitmap.close();
+    if (cancelled.has(request.id)) workerScope.postMessage({ id: request.id, kind: 'cancelled' });
     cancelled.delete(request.id);
   }
+}
+
+let warmupPromise: Promise<void> | undefined;
+function warmup(): Promise<void> {
+  warmupPromise ??= (async () => {
+    const tensor = new ort.Tensor('float32', new Float32Array(3 * 224 * 224), [1, 3, 224, 224]);
+    try {
+      const output = await classifierRuntime.run({ image: tensor });
+      Object.values(output).forEach((value) => {
+        value.dispose();
+      });
+    } finally {
+      tensor.dispose();
+    }
+  })().catch((error: unknown) => {
+    warmupPromise = undefined;
+    throw error;
+  });
+  return warmupPromise;
 }
 
 workerScope.addEventListener('message', (event: MessageEvent<WorkerRequest>) => {
   const request = event.data;
   if (request.operation === 'warmup') {
-    void classifier().catch(() => undefined);
+    restorationQueue = restorationQueue.then(warmup).then(
+      () => {
+        workerScope.postMessage({ kind: 'warmed' });
+      },
+      () => {
+        workerScope.postMessage({ kind: 'warmup-failed' });
+      },
+    );
     return;
   }
   if (request.operation === 'cancel') {
@@ -488,6 +505,7 @@ workerScope.addEventListener('message', (event: MessageEvent<WorkerRequest>) => 
   restorationQueue = restorationQueue
     .then(async () => {
       if (cancelled.has(request.id)) {
+        workerScope.postMessage({ id: request.id, kind: 'cancelled' });
         cancelled.delete(request.id);
         return;
       }
@@ -495,6 +513,7 @@ workerScope.addEventListener('message', (event: MessageEvent<WorkerRequest>) => 
       else await restore(request);
     })
     .catch((error: unknown) => {
+      if (cancelled.has(request.id)) workerScope.postMessage({ id: request.id, kind: 'cancelled' });
       if (!cancelled.has(request.id))
         workerScope.postMessage({
           id: request.id,

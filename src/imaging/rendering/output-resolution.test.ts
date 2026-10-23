@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { resolveHighQualityOutputDimensions } from './output-resolution';
 
 describe('high-quality perspective output resolution', () => {
-  it('raises a foreshortened document to a 3000-pixel long side when the source supports it', () => {
+  it('preserves useful crop resolution even when the full source is much larger', () => {
     expect(
       resolveHighQualityOutputDimensions(
         [
@@ -14,7 +14,7 @@ describe('high-quality perspective output resolution', () => {
         ],
         { width: 3000, height: 4000 },
       ),
-    ).toEqual({ width: 2250, height: 3000 });
+    ).toEqual({ width: 1200, height: 1600 });
   });
 
   it('does not enlarge an image whose source is below the quality target', () => {
@@ -31,7 +31,7 @@ describe('high-quality perspective output resolution', () => {
     ).toEqual({ width: 801, height: 1200 });
   });
 
-  it('does not downscale a document already larger than the quality target', () => {
+  it('caps the final image to 3000 pixels by default', () => {
     expect(
       resolveHighQualityOutputDimensions(
         [
@@ -42,7 +42,7 @@ describe('high-quality perspective output resolution', () => {
         ],
         { width: 4000, height: 3000 },
       ),
-    ).toEqual({ width: 4000, height: 3000 });
+    ).toEqual({ width: 3000, height: 2250 });
   });
 
   it('caps a preview to the requested long side while preserving its aspect ratio', () => {

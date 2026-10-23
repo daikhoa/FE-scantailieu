@@ -7,6 +7,7 @@ import { ManualCropEditor } from '../editor/ManualCropEditor';
 import { downloadBlob } from '../export/download-blob';
 import { createImagePdf } from '../export/image-pdf';
 import type { ScanBatchPage } from './scan-batch';
+import { PendingPagePreview } from './PendingPagePreview';
 
 interface ScanBatchReviewProps {
   readonly pages: readonly ScanBatchPage[];
@@ -27,6 +28,7 @@ function isAbort(error: unknown): boolean {
 type ReadyScanBatchPage = Extract<ScanBatchPage, { readonly kind: 'ready' }>;
 
 const RESTORATION_WARNING_LABELS: Record<RestorationWarning, string> = {
+  'retake-blur': 'Ảnh quá mờ — nên chụp lại để đọc rõ chữ.',
   'retake-finger': 'Tay đang che tài liệu — nên chụp lại trang này.',
   'retake-curved': 'Trang bị cong mạnh — nên ép phẳng và chụp lại để OCR chính xác hơn.',
   'unsupported-moire': 'Có vân moiré — bộ xử lý hiện tại chưa khử hoàn toàn.',
@@ -42,11 +44,16 @@ function pageWarnings(page: ReadyScanBatchPage): readonly RestorationWarning[] {
 function PagePreview({
   page,
   number,
+  selected,
 }: {
   readonly page: ReadyScanBatchPage;
   readonly number: number;
+  readonly selected: boolean;
 }) {
-  const url = useMemo(() => URL.createObjectURL(page.page.variant.image.blob), [page]);
+  const asset = selected
+    ? page.page.variant.image
+    : (page.page.variant.thumbnail ?? page.page.variant.image);
+  const url = useMemo(() => URL.createObjectURL(asset.blob), [asset]);
   const { width, height } = page.page.variant.image.dimensions;
 
   useEffect(
@@ -272,7 +279,9 @@ export function ScanBatchReview({
                       }}
                     >
                       {page.kind === 'ready' ? (
-                        <PagePreview page={page} number={number} />
+                        <PagePreview page={page} number={number} selected={selected} />
+                      ) : page.preview !== undefined ? (
+                        <PendingPagePreview preview={page.preview} number={number} />
                       ) : (
                         <span
                           className="batch-page__placeholder"
@@ -291,7 +300,7 @@ export function ScanBatchReview({
                       <strong>Trang {number}</strong>
                       <span>
                         {page.kind === 'queued' || page.kind === 'processing'
-                          ? 'Đang xử lý'
+                          ? 'Đang hoàn thiện'
                           : page.kind === 'failed'
                             ? 'Cần xử lý lại'
                             : page.page.restoration?.kind === 'processing'

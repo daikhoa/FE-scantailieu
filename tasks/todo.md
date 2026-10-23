@@ -1,5 +1,18 @@
 # Todo: clonecamscanner v1
 
+## Cập nhật pipeline 2026-10-23
+
+- [x] ML-only, retry một realm mới, backoff và geometry/stability regressions.
+- [x] Chụp RGBA ngay, thumbnail tạm, frozen ML và lưu JPEG gốc trước transfer.
+- [x] Rough crop 720 → classifier/metrics → một final JPEG tối đa 3000 px; bỏ preview 1600.
+- [x] Tái dùng analysis khi đổi filter/xoay; crop mới phân tích lại; PDF dùng ảnh cuối.
+- [x] Classifier WebGPU/WASM recovery, timeout/cancellation watchdog và tensor cleanup.
+- [x] Full suite 443 tests; typecheck, lint, production build; smoke model thật và SmartDoc 15/15.
+- [x] Benchmark desktop và network audit; không thêm dependency/model.
+- [ ] Xác nhận latency, nhiệt máy, bộ nhớ và OCR trên iPhone/Android thật sau triển khai.
+
+Chi tiết: [ADR 003](../docs/decisions/003-ml-only-final-image-pipeline.md).
+
 Nguồn yêu cầu: [đặc tả đã duyệt](../docs/specs/mobile-document-scanner.md)  
 Kế hoạch chi tiết: [tasks/plan.md](./plan.md)
 

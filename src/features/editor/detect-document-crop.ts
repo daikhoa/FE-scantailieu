@@ -1,3 +1,4 @@
+import type { RgbaBackendInput } from '../../imaging/engines/scanic-backend-contract';
 import type { CropRegion, ImageAsset } from '../../domain/document';
 import type { ScannerEngine } from '../../imaging/contracts/scanner-engine';
 import { ScannerEngineError } from '../../imaging/engines/scanner-engine-error';
@@ -10,22 +11,30 @@ export async function detectDocumentCrop(
   original: ImageAsset,
   signal: AbortSignal,
   fallback: CropRegion = { kind: 'full-frame' },
+  sourcePixels?: RgbaBackendInput,
 ): Promise<CropRegion> {
-  const frame = await source.create(original, signal);
   try {
-    const result = await engine.detect(frame, signal);
-    if (
-      result.dimensions.width !== frame.dimensions.width ||
-      result.dimensions.height !== frame.dimensions.height
-    ) {
-      throw new ScannerEngineError('failed');
+    const frame = await (sourcePixels === undefined
+      ? source.create(original, signal)
+      : source.create(original, signal, sourcePixels));
+    try {
+      const result = await engine.detect(frame, signal);
+      if (
+        result.dimensions.width !== frame.dimensions.width ||
+        result.dimensions.height !== frame.dimensions.height
+      ) {
+        throw new ScannerEngineError('failed');
+      }
+      if (result.kind === 'full-frame') return fallback;
+      return {
+        kind: 'document',
+        corners: scaleCorners(result.corners, result.dimensions, original.dimensions),
+      };
+    } finally {
+      frame.close();
     }
-    if (result.kind === 'full-frame') return fallback;
-    return {
-      kind: 'document',
-      corners: scaleCorners(result.corners, result.dimensions, original.dimensions),
-    };
-  } finally {
-    frame.close();
+  } catch (error) {
+    if (signal.aborted || (error instanceof Error && error.name === 'AbortError')) throw error;
+    return fallback;
   }
 }

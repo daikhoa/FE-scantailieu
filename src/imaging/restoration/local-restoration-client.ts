@@ -1,5 +1,14 @@
 import type { ImageAsset, ImageDimensions } from '../../domain/document';
 import type { AppliedRestorationStage, RestorationWarning } from './restoration-types';
+import type { DocumentQualityProfile } from '../analysis/document-quality';
+
+export interface RestorationStrengths {
+  readonly shadow: number;
+  readonly lift: number;
+  readonly contrast: number;
+  readonly sharpen: number;
+  readonly smooth: number;
+}
 
 export interface LocalRestorationAnalysis {
   readonly kind: 'analysis';
@@ -7,6 +16,9 @@ export interface LocalRestorationAnalysis {
   readonly classifierModel: string;
   readonly warnings: readonly RestorationWarning[];
   readonly protectColor: boolean;
+  readonly quality?: DocumentQualityProfile;
+  readonly strengths?: RestorationStrengths;
+  readonly timings?: { readonly classifier: number; readonly qualityMetrics: number };
 }
 
 export interface LocalRestorationResult {
@@ -56,7 +68,11 @@ interface WorkerFailure {
   readonly kind: 'failure';
   readonly code: string;
 }
-type WorkerResponse = WorkerSuccess | WorkerFailure;
+type WorkerResponse =
+  | WorkerSuccess
+  | WorkerFailure
+  | { readonly id: number; readonly kind: 'cancelled' }
+  | { readonly kind: 'warmed' | 'warmup-failed' };
 
 function abortError(): Error {
   const error = new Error('Local restoration cancelled.');
@@ -70,96 +86,113 @@ export function createLocalRestorationClient(): LocalRestorationClient {
   });
   let sequence = 0;
   let closed = false;
+  let warmed = false;
+  let warmupTimer: ReturnType<typeof setTimeout> | undefined;
   const pending = new Map<
     number,
     {
       readonly resolve: (value: LocalRestorationResult | LocalRestorationAnalysis) => void;
-      readonly reject: (reason: Error) => void;
+      readonly reject: (error: Error) => void;
       readonly signal: AbortSignal;
       readonly abort: () => void;
+      readonly timer: ReturnType<typeof setTimeout>;
     }
   >();
-
-  const failAll = () => {
-    for (const job of pending.values()) {
+  const release = (id: number) => {
+    const job = pending.get(id);
+    if (job !== undefined) {
+      clearTimeout(job.timer);
       job.signal.removeEventListener('abort', job.abort);
-      job.reject(new Error('Local restoration worker failed.'));
+      pending.delete(id);
     }
-    pending.clear();
+    return job;
   };
-  worker.addEventListener('error', failAll);
-  worker.addEventListener('messageerror', failAll);
+  const close = (reason: Error) => {
+    if (closed) return;
+    closed = true;
+    clearTimeout(warmupTimer);
+    worker.terminate();
+    for (const id of pending.keys()) release(id)?.reject(reason);
+  };
+  const fail = () => {
+    close(new Error('Local restoration worker failed.'));
+  };
+  worker.addEventListener('error', fail);
+  worker.addEventListener('messageerror', fail);
   worker.addEventListener('message', (event: MessageEvent<WorkerResponse>) => {
-    const message = event.data;
-    const job = pending.get(message.id);
+    const response = event.data;
+    if (!('id' in response)) {
+      clearTimeout(warmupTimer);
+      if (response.kind === 'warmup-failed') warmed = false;
+      return;
+    }
+    const job = release(response.id);
     if (job === undefined) return;
-    pending.delete(message.id);
-    job.signal.removeEventListener('abort', job.abort);
-    if (message.kind === 'success') job.resolve(message.result);
-    else job.reject(new Error(`Local restoration failed: ${message.code}`));
+    if (response.kind === 'success') job.resolve(response.result);
+    else if (response.kind === 'cancelled') job.reject(abortError());
+    else job.reject(new Error('Local restoration failed.'));
   });
-
+  const request = (
+    operation: 'analyze' | 'restore',
+    source: LocalRestorationSource,
+    signal: AbortSignal,
+    options: LocalRestorationRequestOptions,
+  ): Promise<LocalRestorationAnalysis | LocalRestorationResult> => {
+    if (closed) return Promise.reject(new Error('Local restoration worker is closed.'));
+    if (signal.aborted) return Promise.reject(abortError());
+    const id = ++sequence;
+    return new Promise((resolve, reject) => {
+      const abort = () => {
+        const job = pending.get(id);
+        job?.signal.removeEventListener('abort', abort);
+        job?.reject(abortError());
+        // Retain the watchdog until the worker acknowledges completion; cancel cannot interrupt ONNX.
+        try {
+          worker.postMessage({ operation: 'cancel', id });
+        } catch {
+          fail();
+        }
+      };
+      const timer = setTimeout(() => {
+        close(new Error('Local restoration timeout.'));
+      }, 15_000);
+      pending.set(id, { resolve, reject, signal, abort, timer });
+      signal.addEventListener('abort', abort, { once: true });
+      try {
+        worker.postMessage(
+          { operation, id, source, ...options },
+          source instanceof Blob ? [] : [source.pixels.buffer],
+        );
+      } catch {
+        fail();
+      }
+    });
+  };
   return {
     warmup() {
-      if (!closed) worker.postMessage({ operation: 'warmup' });
+      if (closed || warmed) return;
+      warmed = true;
+      warmupTimer = setTimeout(() => {
+        close(new Error('Local restoration warmup timeout.'));
+      }, 15_000);
+      try {
+        worker.postMessage({ operation: 'warmup' });
+      } catch {
+        fail();
+      }
     },
-    analyze(source, signal, options = {}) {
-      if (closed) return Promise.reject(new Error('Local restoration worker is closed.'));
-      if (signal.aborted) return Promise.reject(abortError());
-      const id = ++sequence;
-      return new Promise((resolve, reject) => {
-        const abort = () => {
-          const job = pending.get(id);
-          if (job === undefined) return;
-          pending.delete(id);
-          worker.postMessage({ operation: 'cancel', id });
-          reject(abortError());
-        };
-        pending.set(id, {
-          resolve(value) {
-            if ('kind' in value) resolve(value);
-            else reject(new Error('Local restoration worker returned an invalid analysis.'));
-          },
-          reject,
-          signal,
-          abort,
-        });
-        signal.addEventListener('abort', abort, { once: true });
-        const transfer = source instanceof Blob ? [] : [source.pixels.buffer];
-        worker.postMessage({ operation: 'analyze', id, source, ...options }, transfer);
-      });
+    async analyze(source, signal, options = {}) {
+      const value = await request('analyze', source, signal, options);
+      if ('kind' in value) return value;
+      throw new Error('Local restoration worker returned an invalid analysis.');
     },
-    restore(source, signal, options = {}) {
-      if (closed) return Promise.reject(new Error('Local restoration worker is closed.'));
-      if (signal.aborted) return Promise.reject(abortError());
-      const id = ++sequence;
-      return new Promise((resolve, reject) => {
-        const abort = () => {
-          const job = pending.get(id);
-          if (job === undefined) return;
-          pending.delete(id);
-          worker.postMessage({ operation: 'cancel', id });
-          reject(abortError());
-        };
-        pending.set(id, {
-          resolve(value) {
-            if ('route' in value) resolve(value);
-            else reject(new Error('Local restoration worker returned an invalid result.'));
-          },
-          reject,
-          signal,
-          abort,
-        });
-        signal.addEventListener('abort', abort, { once: true });
-        const transfer = source instanceof Blob ? [] : [source.pixels.buffer];
-        worker.postMessage({ operation: 'restore', id, source, ...options }, transfer);
-      });
+    async restore(source, signal, options = {}) {
+      const value = await request('restore', source, signal, options);
+      if ('route' in value) return value;
+      throw new Error('Local restoration worker returned an invalid result.');
     },
     dispose() {
-      if (closed) return;
-      closed = true;
-      worker.terminate();
-      failAll();
+      close(new Error('Local restoration worker is closed.'));
     },
   };
 }

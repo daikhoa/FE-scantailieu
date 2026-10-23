@@ -41,55 +41,16 @@ describe('Scanic detector runtime recovery', () => {
     expect(createScanner.mock.calls[0]?.[0]).toMatchObject({ detector: 'ml' });
   });
 
-  it('retries a fresh ML scanner after one transient failure', async () => {
-    const failedMl = {
-      initialize: vi.fn(() => Promise.resolve()),
-      scan: vi.fn(() => Promise.reject(new Error('transient'))),
-    };
-    const recoveredMl = {
-      initialize: vi.fn(() => Promise.resolve()),
-      scan: vi.fn(() => Promise.resolve(result)),
-    };
-    const createScanner = vi.fn().mockReturnValueOnce(failedMl).mockReturnValueOnce(recoveredMl);
-    const runtime = new ScanicDetectorRuntime(createScanner);
-
-    await runtime.initialize();
-
-    await expect(runtime.scan(image())).resolves.toMatchObject({
-      detector: 'ml',
-      success: true,
-    });
-    expect(createScanner).toHaveBeenCalledTimes(2);
-    expect(createScanner.mock.calls.map(([options]) => options.detector)).toEqual(['ml', 'ml']);
-  });
-
-  it('uses the classical detector only after two consecutive ML scanners fail', async () => {
-    const broken = () => ({
+  it('propagates ML failure without ever constructing a classical detector', async () => {
+    const scanner = {
       initialize: vi.fn(() => Promise.resolve()),
       scan: vi.fn(() => Promise.reject(new Error('ML failed'))),
-    });
-    const classical = {
-      initialize: vi.fn(() => Promise.resolve()),
-      scan: vi.fn(() => Promise.resolve(result)),
     };
-    const createScanner = vi
-      .fn()
-      .mockReturnValueOnce(broken())
-      .mockReturnValueOnce(broken())
-      .mockReturnValueOnce(classical);
+    const createScanner = vi.fn(() => scanner);
     const runtime = new ScanicDetectorRuntime(createScanner);
-
     await runtime.initialize();
-
-    await expect(runtime.scan(image())).resolves.toMatchObject({
-      detector: 'classical',
-      success: true,
-    });
-    expect(createScanner).toHaveBeenCalledTimes(3);
-    expect(createScanner.mock.calls.map(([options]) => options.detector)).toEqual([
-      'ml',
-      'ml',
-      'classical',
-    ]);
+    await expect(runtime.scan(image())).rejects.toThrow('ML failed');
+    expect(createScanner).toHaveBeenCalledOnce();
+    expect(createScanner.mock.calls[0]).toEqual([expect.objectContaining({ detector: 'ml' })]);
   });
 });

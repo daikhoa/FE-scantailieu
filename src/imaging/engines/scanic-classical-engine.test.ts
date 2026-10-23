@@ -213,6 +213,28 @@ describe('Scanic classical lifecycle', () => {
 });
 
 describe('Scanic result boundary', () => {
+  it('keeps full frame for a high-score quadrilateral smaller than two percent of the image', async () => {
+    const { engine, backend } = await ready();
+    backend.detect = () =>
+      Promise.resolve({
+        ...documentResult,
+        confidence: 0.99,
+        detector: 'ml',
+        corners: {
+          topLeft: { x: 1, y: 1 },
+          topRight: { x: 2, y: 1 },
+          bottomRight: { x: 2, y: 2 },
+          bottomLeft: { x: 1, y: 2 },
+        },
+      });
+    const input = frame();
+    await expect(engine.detect(input, signal())).resolves.toMatchObject({
+      kind: 'full-frame',
+      reason: 'low-confidence',
+    });
+    input.close();
+    await engine.dispose();
+  });
   it('maps validated corners in the input frame coordinates', async () => {
     const { engine, backend } = await ready();
     backend.detect = () => Promise.resolve(documentResult);
@@ -305,6 +327,34 @@ describe('Scanic result boundary', () => {
 });
 
 describe('Scanic serialized work, cancellation and cleanup', () => {
+  it('returns the rough crop as pixels without an intermediate JPEG encode', async () => {
+    const codec = fakeCodec(),
+      backend = fakeBackend();
+    const raw = { dimensions, pixels: new Uint8ClampedArray(800) };
+    backend.warp = () => Promise.resolve(raw);
+    const engine = createScanicClassicalEngine({ createBackend: () => backend, codec });
+    await engine.initialize(signal());
+    const recipe: EditRecipe = {
+      version: 1,
+      crop: { kind: 'full-frame' },
+      rotation: 0,
+      dewarp: { mode: 'perspective-only' },
+      filter: { mode: 'original', presetVersion: 'rough', parameters: {} },
+    };
+    await expect(
+      engine.renderPixels?.(
+        {
+          original: { blob: new Blob(['source'], { type: 'image/jpeg' }), dimensions },
+          orientation: 0,
+          recipe,
+          maximumOutputLongSide: 720,
+        },
+        signal(),
+      ),
+    ).resolves.toBe(raw);
+    expect(vi.mocked(codec).encode.mock.calls).toHaveLength(0);
+    await engine.dispose();
+  });
   it('shares initialization-failure cleanup with a concurrent dispose', async () => {
     const cleanupStarted = deferred<undefined>();
     const cleanupRelease = deferred<undefined>();
@@ -520,7 +570,7 @@ describe('Scanic serialized work, cancellation and cleanup', () => {
     );
     expect(result.recipeKey).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(result).toMatchObject({
-      engineVersion: 'scanic-1.6.0+ml-retry-classical-fallback-perspective-v2-filter-v7',
+      engineVersion: 'scanic-1.6.0+ml-only-perspective-v2-filter-v8',
       image: { dimensions: warped.dimensions },
       dewarp: { kind: 'not-requested' },
     });

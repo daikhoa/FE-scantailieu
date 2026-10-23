@@ -1,3 +1,6 @@
+import { applyClaheLightness } from './clahe-lightness';
+import { adjustLabLightness } from './lab-lightness';
+import type { LocalRestorationAnalysis } from '../restoration/local-restoration-client';
 import type { FilterMode } from '../../domain/document';
 import { analyzeDocumentQuality, type DocumentQualityProfile } from '../analysis/document-quality';
 import type { RgbaBackendInput } from '../engines/scanic-backend-contract';
@@ -178,6 +181,8 @@ function normalizeIllumination(
   input: RgbaBackendInput,
   gray: Uint8Array<ArrayBuffer>,
   profile: DocumentQualityProfile,
+  strength = 1,
+  useLab = false,
 ): void {
   if (!profile.stages.normalizeIllumination) return;
   const { width, height } = input.dimensions;
@@ -192,7 +197,7 @@ function normalizeIllumination(
         interpolateIllumination(illumination, x, y, width, height),
         32,
       );
-      const requestedGain = clamp(paperLevel / estimatedLight, 1, maximumGain);
+      const requestedGain = 1 + (clamp(paperLevel / estimatedLight, 1, maximumGain) - 1) * strength;
       const maximumChannel = Math.max(
         input.pixels[offset] ?? 0,
         input.pixels[offset + 1] ?? 0,
@@ -200,6 +205,16 @@ function normalizeIllumination(
       );
       const gain = maximumChannel === 0 ? 1 : Math.min(requestedGain, 248 / maximumChannel);
       if (gain <= 1) continue;
+      if (profile.stages.protectColor && useLab) {
+        adjustLabLightness(input.pixels, offset, (gray[index] ?? 0) * (gain - 1) * 0.65);
+        gray[index] = luminance(
+          input.pixels[offset] ?? 0,
+          input.pixels[offset + 1] ?? 0,
+          input.pixels[offset + 2] ?? 0,
+          255,
+        );
+        continue;
+      }
       input.pixels[offset] = clampByte((input.pixels[offset] ?? 0) * gain);
       input.pixels[offset + 1] = clampByte((input.pixels[offset + 1] ?? 0) * gain);
       input.pixels[offset + 2] = clampByte((input.pixels[offset + 2] ?? 0) * gain);
@@ -212,10 +227,11 @@ function normalizePaperTone(
   input: RgbaBackendInput,
   gray: Uint8Array<ArrayBuffer>,
   profile: DocumentQualityProfile,
+  strength = 1,
 ): void {
   if (!profile.stages.normalizePaperTone) return;
   const paperLevel = Math.max(1, profile.illumination.brightLevel);
-  const lift = Math.min(72, 238 - paperLevel);
+  const lift = Math.min(72, 238 - paperLevel) * strength;
   for (let index = 0, offset = 0; index < gray.length; index += 1, offset += 4) {
     const sourceLuminance = gray[index] ?? 0;
     const relativeTone = clamp(sourceLuminance / paperLevel, 0, 1);
@@ -233,22 +249,118 @@ function normalizePaperTone(
   }
 }
 
+function smoothLuminance(
+  input: RgbaBackendInput,
+  gray: Uint8Array<ArrayBuffer>,
+  strength: number,
+): void {
+  const source = gray.slice();
+  const { width, height } = input.dimensions;
+  for (let y = 1; y < height - 1; y++)
+    for (let x = 1; x < width - 1; x++) {
+      const index = y * width + x;
+      const center = source[index] ?? 0;
+      const mean =
+        ((source[index - 1] ?? center) +
+          (source[index + 1] ?? center) +
+          (source[index - width] ?? center) +
+          (source[index + width] ?? center)) /
+        4;
+      // Preserve text edges and faint strokes: smoothing is limited to near-flat neighborhoods.
+      if (Math.abs(mean - center) > 8) continue;
+      const adjustment = (mean - center) * strength;
+      for (let channel = 0; channel < 3; channel++)
+        input.pixels[index * 4 + channel] = clampByte(
+          (input.pixels[index * 4 + channel] ?? 0) + adjustment,
+        );
+      gray[index] = clampByte(center + adjustment);
+    }
+}
+
+function adjustAppearance(
+  input: RgbaBackendInput,
+  gray: Uint8Array<ArrayBuffer>,
+  analysis: LocalRestorationAnalysis,
+): void {
+  const { lift = 0 } = analysis.strengths ?? {};
+  for (let index = 0; index < gray.length; index++) {
+    const value = gray[index] ?? 0;
+    // A soft gamma lift keeps black text anchored and rolls off before the highlights.
+    const lifted = 255 * Math.pow(value / 255, 1 - lift * 0.3);
+    const requested = lifted;
+    const offset = index * 4;
+    const maximum = Math.max(
+      input.pixels[offset] ?? 0,
+      input.pixels[offset + 1] ?? 0,
+      input.pixels[offset + 2] ?? 0,
+    );
+    const minimum = Math.min(
+      input.pixels[offset] ?? 0,
+      input.pixels[offset + 1] ?? 0,
+      input.pixels[offset + 2] ?? 0,
+    );
+    const adjustment = clamp(requested - value, -minimum, Math.max(0, 248 - maximum));
+    if (analysis.protectColor) adjustLabLightness(input.pixels, offset, adjustment * 0.65);
+    else
+      for (let channel = 0; channel < 3; channel++)
+        input.pixels[offset + channel] = clampByte(
+          (input.pixels[offset + channel] ?? 0) + adjustment,
+        );
+    gray[index] = luminance(
+      input.pixels[offset] ?? 0,
+      input.pixels[offset + 1] ?? 0,
+      input.pixels[offset + 2] ?? 0,
+      255,
+    );
+  }
+}
+
 function filterPixels(
   input: RgbaBackendInput,
   mode: Exclude<FilterMode, 'original'>,
+  analysis?: LocalRestorationAnalysis,
 ): Uint8ClampedArray<ArrayBuffer> {
   const { width, height } = input.dimensions;
-  const profile = analyzeDocumentQuality(input);
+  const measured = analysis?.quality ?? analyzeDocumentQuality(input);
+  const profile =
+    analysis === undefined
+      ? measured
+      : {
+          ...measured,
+          stages: {
+            ...measured.stages,
+            protectColor: analysis.protectColor,
+            normalizeIllumination: (analysis.strengths?.shadow ?? 0) > 0,
+            normalizePaperTone: !analysis.protectColor && (analysis.strengths?.lift ?? 0) > 0,
+          },
+        };
   const gray = createLuminance(input);
-  normalizeIllumination(input, gray, profile);
-  normalizePaperTone(input, gray, profile);
+  if ((analysis?.strengths?.smooth ?? 0) > 0)
+    smoothLuminance(input, gray, analysis?.strengths?.smooth ?? 0);
+  normalizeIllumination(
+    input,
+    gray,
+    profile,
+    analysis?.strengths?.shadow ?? 1,
+    analysis !== undefined,
+  );
+  normalizePaperTone(input, gray, profile, analysis?.strengths?.lift ?? 1);
+  if (analysis?.strengths !== undefined) {
+    adjustAppearance(input, gray, analysis);
+    applyClaheLightness(input, gray, analysis.strengths.contrast);
+  }
   const output = input.pixels;
-  if (mode === 'ocr-color' && profile.stages.sharpen === 'none') return output;
+  if (
+    mode === 'ocr-color' &&
+    (analysis?.strengths?.sharpen ?? (profile.stages.sharpen === 'none' ? 0 : 1)) === 0
+  )
+    return output;
   const columns = new Uint32Array(width);
   const squaredColumns = mode === 'black-and-white' ? new Float64Array(width) : null;
   const radius = localRadius(width, height);
   const sharpeningStrength =
-    profile.stages.sharpen === 'none' ? 0 : profile.stages.sharpen === 'gentle' ? 0.55 : 1;
+    analysis?.strengths?.sharpen ??
+    (profile.stages.sharpen === 'none' ? 0 : profile.stages.sharpen === 'gentle' ? 0.55 : 1);
   let firstRow = 0;
   let lastRow = -1;
 
@@ -340,9 +452,19 @@ function filterPixels(
 }
 
 /** Worker-safe document enhancement. Consumes and reuses the caller-owned pixel buffer. */
-export function applyDocumentFilter(input: RgbaBackendInput, mode: FilterMode): RgbaImage {
+export function applyDocumentFilter(
+  input: RgbaBackendInput,
+  mode: FilterMode,
+  analysis?: LocalRestorationAnalysis,
+): RgbaImage {
   validateInput(input, mode);
   if (mode === 'original') return input;
-  filterPixels(input, mode);
+  if (
+    mode === 'ocr-color' &&
+    analysis?.strengths !== undefined &&
+    Object.values(analysis.strengths).every((strength) => strength === 0)
+  )
+    return input;
+  filterPixels(input, mode, analysis);
   return input;
 }

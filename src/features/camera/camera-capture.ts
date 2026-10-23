@@ -1,4 +1,6 @@
 import { isValidImageDimensions } from '../../imaging/geometry/coordinates';
+import { createRgbaThumbnail } from '../../imaging/rendering/rgba-thumbnail';
+import type { RgbaBackendInput } from '../../imaging/engines/scanic-backend-contract';
 import {
   MAX_WORKING_IMAGE_PIXELS,
   MAX_WORKING_IMAGE_SIDE,
@@ -37,6 +39,8 @@ export interface CapturedRgbaFrame {
   readonly kind: 'rgba-frame';
   readonly dimensions: { readonly width: number; readonly height: number };
   readonly pixels: Uint8ClampedArray<ArrayBuffer>;
+  readonly captureMs?: number;
+  readonly preview?: RgbaBackendInput;
 }
 
 function abortError(): Error {
@@ -68,6 +72,7 @@ export function createCameraCapture(options: CameraCaptureOptions = {}): CameraC
 
   return {
     capture(_stream, video, signal) {
+      const started = performance.now();
       let canvas: HTMLCanvasElement | null = null;
       try {
         checkAbort(signal);
@@ -94,6 +99,11 @@ export function createCameraCapture(options: CameraCaptureOptions = {}): CameraC
           kind: 'rgba-frame',
           dimensions: { width: canvas.width, height: canvas.height },
           pixels: image.data,
+          preview: createRgbaThumbnail(
+            { dimensions: { width: canvas.width, height: canvas.height }, pixels: image.data },
+            128,
+          ),
+          captureMs: performance.now() - started,
         });
       } catch (error) {
         if (signal.aborted) return Promise.reject(abortError());

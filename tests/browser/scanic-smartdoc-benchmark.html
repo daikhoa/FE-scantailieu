@@ -107,7 +107,7 @@
           .getEntriesByType('resource')
           .filter((entry) => new URL(entry.name, location.href).origin !== location.origin).length;
         return {
-          engine: 'scanic-1.6.0-ml-self-hosted-classical-fallback',
+          engine: 'scanic-1.6.0-ml-only-self-hosted',
           runsPerFixture: 3,
           previewMaxSide: 960,
           initializationMs,

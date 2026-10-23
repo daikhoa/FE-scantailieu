@@ -146,7 +146,7 @@ describe('ScanBatchReview', () => {
 
     expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
       expect.stringContaining('Trang 1'),
-      expect.stringContaining('Trang 2Đang xử lý'),
+      expect.stringContaining('Trang 2Đang hoàn thiện'),
       expect.stringContaining('Trang 3Cần xử lý lại'),
     ]);
     expect(screen.getByRole('button', { name: 'Tải PDF 3 trang' })).toBeDisabled();

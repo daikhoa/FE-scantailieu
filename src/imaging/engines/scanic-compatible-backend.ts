@@ -24,52 +24,92 @@ export function createCompatibleScanicBackend(
   const createFallback = options.createFallback ?? loadMainThreadFallback;
   let active: ClassicalBackend | null = null;
   let initialized = false;
+  let initializing = false;
   let disposed = false;
-
-  const requireActive = (): ClassicalBackend => {
-    if (disposed || !initialized || active === null) {
+  let usingWorker = true;
+  const cleanup = new WeakMap<ClassicalBackend, Promise<void>>();
+  const isDisposed = () => disposed;
+  const release = (backend: ClassicalBackend): Promise<void> => {
+    if (active === backend) active = null;
+    let task = cleanup.get(backend);
+    if (task === undefined) {
+      task = Promise.resolve().then(() => backend.dispose());
+      cleanup.set(backend, task);
+    }
+    return task;
+  };
+  const activate = async (candidate: ClassicalBackend): Promise<void> => {
+    if (isDisposed()) {
+      await release(candidate);
       throw new ScannerEngineError('unavailable');
     }
+    active = candidate;
+    try {
+      await candidate.initialize();
+      if (isDisposed()) throw new ScannerEngineError('unavailable');
+      initialized = true;
+    } catch (error) {
+      await release(candidate);
+      throw error;
+    }
+  };
+  const requireActive = (): ClassicalBackend => {
+    if (disposed || !initialized || active === null) throw new ScannerEngineError('unavailable');
     return active;
   };
-
   return {
     async initialize() {
-      if (disposed || initialized) throw new ScannerEngineError('unavailable');
+      if (disposed || initialized || initializing) throw new ScannerEngineError('unavailable');
+      initializing = true;
       try {
-        active = createWorker();
-        await active.initialize();
-        initialized = true;
-        return;
-      } catch (error) {
-        await active?.dispose().catch(() => undefined);
-        active = null;
-        if (failureCode(error) !== 'unavailable') throw error;
-      }
-
-      try {
-        active = await createFallback();
-        await active.initialize();
-        initialized = true;
-      } catch (error) {
-        await active?.dispose().catch(() => undefined);
-        active = null;
-        throw error instanceof ScannerEngineError ? error : new ScannerEngineError('unavailable');
+        try {
+          await activate(createWorker());
+        } catch (error) {
+          if (isDisposed() || failureCode(error) !== 'unavailable') throw error;
+          usingWorker = false;
+          await activate(await createFallback());
+        }
+      } finally {
+        initializing = false;
       }
     },
-    detect(input) {
-      return requireActive().detect(input);
+    async detect(input) {
+      const current = requireActive();
+      // Retain only the reduced detection frame for one retry; warp never makes this copy.
+      const retryInput = { dimensions: input.dimensions, pixels: input.pixels.slice() };
+      try {
+        return await current.detect(input);
+      } catch (error) {
+        if (isDisposed()) throw error;
+        initialized = false;
+        await release(current);
+        if (isDisposed()) throw new ScannerEngineError('unavailable');
+        const recovered = usingWorker ? createWorker() : await createFallback();
+        try {
+          await activate(recovered);
+          return await recovered.detect(retryInput);
+        } catch (retryError) {
+          initialized = false;
+          await release(recovered);
+          throw retryError;
+        }
+      }
     },
-    warp(input, corners, rotation, filter, maximumOutputLongSide) {
-      return requireActive().warp(input, corners, rotation, filter, maximumOutputLongSide);
+    warp(input, corners, rotation, filter, maximumOutputLongSide, analysis) {
+      return requireActive().warp(
+        input,
+        corners,
+        rotation,
+        filter,
+        maximumOutputLongSide,
+        analysis,
+      );
     },
     async dispose() {
-      if (disposed) return;
       disposed = true;
       initialized = false;
-      const owned = active;
-      active = null;
-      await owned?.dispose();
+      const current = active;
+      if (current !== null) await release(current);
     },
   };
 }

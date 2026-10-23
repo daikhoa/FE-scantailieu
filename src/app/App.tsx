@@ -1,4 +1,5 @@
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { renderAnalyzedPage } from '../imaging/restoration/analyzed-page-renderer';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 
 import type { EditRecipe } from '../domain/document';
 import { CameraScreen } from '../features/camera/CameraScreen';
@@ -15,7 +16,6 @@ import { DocumentEditor } from '../features/editor/DocumentEditor';
 import {
   createBackgroundPageProcessor,
   type BackgroundPageProcessor,
-  type ProcessedScanPage,
   type ScanPageSource,
 } from '../features/scanner/background-page-processor';
 import type { LiveDetectionResult } from '../features/scanner/detection-scheduler';
@@ -25,11 +25,7 @@ import { scanBatchReducer, scanBatchStatus } from '../features/scanner/scan-batc
 import type { VideoFrameSource } from '../features/scanner/video-frame-source';
 import type { ScannerEngine } from '../imaging/contracts/scanner-engine';
 import { createScanicEngine } from '../imaging/engines/scanic-classical-engine';
-import {
-  canReuseRestorationAnalysis,
-  discardTransientRestorationPixels,
-  restoreProcessedPage,
-} from '../imaging/restoration/local-page-restoration';
+import { canReuseRestorationAnalysis } from '../imaging/restoration/local-page-restoration';
 import {
   createLocalRestorationClient,
   type LocalRestorationClient,
@@ -80,7 +76,7 @@ function PrivacyNotice() {
       <div>
         <strong>Xử lý ngay trên thiết bị</strong>
         <span>
-          Ảnh không được tải lên máy chủ. Classifier và model phục hồi chạy trong trình duyệt.
+          Ảnh không được tải lên máy chủ. Nhận diện và hoàn thiện ảnh chạy trong trình duyệt.
         </span>
       </div>
     </aside>
@@ -163,6 +159,7 @@ export function App({
   const [batch, dispatchBatch] = useReducer(scanBatchReducer, { pages: [] });
   const [resolvedCameraService] = useState(() => cameraService ?? createCameraService());
   const restorationClientRef = useRef<LocalRestorationClient | null>(null);
+  const editorAnalyzerFactory = useCallback(() => restorationClientRef.current, []);
   const viewHeadingRef = useRef<HTMLHeadingElement>(null);
   const shouldMoveFocus = useRef(false);
   const pageProcessor = useRef<BackgroundPageProcessor | null>(null);
@@ -224,7 +221,10 @@ export function App({
   );
 
   useEffect(() => {
-    if (view === 'camera') restorationClientRef.current?.warmup?.();
+    if (view === 'camera') {
+      restorationClientRef.current?.warmup?.();
+      void pageProcessor.current?.warmup?.().catch(() => undefined);
+    }
   }, [view]);
 
   useEffect(() => {
@@ -276,7 +276,6 @@ export function App({
     const controller = new AbortController();
     pageOperations.current.get(id)?.abort();
     pageOperations.current.set(id, controller);
-    let publishedPreview: ProcessedScanPage | null = null;
     void processor
       .enqueue(
         source,
@@ -287,80 +286,23 @@ export function App({
         liveDetection,
         {
           analysisKey: id,
-          onPreview: (page) => {
-            if (pageOperations.current.get(id) !== controller) return;
-            const previewPage =
-              restorationClientRef.current === null
-                ? discardTransientRestorationPixels(page)
-                : { ...page, restoration: { kind: 'processing' as const } };
-            publishedPreview = previewPage;
-            dispatchBatch({ type: 'ready', id, page: previewPage });
+          onOriginal: (original) => {
+            if (pageOperations.current.get(id) === controller)
+              dispatchBatch({ type: 'source-saved', id, source: original.blob });
           },
         },
       )
-      .then(async (page) => {
-        if (pageOperations.current.get(id) !== controller) return;
-        const resolvedRestorationClient = restorationClientRef.current;
-        const shouldRestore = resolvedRestorationClient !== null;
-        const readyPage: ProcessedScanPage = shouldRestore
-          ? { ...page, restoration: { kind: 'processing' } }
-          : discardTransientRestorationPixels(page);
-        dispatchBatch({
-          type: publishedPreview === null ? 'ready' : 'updated',
-          id,
-          page: readyPage,
-        });
-        if (!shouldRestore || pageOperations.current.get(id) !== controller) return;
-        try {
-          const restored = await restoreProcessedPage(
-            readyPage,
-            resolvedRestorationClient,
-            controller.signal,
-            { analysisKey: id, reuseAnalysis: true },
-          );
-          if (pageOperations.current.get(id) === controller) {
-            dispatchBatch({ type: 'updated', id, page: restored });
-          }
-        } catch (error) {
-          if (
-            pageOperations.current.get(id) !== controller ||
-            (error instanceof Error && error.name === 'AbortError')
-          ) {
-            return;
-          }
-          const reason =
-            error instanceof Error && error.message.includes('unavailable')
-              ? 'unavailable'
-              : 'failed';
-          dispatchBatch({
-            type: 'updated',
-            id,
-            page: {
-              ...discardTransientRestorationPixels(readyPage),
-              restoration: { kind: 'fallback', reason },
-            },
-          });
-        }
+      .then((page) => {
+        if (pageOperations.current.get(id) === controller)
+          dispatchBatch({ type: 'ready', id, page });
       })
       .catch((error: unknown) => {
         if (
           pageOperations.current.get(id) !== controller ||
           (error instanceof Error && error.name === 'AbortError')
-        ) {
+        )
           return;
-        }
-        if (publishedPreview === null) {
-          dispatchBatch({ type: 'failed', id });
-          return;
-        }
-        dispatchBatch({
-          type: 'updated',
-          id,
-          page: {
-            ...publishedPreview,
-            restoration: { kind: 'fallback', reason: 'failed' },
-          },
-        });
+        dispatchBatch({ type: 'failed', id });
       })
       .finally(() => {
         if (pageOperations.current.get(id) === controller) pageOperations.current.delete(id);
@@ -382,70 +324,35 @@ export function App({
     const controller = new AbortController();
     pageOperations.current.get(id)?.abort();
     pageOperations.current.set(id, controller);
-    let restorationContinues = false;
     try {
       const localEngine = await readyEditorEngine();
-      const variant = await localEngine.render(
-        { original: selected.page.original, orientation: 0, recipe, preserveOutputPixels: true },
+      const client = restorationClientRef.current;
+      const output = await renderAnalyzedPage(
+        localEngine,
+        selected.page.original,
+        recipe,
         controller.signal,
+        {
+          ...(client === null ? {} : { analyzer: client }),
+          ...(canReuseRestorationAnalysis(selected.page.recipe, recipe) &&
+          selected.page.analysis !== undefined
+            ? { analysis: selected.page.analysis }
+            : {}),
+          analysisKey: id,
+        },
       );
       if (controller.signal.aborted || pageOperations.current.get(id) !== controller) {
         const error = new Error('Page edit cancelled.');
         error.name = 'AbortError';
         throw error;
       }
-
-      const resolvedRestorationClient = restorationClientRef.current;
-      const editedPage: ProcessedScanPage = {
-        original: selected.page.original,
-        crop: recipe.crop,
-        recipe,
-        variant,
-        ...(resolvedRestorationClient === null
-          ? {}
-          : { restoration: { kind: 'processing' as const } }),
-      };
-      dispatchBatch({ type: 'updated', id, page: editedPage });
-
-      if (resolvedRestorationClient !== null) {
-        restorationContinues = true;
-        void restoreProcessedPage(editedPage, resolvedRestorationClient, controller.signal, {
-          analysisKey: id,
-          reuseAnalysis: canReuseRestorationAnalysis(selected.page.recipe, recipe),
-        })
-          .then((restored) => {
-            if (pageOperations.current.get(id) === controller) {
-              dispatchBatch({ type: 'updated', id, page: restored });
-            }
-          })
-          .catch((error: unknown) => {
-            if (
-              pageOperations.current.get(id) !== controller ||
-              (error instanceof Error && error.name === 'AbortError')
-            ) {
-              return;
-            }
-            const reason =
-              error instanceof Error && error.message.includes('unavailable')
-                ? 'unavailable'
-                : 'failed';
-            dispatchBatch({
-              type: 'updated',
-              id,
-              page: {
-                ...discardTransientRestorationPixels(editedPage),
-                restoration: { kind: 'fallback', reason },
-              },
-            });
-          })
-          .finally(() => {
-            if (pageOperations.current.get(id) === controller) pageOperations.current.delete(id);
-          });
-      }
+      dispatchBatch({
+        type: 'updated',
+        id,
+        page: { original: selected.page.original, crop: recipe.crop, recipe, ...output },
+      });
     } finally {
-      if (!restorationContinues && pageOperations.current.get(id) === controller) {
-        pageOperations.current.delete(id);
-      }
+      if (pageOperations.current.get(id) === controller) pageOperations.current.delete(id);
     }
   };
 
@@ -674,6 +581,7 @@ export function App({
         />
       ) : editorImage === null ? null : (
         <DocumentEditor
+          analyzerFactory={editorAnalyzerFactory}
           image={editorImage}
           headingRef={viewHeadingRef}
           {...(editorEngineFactory === undefined ? {} : { engineFactory: editorEngineFactory })}

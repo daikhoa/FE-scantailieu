@@ -9,6 +9,14 @@ const HISTOGRAM_LEVELS = 256;
 const MAX_ANALYSIS_SAMPLES = 65_536;
 
 export interface DocumentQualityProfile {
+  readonly brightness: {
+    readonly mean: number;
+    readonly darkPercentile: number;
+    readonly brightPercentile: number;
+    readonly darkRatio: number;
+    readonly contrast: number;
+    readonly saturation: number;
+  };
   readonly illumination: {
     readonly kind: 'uniform' | 'uneven';
     readonly range: number;
@@ -22,6 +30,7 @@ export interface DocumentQualityProfile {
   readonly detail: {
     readonly kind: 'low' | 'medium' | 'high';
     readonly edgeScore: number;
+    readonly periodicRatio?: number;
   };
   readonly clipping: {
     readonly highlightRatio: number;
@@ -85,6 +94,12 @@ export function analyzeDocumentQuality(input: RgbaBackendInput): DocumentQuality
   let clippedHighlights = 0;
   let edgeSamples = 0;
   let edgeTotal = 0;
+  let periodicSamples = 0;
+  let sum = 0;
+  let squaredSum = 0;
+  let darkPixels = 0;
+  let saturation = 0;
+  const histogram = new Uint32Array(256);
 
   for (let y = 0; y < height; y += stride) {
     for (let x = 0; x < width; x += stride) {
@@ -95,6 +110,11 @@ export function analyzeDocumentQuality(input: RgbaBackendInput): DocumentQuality
       const maximum = Math.max(red, green, blue);
       const minimum = Math.min(red, green, blue);
       const value = luminanceAt(input, x, y);
+      sum += value;
+      squaredSum += value * value;
+      if (value < 40) darkPixels++;
+      saturation += maximum === 0 ? 0 : (maximum - minimum) / maximum;
+      histogram[value] = (histogram[value] ?? 0) + 1;
       const tileX = Math.min(TILE_COLUMNS - 1, Math.floor((x * TILE_COLUMNS) / width));
       const tileY = Math.min(TILE_ROWS - 1, Math.floor((y * TILE_ROWS) / height));
       const tile = tileY * TILE_COLUMNS + tileX;
@@ -116,6 +136,15 @@ export function analyzeDocumentQuality(input: RgbaBackendInput): DocumentQuality
         );
         edgeTotal += laplacian / 4;
         edgeSamples += 1;
+        const left = center - luminanceAt(input, x - stride, y),
+          right = luminanceAt(input, x + stride, y) - center;
+        const above = center - luminanceAt(input, x, y - stride),
+          below = luminanceAt(input, x, y + stride) - center;
+        const alternates = (a: number, b: number) =>
+          a * b < 0 &&
+          Math.min(Math.abs(a), Math.abs(b)) >= 3 &&
+          Math.max(Math.abs(a), Math.abs(b)) <= 32;
+        if (alternates(left, right) || alternates(above, below)) periodicSamples++;
       }
     }
   }
@@ -150,6 +179,14 @@ export function analyzeDocumentQuality(input: RgbaBackendInput): DocumentQuality
           : 'gentle';
 
   return {
+    brightness: {
+      mean: sum / samples,
+      darkPercentile: percentile(histogram, samples, 0.05),
+      brightPercentile: percentile(histogram, samples, 0.95),
+      darkRatio: darkPixels / samples,
+      contrast: Math.sqrt(Math.max(0, squaredSum / samples - (sum / samples) ** 2)),
+      saturation: saturation / samples,
+    },
     illumination: {
       kind: illuminationRange >= 18 ? 'uneven' : 'uniform',
       range: illuminationRange,
@@ -157,7 +194,11 @@ export function analyzeDocumentQuality(input: RgbaBackendInput): DocumentQuality
       brightLevel,
     },
     color: { kind: colorKind, saturatedRatio },
-    detail: { kind: detailKind, edgeScore },
+    detail: {
+      kind: detailKind,
+      edgeScore,
+      periodicRatio: edgeSamples === 0 ? 0 : periodicSamples / edgeSamples,
+    },
     clipping: { highlightRatio },
     stages: {
       normalizeIllumination: illuminationRange >= 18 && highlightRatio < 0.55,

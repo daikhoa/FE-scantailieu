@@ -15,6 +15,8 @@
         createRgbaScannerFrame,
         createScanicEngine,
       } from '/src/imaging/engines/scanic-classical-engine.ts';
+      import { createCompatibleScanicBackend } from '/src/imaging/engines/scanic-compatible-backend.ts';
+      import { ScannerEngineError } from '/src/imaging/engines/scanner-engine-error.ts';
 
       const fixturePaths = [
         '/tests/fixtures/synthetic/flat-document.png',
@@ -23,7 +25,18 @@
         '/tests/fixtures/synthetic/no-document-clutter.png',
       ];
       const resultElement = document.querySelector('#result');
-      const engine = createScanicEngine();
+      const engine = createScanicEngine(
+        location.search.includes('fallback')
+          ? {
+              createBackend: () =>
+                createCompatibleScanicBackend({
+                  createWorker: () => {
+                    throw new ScannerEngineError('unavailable');
+                  },
+                }),
+            }
+          : {},
+      );
       const controller = new AbortController();
 
       async function rgbaFrame(path) {

@@ -149,7 +149,8 @@ describe('background page processor', () => {
         orientation: 0,
         recipe: result.recipe,
         maximumOutputLongSide: 3000,
-        preserveOutputPixels: true,
+        preserveOutputPixels: false,
+        createThumbnail: true,
       },
       expect.any(AbortSignal),
     );
@@ -233,14 +234,14 @@ describe('background page processor', () => {
       ],
     });
     expect(detectPage).toHaveBeenCalledOnce();
-    expect(renderPage).toHaveBeenCalledTimes(2);
+    expect(renderPage).toHaveBeenCalledTimes(1);
     expect(renderPage.mock.calls[0]?.[0].recipe.crop).toEqual(result.crop);
     expect(renderPage.mock.calls[0]?.[1]).toBeInstanceOf(AbortSignal);
 
     await processor.dispose();
   });
 
-  it('classifies the rough crop before publishing a 1600 px preview and rendering the final', async () => {
+  it('classifies a raw 720 crop then renders the final once without a 1600 preview', async () => {
     const source = new Blob(['page'], { type: 'image/jpeg' });
     const { engine, renderPage } = fakeEngine();
     const analyze = vi.fn<NonNullable<LocalRestorationClient['analyze']>>(() =>
@@ -288,23 +289,28 @@ describe('background page processor', () => {
     }
     expect(roughRenderOrder).toBeLessThan(analysisOrder);
     expect(analysisOrder).toBeLessThan(previewRenderOrder);
-    expect(renderPage).toHaveBeenCalledTimes(3);
+    expect(renderPage).toHaveBeenCalledTimes(2);
     expect(renderPage.mock.calls[0]?.[0]).toMatchObject({
       maximumOutputLongSide: 720,
       preserveOutputPixels: true,
       recipe: { filter: { mode: 'original' } },
     });
     expect(renderPage.mock.calls[1]?.[0]).toMatchObject({
-      maximumOutputLongSide: 1600,
+      maximumOutputLongSide: 3000,
       preserveOutputPixels: false,
+      analysis: {
+        kind: 'analysis',
+        stages: ['deshadow', 'appearance'],
+        classifierModel: 'classifier@test',
+        warnings: [],
+        protectColor: false,
+      },
     });
-    expect(renderPage.mock.calls[2]?.[0].maximumOutputLongSide).toBe(3000);
-    expect(renderPage.mock.calls[2]?.[0].preserveOutputPixels).toBe(true);
-    expect(onPreview).toHaveBeenCalledOnce();
-    expect(onPreview.mock.calls[0]?.[0]).toMatchObject({
-      restoration: { kind: 'processing' },
+    expect(onPreview).not.toHaveBeenCalled();
+    expect(result.restoration).toMatchObject({
+      kind: 'applied',
+      classifierModel: 'classifier@test',
     });
-    expect(result.restoration).toEqual({ kind: 'processing' });
 
     await processor.dispose();
   });

@@ -18,13 +18,18 @@ async function execute(request: ScanicWorkerRequest): Promise<unknown> {
     return null;
   }
   if (request.operation === 'warp') {
+    const started = performance.now();
     const corrected = warpPerspectiveRgba(
       request.input,
       request.corners,
       request.maximumOutputLongSide,
     );
-    const filtered = applyDocumentFilter(corrected, request.filter);
-    return rotateOwnedRgba(filtered, request.rotation);
+    const warped = performance.now();
+    const filtered = applyDocumentFilter(corrected, request.filter, request.analysis);
+    return {
+      ...rotateOwnedRgba(filtered, request.rotation),
+      timings: { warp3000: warped - started, restorationFilter: performance.now() - warped },
+    };
   }
   if (detector === null) throw new Error('Scanner not initialized.');
   const input: RgbaBackendInput = request.input;

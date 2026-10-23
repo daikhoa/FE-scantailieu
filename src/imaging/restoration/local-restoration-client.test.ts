@@ -38,7 +38,33 @@ class FakeWorker {
 }
 
 describe('local restoration client', () => {
+  it('keeps a watchdog for cancelled inference until the worker acknowledges completion', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('Worker', FakeWorker);
+    const client = createLocalRestorationClient();
+    const worker = FakeWorker.latest;
+    const controller = new AbortController();
+    const operation = client.analyze?.(new Blob(['page']), controller.signal);
+    controller.abort();
+    await expect(operation).rejects.toMatchObject({ name: 'AbortError' });
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(worker?.terminate).toHaveBeenCalledOnce();
+    vi.useRealTimers();
+  });
+  it('terminates a stuck worker and rejects pending analysis after a bounded timeout', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('Worker', FakeWorker);
+    const client = createLocalRestorationClient();
+    const worker = FakeWorker.latest;
+    const operation = client.analyze?.(new Blob(['page']), new AbortController().signal);
+    const assertion = expect(operation).rejects.toThrow('timeout');
+    await vi.advanceTimersByTimeAsync(15_000);
+    await assertion;
+    expect(worker?.terminate).toHaveBeenCalledOnce();
+    vi.useRealTimers();
+  });
   afterEach(() => {
+    vi.useRealTimers();
     FakeWorker.latest = null;
     vi.unstubAllGlobals();
   });

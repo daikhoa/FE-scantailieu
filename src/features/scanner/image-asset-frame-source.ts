@@ -1,3 +1,4 @@
+import type { RgbaBackendInput } from '../../imaging/engines/scanic-backend-contract';
 import type { ImageAsset } from '../../domain/document';
 import { validateRasterAsset } from '../../imaging/codecs/browser-rgba-codec';
 import type { ScannerFrame } from '../../imaging/contracts/scanner-engine';
@@ -14,7 +15,11 @@ interface ImageAssetFrameSourceOptions {
 }
 
 export interface ImageAssetFrameSource {
-  create(asset: ImageAsset, signal: AbortSignal): Promise<ScannerFrame>;
+  create(
+    asset: ImageAsset,
+    signal: AbortSignal,
+    sourcePixels?: RgbaBackendInput,
+  ): Promise<ScannerFrame>;
 }
 
 function abortError(): Error {
@@ -50,13 +55,22 @@ export function createImageAssetFrameSource(
   const createCanvas = options.createCanvas ?? browserCanvas;
 
   return {
-    async create(asset, signal) {
+    async create(asset, signal, sourcePixels) {
       checkAbort(signal);
       validateRasterAsset(asset);
       let bitmap: ImageBitmap | null = null;
       let canvas: HTMLCanvasElement | null = null;
       try {
-        bitmap = await decode(asset.blob, { imageOrientation: 'none' });
+        bitmap =
+          sourcePixels === undefined
+            ? await decode(asset.blob, { imageOrientation: 'none' })
+            : await createImageBitmap(
+                new ImageData(
+                  sourcePixels.pixels,
+                  sourcePixels.dimensions.width,
+                  sourcePixels.dimensions.height,
+                ),
+              );
         checkAbort(signal);
         if (bitmap.width !== asset.dimensions.width || bitmap.height !== asset.dimensions.height) {
           throw new ScannerEngineError('invalid-input');

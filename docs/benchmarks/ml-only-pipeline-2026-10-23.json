@@ -1,0 +1,154 @@
+{
+  "date": "2026-10-23",
+  "environment": "Windows development desktop, Chrome headless, GPU disabled; not a phone measurement",
+  "inputPixels": 7680000,
+  "runsPerCase": 3,
+  "initializationMs": 213.2,
+  "pages": [
+    {
+      "kind": "normal",
+      "dimensions": {
+        "width": 1959,
+        "height": 2823
+      },
+      "totalRangeMs": [
+        374.2,
+        825.8
+      ],
+      "medianStageMs": {
+        "crop720": 26.6,
+        "classifier": 14,
+        "qualityMetrics": 11.8,
+        "warp3000": 253,
+        "restorationFilter": 0,
+        "jpegEncode": 34.8,
+        "frozenDetection": 41.7,
+        "total": 443.7,
+        "capture": 21.8
+      },
+      "stages": [],
+      "jpegBytes": 614465,
+      "thumbnailBytes": 5916
+    },
+    {
+      "kind": "shadow",
+      "dimensions": {
+        "width": 1957,
+        "height": 2825
+      },
+      "totalRangeMs": [
+        844,
+        904.6
+      ],
+      "medianStageMs": {
+        "crop720": 26.8,
+        "classifier": 10.3,
+        "qualityMetrics": 5.4,
+        "warp3000": 229.4,
+        "restorationFilter": 475.9,
+        "jpegEncode": 38.5,
+        "frozenDetection": 39.4,
+        "total": 899.6,
+        "capture": 30
+      },
+      "stages": [
+        "deshadow",
+        "appearance"
+      ],
+      "jpegBytes": 668845,
+      "thumbnailBytes": 5150
+    },
+    {
+      "kind": "color",
+      "dimensions": {
+        "width": 1958,
+        "height": 2816
+      },
+      "totalRangeMs": [
+        366.3,
+        451.6
+      ],
+      "medianStageMs": {
+        "crop720": 25.2,
+        "classifier": 9.1,
+        "qualityMetrics": 4.5,
+        "warp3000": 229,
+        "restorationFilter": 0,
+        "jpegEncode": 30.9,
+        "frozenDetection": 42.4,
+        "total": 386.7,
+        "capture": 17.5
+      },
+      "stages": [],
+      "jpegBytes": 617920,
+      "thumbnailBytes": 6407
+    }
+  ],
+  "smartdoc": [
+    {
+      "manifest": "/tests/fixtures/smartdoc15/development/manifest.json",
+      "documents": 10,
+      "passedIoU09": 10,
+      "meanIoU": 0.9778691447600345,
+      "medianMs": 15.8,
+      "maxMs": 20.1
+    },
+    {
+      "manifest": "/tests/fixtures/smartdoc15/holdout/manifest.json",
+      "documents": 5,
+      "passedIoU09": 5,
+      "meanIoU": 0.9523277398451034,
+      "medianMs": 16.1,
+      "maxMs": 18.6
+    }
+  ],
+  "network": {
+    "developmentPipeline": {
+      "allRealms": true,
+      "externalRequests": 0,
+      "externalOrigins": []
+    },
+    "smartdoc": {
+      "allRealms": true,
+      "externalRequests": 0,
+      "externalOrigins": []
+    },
+    "productionPipeline": {
+      "allRealms": true,
+      "externalRequests": 0,
+      "externalOrigins": []
+    },
+    "productionFallback": {
+      "allRealms": true,
+      "externalRequests": 0,
+      "externalOrigins": []
+    }
+  },
+  "bundle": [
+    {
+      "name": "index-6DJzFgNH.js",
+      "bytes": 437917,
+      "gzipBytes": 180978
+    },
+    {
+      "name": "index-B5y7t9OC.js",
+      "bytes": 308583,
+      "gzipBytes": 94446
+    },
+    {
+      "name": "index-BgX54YUF.css",
+      "bytes": 30182,
+      "gzipBytes": 6127
+    },
+    {
+      "name": "local-restoration.worker-D-l4quV3.js",
+      "bytes": 125372,
+      "gzipBytes": 42420
+    },
+    {
+      "name": "ort-wasm-simd-threaded.asyncify-CvvOzbbq.wasm",
+      "bytes": 24254953,
+      "gzipBytes": 5878496
+    }
+  ]
+}

@@ -1,0 +1,94 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Local scan pipeline benchmark</title>
+<pre id="result" data-status="running">Running…</pre>
+<script type="module">
+  import { createBackgroundPageProcessor } from '/src/features/scanner/background-page-processor.ts';
+  import { createLocalRestorationClient } from '/src/imaging/restoration/local-restoration-client.ts';
+  import { pipelineTimings } from '/src/imaging/pipeline-timing.ts';
+  const output = document.querySelector('#result');
+  const client = createLocalRestorationClient();
+  const processor = createBackgroundPageProcessor({ restorationAnalyzer: client });
+  const signal = new AbortController().signal;
+  function fixture(kind) {
+    const canvas = new OffscreenCanvas(2400, 3200);
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#41454a';
+    ctx.fillRect(0, 0, 2400, 3200);
+    ctx.fillStyle = kind === 'shadow' ? '#d0ccc4' : '#eeeae2';
+    ctx.fillRect(220, 180, 1960, 2840);
+    ctx.fillStyle = '#313236';
+    ctx.font = '64px sans-serif';
+    ctx.fillText('DOCUMENT SCAN / OCR', 340, 400);
+    ctx.font = '36px sans-serif';
+    for (let row = 0; row < 35; row++)
+      ctx.fillText('0123456789  Document text — light ink and fine lines', 340, 550 + row * 60);
+    ctx.fillStyle = '#a9a6a0';
+    ctx.fillText('Faint signature and pale text', 340, 2780);
+    if (kind === 'color') {
+      ctx.fillStyle = '#ad2536';
+      ctx.fillRect(1600, 2600, 330, 200);
+      ctx.fillStyle = '#24619a';
+      ctx.fillRect(340, 2860, 700, 60);
+    }
+    if (kind === 'shadow') {
+      const gradient = ctx.createLinearGradient(220, 0, 2180, 0);
+      gradient.addColorStop(0, 'rgba(0,0,0,0.5)');
+      gradient.addColorStop(1, 'rgba(0,0,0,0)');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(220, 180, 1960, 2840);
+    }
+    const started = performance.now();
+    const pixels = ctx.getImageData(0, 0, 2400, 3200).data;
+    canvas.width = 1;
+    canvas.height = 1;
+    return {
+      kind: 'rgba-frame',
+      dimensions: { width: 2400, height: 3200 },
+      pixels,
+      captureMs: performance.now() - started,
+    };
+  }
+  try {
+    const initialized = performance.now();
+    client.warmup();
+    await processor.warmup();
+    const initializationMs = performance.now() - initialized;
+    const pages = [];
+    for (let run = 0; run < 3; run++)
+      for (const kind of ['normal', 'shadow', 'color']) {
+        const source = fixture(kind);
+        const page = await processor.enqueue(source, signal, undefined, null, {
+          analysisKey: `${kind}-${run}`,
+        });
+        const timings = Object.assign({}, ...pipelineTimings().slice(-4));
+        if (page.analysis === undefined) throw new Error('Classifier did not complete.');
+        if (
+          page.variant.transientRgba !== undefined ||
+          Math.max(page.variant.image.dimensions.width, page.variant.image.dimensions.height) > 3000
+        )
+          throw new Error('Invalid final render.');
+        pages.push({
+          kind,
+          run,
+          crop: page.crop.kind,
+          dimensions: page.variant.image.dimensions,
+          bytes: page.variant.image.blob.size,
+          thumbnailBytes: page.variant.thumbnail?.blob.size,
+          stages: page.analysis.stages,
+          strengths: page.analysis.strengths,
+          quality: page.analysis.quality,
+          warnings: page.analysis.warnings,
+          timings,
+        });
+      }
+    output.dataset.status = 'complete';
+    output.textContent = JSON.stringify({ initializationMs, pages }, null, 2);
+  } catch (error) {
+    output.dataset.status = 'failed';
+    output.textContent = JSON.stringify({ error: error.message });
+  } finally {
+    await processor.dispose();
+    client.dispose();
+  }
+</script>

@@ -1,3 +1,6 @@
+import { recordPipelineTiming } from '../../imaging/pipeline-timing';
+import { renderAnalyzedPage } from '../../imaging/restoration/analyzed-page-renderer';
+import type { LocalRestorationAnalysis } from '../../imaging/restoration/local-restoration-client';
 import type { CropRegion, EditRecipe, ImageAsset, RenderedVariant } from '../../domain/document';
 import type { ScannerEngine } from '../../imaging/contracts/scanner-engine';
 import type { RestorationWarning } from '../../imaging/restoration/restoration-types';
@@ -21,6 +24,7 @@ export interface ProcessedScanPage {
   readonly recipe: EditRecipe;
   readonly variant: RenderedVariant;
   readonly restoration?: PageRestorationState;
+  readonly analysis?: LocalRestorationAnalysis;
 }
 
 export type PageRestorationState =
@@ -44,6 +48,7 @@ export type PageRestorationState =
     };
 
 export interface BackgroundPageProcessor {
+  warmup?(): Promise<void>;
   enqueue(
     source: ScanPageSource,
     signal: AbortSignal,
@@ -56,6 +61,7 @@ export interface BackgroundPageProcessor {
 
 export interface PageProcessingOptions {
   readonly analysisKey?: string;
+  readonly onOriginal?: (original: ImageAsset) => void;
   readonly onPreview?: (page: ProcessedScanPage) => void;
 }
 
@@ -153,6 +159,7 @@ export function createBackgroundPageProcessor(
     liveDetection: LiveDetectionResult | null,
     processingOptions: PageProcessingOptions,
   ): Promise<ProcessedScanPage> => {
+    const totalStarted = performance.now();
     checkAbort(signal, disposal.signal);
     const imported =
       source instanceof Blob
@@ -168,18 +175,22 @@ export function createBackgroundPageProcessor(
             },
           };
     checkAbort(signal, disposal.signal);
-    const currentEngine = await readyEngine(signal);
+    let currentEngine = await readyEngine(signal);
+    processingOptions.onOriginal?.(imported.original);
     try {
       const liveCrop = mapLiveDetectionToCrop(liveDetection, imported.original.dimensions);
       // The live guide can be one or more video frames behind the shutter. Refine it against the
       // frozen capture so camera motion at press time cannot skew the perspective transform.
+      const detectionStarted = performance.now();
       const crop = await detectDocumentCrop(
         currentEngine,
         frameSource,
         imported.original,
         signal,
         liveCrop,
+        source instanceof Blob ? undefined : source,
       );
+      const frozenDetection = performance.now() - detectionStarted;
       const recipe = createDefaultPageRecipe(crop);
       const sourcePixels =
         source instanceof Blob
@@ -190,75 +201,21 @@ export function createBackgroundPageProcessor(
                 pixels: source.pixels,
               },
             };
-      let restoration: PageRestorationState = { kind: 'local' };
-      if (restorationAnalyzer?.analyze !== undefined) {
-        try {
-          const roughVariant = await currentEngine.render(
-            {
-              original: imported.original,
-              orientation: 0,
-              recipe: {
-                ...recipe,
-                filter: {
-                  mode: 'original',
-                  presetVersion: 'classifier-rough-v1',
-                  parameters: {},
-                },
-              },
-              maximumOutputLongSide: 720,
-              preserveOutputPixels: true,
-              ...sourcePixels,
-            },
-            signal,
-          );
-          const roughSource =
-            roughVariant.transientRgba === undefined
-              ? roughVariant.image.blob
-              : { kind: 'rgba-frame' as const, ...roughVariant.transientRgba };
-          await restorationAnalyzer.analyze(roughSource, signal, {
-            ...(processingOptions.analysisKey === undefined
-              ? {}
-              : { analysisKey: processingOptions.analysisKey }),
-          });
-          restoration = { kind: 'processing' };
-        } catch (error) {
-          if (error instanceof Error && error.name === 'AbortError') throw error;
-          restoration = { kind: 'fallback', reason: 'failed' };
-        }
-      }
-      checkAbort(signal, disposal.signal);
-      const previewVariant = await currentEngine.render(
-        {
-          original: imported.original,
-          orientation: 0,
-          recipe,
-          maximumOutputLongSide: 1600,
-          preserveOutputPixels: false,
-          ...sourcePixels,
-        },
-        signal,
-      );
-      checkAbort(signal, disposal.signal);
-      processingOptions.onPreview?.({
-        original: imported.original,
-        crop,
-        recipe,
-        variant: previewVariant,
-        restoration,
+      if (currentEngine.lifecycle.kind === 'failed') currentEngine = await readyEngine(signal);
+      const output = await renderAnalyzedPage(currentEngine, imported.original, recipe, signal, {
+        ...(restorationAnalyzer === undefined ? {} : { analyzer: restorationAnalyzer }),
+        ...(processingOptions.analysisKey === undefined
+          ? {}
+          : { analysisKey: processingOptions.analysisKey }),
+        ...sourcePixels,
       });
-      const variant = await currentEngine.render(
-        {
-          original: imported.original,
-          orientation: 0,
-          recipe,
-          maximumOutputLongSide: 3000,
-          preserveOutputPixels: true,
-          ...sourcePixels,
-        },
-        signal,
-      );
       checkAbort(signal, disposal.signal);
-      return { original: imported.original, crop, recipe, variant, restoration };
+      recordPipelineTiming({
+        frozenDetection,
+        total: performance.now() - totalStarted,
+        ...(source instanceof Blob ? {} : { capture: source.captureMs ?? 0 }),
+      });
+      return { original: imported.original, crop, recipe, ...output };
     } catch (error) {
       if (!(error instanceof Error && error.name === 'AbortError')) {
         await releaseEngine().catch(() => undefined);
@@ -268,6 +225,12 @@ export function createBackgroundPageProcessor(
   };
 
   return {
+    warmup() {
+      if (disposePromise !== null) return Promise.reject(abortError());
+      const warming = tail.then(() => readyEngine(disposal.signal)).then(() => undefined);
+      tail = warming.catch(() => undefined);
+      return warming;
+    },
     enqueue(source, signal, onStart, liveDetection = null, processingOptions = {}) {
       if (disposePromise !== null || disposal.signal.aborted) return Promise.reject(abortError());
       const result = tail.then(async () => {

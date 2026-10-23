@@ -66,6 +66,8 @@ describe('camera capture', () => {
     expect(output).not.toBeInstanceOf(Blob);
     if (output instanceof Blob) throw new Error('Expected captured RGBA pixels.');
     expect(output.pixels).toBe(fixture.pixels());
+    expect(output.preview?.dimensions).toEqual({ width: 128, height: 72 });
+    expect(output.preview?.pixels.byteLength).toBe(128 * 72 * 4);
     expect(fixture.drawImage).toHaveBeenCalledWith(expect.anything(), 0, 0, 1280, 720);
     expect(fixture.toBlob).not.toHaveBeenCalled();
   });

@@ -57,7 +57,7 @@ function documentResult(
   return {
     kind: 'document',
     dimensions,
-    confidence: 0.9,
+    confidence: 0.7,
     corners: BASE_CORNERS.map(({ x, y }) => ({
       x: x + offset,
       y: y + offset,
@@ -197,6 +197,15 @@ describe('detection scheduler', () => {
 });
 
 describe('detection smoothing', () => {
+  it('accepts two stable high-confidence frames while retaining one missed frame', () => {
+    const smoother = createDetectionSmoother();
+    const high = { ...documentResult(), confidence: 0.94 };
+    expect(smoother.update(high).kind).toBe('full-frame');
+    expect(smoother.update(high).kind).toBe('document');
+    expect(smoother.update(fullFrame()).kind).toBe('document');
+    expect(smoother.update(fullFrame()).kind).toBe('full-frame');
+  });
+
   it('keeps the full frame until three similar document detections are stable', () => {
     const smoother = createDetectionSmoother({
       stableFrames: 3,
@@ -217,7 +226,7 @@ describe('detection smoothing', () => {
     expect(stable.kind).toBe('document');
     if (stable.kind === 'document') {
       expect(stable.corners[0]).toEqual({ x: 105, y: 125 });
-      expect(stable.confidence).toBeCloseTo(0.9);
+      expect(stable.confidence).toBeCloseTo(0.7);
     }
   });
 

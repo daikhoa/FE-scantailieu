@@ -109,30 +109,16 @@ describe('Scanic document detector worker runtime', () => {
     });
   });
 
-  it('falls back to the guarded classical detector only when ML cannot run', async () => {
+  it('reports ML failure without constructing a classical detector', async () => {
     await send({ id: 1, operation: 'initialize' });
-    vendor.scan
-      .mockRejectedValueOnce(new Error('ML runtime unavailable'))
-      .mockRejectedValueOnce(new Error('ML runtime still unavailable'));
+    vendor.scan.mockRejectedValue(new Error('ML failed'));
     await send({
       id: 2,
       operation: 'detect',
       input: { dimensions: { width: 2, height: 2 }, pixels: new Uint8ClampedArray(16) },
     });
-
-    expect(vendor.options.at(-1)).toEqual({
-      detector: 'classical',
-      mode: 'detect',
-      output: 'imagedata',
-      debug: false,
-      maxProcessingDimension: 8192,
-      minDetectionConfidence: 0.72,
-    });
-    expect(response).toHaveBeenLastCalledWith({
-      id: 2,
-      kind: 'success',
-      output: { success: false, corners: null, confidence: null, detector: 'classical' },
-    });
+    expect(vendor.options).toEqual([expect.objectContaining({ detector: 'ml' })]);
+    expect(response).toHaveBeenLastCalledWith({ id: 2, kind: 'failure', code: 'failed' });
   });
 
   it('warps RGBA pixels without DOM canvas and transfers the owned output buffer', async () => {
