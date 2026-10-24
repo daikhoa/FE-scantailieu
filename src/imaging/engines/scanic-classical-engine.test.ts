@@ -652,7 +652,7 @@ describe('Scanic serialized work, cancellation and cleanup', () => {
     );
     expect(result.recipeKey).toMatch(/^sha256:[0-9a-f]{64}$/);
     expect(result).toMatchObject({
-      engineVersion: 'scanic-1.6.0+ml-only-perspective-v2-filter-v9',
+      engineVersion: 'scanic-1.6.0+ml-only-perspective-v2-filter-v10',
       image: { dimensions: warped.dimensions },
       dewarp: { kind: 'not-requested' },
     });

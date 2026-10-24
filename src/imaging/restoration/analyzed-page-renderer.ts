@@ -20,8 +20,10 @@ export async function renderAnalyzedPage(
 ) {
   let analysis = options.analysis;
   let restoration: PageRestorationState = { kind: 'local' };
+  const needsClassifier =
+    recipe.filter.mode !== 'enhanced-color' && recipe.filter.mode !== 'original';
   const pixels = options.sourcePixels === undefined ? {} : { sourcePixels: options.sourcePixels };
-  if (analysis === undefined && options.analyzer?.analyze !== undefined) {
+  if (needsClassifier && analysis === undefined && options.analyzer?.analyze !== undefined) {
     try {
       const request = {
         original,
@@ -56,7 +58,7 @@ export async function renderAnalyzedPage(
       restoration = { kind: 'fallback', reason: 'failed' };
     }
   }
-  recordPipelineTiming({ ...analysis?.timings });
+  if (needsClassifier) recordPipelineTiming({ ...analysis?.timings });
   const variant = await engine.render(
     {
       original,
@@ -71,7 +73,7 @@ export async function renderAnalyzedPage(
     },
     signal,
   );
-  if (analysis !== undefined)
+  if (needsClassifier && analysis !== undefined)
     restoration = {
       kind: 'applied',
       stages: analysis.stages,

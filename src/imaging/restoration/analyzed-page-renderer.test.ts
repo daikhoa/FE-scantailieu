@@ -3,6 +3,7 @@ import type { ScannerEngine } from '../contracts/scanner-engine';
 import { renderAnalyzedPage } from './analyzed-page-renderer';
 import { createDefaultPageRecipe } from '../../features/scanner/background-page-processor';
 import type { LocalRestorationAnalysis } from './local-restoration-client';
+import { createDocumentRecipe } from '../../features/editor/document-filters';
 
 const analysis: LocalRestorationAnalysis = {
   kind: 'analysis',
@@ -15,7 +16,7 @@ const original = {
   blob: new Blob(['original'], { type: 'image/jpeg' }),
   dimensions: { width: 20, height: 30 },
 };
-const recipe = createDefaultPageRecipe({ kind: 'full-frame' });
+const recipe = createDocumentRecipe({ kind: 'full-frame' }, 'ocr-color');
 function setup() {
   const renderPixels = vi.fn<NonNullable<ScannerEngine['renderPixels']>>(() =>
     Promise.resolve({ dimensions: { width: 20, height: 30 }, pixels: new Uint8ClampedArray(2400) }),
@@ -40,6 +41,24 @@ function setup() {
   return { engine, renderPixels, render, analyze };
 }
 describe('single final render', () => {
+  it.each(['enhanced-color', 'original'] as const)(
+    'renders %s without an unused classifier or rough warp',
+    async (mode) => {
+      const { engine, renderPixels, render, analyze } = setup();
+      const fastRecipe = createDefaultPageRecipe({ kind: 'full-frame' });
+      const result = await renderAnalyzedPage(
+        engine,
+        original,
+        { ...fastRecipe, filter: { ...fastRecipe.filter, mode } },
+        new AbortController().signal,
+        { analyzer: { analyze } },
+      );
+      expect(renderPixels).not.toHaveBeenCalled();
+      expect(analyze).not.toHaveBeenCalled();
+      expect(render).toHaveBeenCalledOnce();
+      expect(result.restoration).toEqual({ kind: 'local' });
+    },
+  );
   it('analyzes raw 720 crop, then encodes exactly one final render with the plan', async () => {
     const { engine, renderPixels, render, analyze } = setup();
     await renderAnalyzedPage(engine, original, recipe, new AbortController().signal, {

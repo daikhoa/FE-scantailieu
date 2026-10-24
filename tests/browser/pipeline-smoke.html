@@ -2,6 +2,18 @@
 <meta charset="utf-8" />
 <title>Local scan pipeline benchmark</title>
 <pre id="result" data-status="running">Running…</pre>
+<script>
+  window.addEventListener('error', (event) => {
+    const output = document.querySelector('#result');
+    output.dataset.status = 'failed';
+    output.textContent = JSON.stringify({ error: event.message || 'Module load failure' });
+  });
+  window.addEventListener('unhandledrejection', (event) => {
+    const output = document.querySelector('#result');
+    output.dataset.status = 'failed';
+    output.textContent = JSON.stringify({ error: String(event.reason) });
+  });
+</script>
 <script type="module">
   import { createBackgroundPageProcessor } from '/src/features/scanner/background-page-processor.ts';
   import { createLocalRestorationClient } from '/src/imaging/restoration/local-restoration-client.ts';
@@ -10,6 +22,7 @@
   const client = createLocalRestorationClient();
   const processor = createBackgroundPageProcessor({ restorationAnalyzer: client });
   const signal = new AbortController().signal;
+  const expectClassifier = location.search.includes('baseline');
   function fixture(kind) {
     const canvas = new OffscreenCanvas(2400, 3200);
     const ctx = canvas.getContext('2d');
@@ -49,46 +62,57 @@
       captureMs: performance.now() - started,
     };
   }
-  try {
-    const initialized = performance.now();
-    client.warmup();
-    await processor.warmup();
-    const initializationMs = performance.now() - initialized;
-    const pages = [];
-    for (let run = 0; run < 3; run++)
-      for (const kind of ['normal', 'shadow', 'color']) {
-        const source = fixture(kind);
-        const page = await processor.enqueue(source, signal, undefined, null, {
-          analysisKey: `${kind}-${run}`,
-        });
-        const timings = Object.assign({}, ...pipelineTimings().slice(-4));
-        if (page.analysis === undefined) throw new Error('Classifier did not complete.');
-        if (
-          page.variant.transientRgba !== undefined ||
-          Math.max(page.variant.image.dimensions.width, page.variant.image.dimensions.height) > 3000
-        )
-          throw new Error('Invalid final render.');
-        pages.push({
-          kind,
-          run,
-          crop: page.crop.kind,
-          dimensions: page.variant.image.dimensions,
-          bytes: page.variant.image.blob.size,
-          thumbnailBytes: page.variant.thumbnail?.blob.size,
-          stages: page.analysis.stages,
-          strengths: page.analysis.strengths,
-          quality: page.analysis.quality,
-          warnings: page.analysis.warnings,
-          timings,
-        });
-      }
-    output.dataset.status = 'complete';
-    output.textContent = JSON.stringify({ initializationMs, pages }, null, 2);
-  } catch (error) {
-    output.dataset.status = 'failed';
-    output.textContent = JSON.stringify({ error: error.message });
-  } finally {
-    await processor.dispose();
-    client.dispose();
+  async function runSmoke() {
+    try {
+      output.textContent = 'Warming detector';
+      const initialized = performance.now();
+      await processor.warmup();
+      const initializationMs = performance.now() - initialized;
+      const pages = [];
+      for (let run = 0; run < 3; run++)
+        for (const kind of ['normal', 'shadow', 'color']) {
+          const source = fixture(kind);
+          output.textContent = `Processing ${kind} ${run}`;
+          const processingStarted = performance.now();
+          const page = await processor.enqueue(source, signal, undefined, null, {
+            analysisKey: `${kind}-${run}`,
+          });
+          const processingMs = performance.now() - processingStarted;
+          const timings = Object.assign({}, ...pipelineTimings().slice(-4));
+          if (
+            expectClassifier
+              ? page.analysis === undefined
+              : page.analysis !== undefined || page.restoration?.kind !== 'local'
+          )
+            throw new Error('Unexpected classification path.');
+          if (
+            page.variant.transientRgba !== undefined ||
+            Math.max(page.variant.image.dimensions.width, page.variant.image.dimensions.height) >
+              3000
+          )
+            throw new Error('Invalid final render.');
+          pages.push({
+            kind,
+            run,
+            processingMs,
+            analysisPerformed: page.analysis !== undefined,
+            crop: page.crop.kind,
+            dimensions: page.variant.image.dimensions,
+            bytes: page.variant.image.blob.size,
+            thumbnailBytes: page.variant.thumbnail?.blob.size,
+            restoration: page.restoration,
+            timings,
+          });
+        }
+      output.dataset.status = 'complete';
+      output.textContent = JSON.stringify({ initializationMs, pages }, null, 2);
+    } catch (error) {
+      output.dataset.status = 'failed';
+      output.textContent = JSON.stringify({ error: error.message });
+    } finally {
+      await processor.dispose();
+      client.dispose();
+    }
   }
+  void runSmoke();
 </script>

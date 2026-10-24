@@ -153,10 +153,6 @@ export function App({
   );
 
   useEffect(() => {
-    if (view === 'camera') restorationClientRef.current?.warmup?.();
-  }, [view]);
-
-  useEffect(() => {
     if (shouldMoveFocus.current) {
       shouldMoveFocus.current = false;
       viewHeadingRef.current?.focus();

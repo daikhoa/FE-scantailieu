@@ -1,0 +1,905 @@
+{
+  "date": "2026-10-24",
+  "quality": {
+    "notes": "Isolated pixel kernel comparison: both filters measure the same final crop. Before is a frozen prior module. Gradient is a synthetic detail indicator, not OCR accuracy or a universal perceptual quality score. No changed resolution or codec.",
+    "results": [
+      {
+        "name": "soft-text",
+        "dimensions": {
+          "width": 720,
+          "height": 520
+        },
+        "changedPixels": 7836,
+        "newClippedChannels": 0,
+        "brightenedChannels": 0,
+        "maxChannelChange": 12,
+        "maxChannelDifferenceChange": 0,
+        "gradientBefore": 2922864,
+        "gradientAfter": 3007872,
+        "provenance": "synthetic"
+      },
+      {
+        "name": "faint-text",
+        "dimensions": {
+          "width": 720,
+          "height": 520
+        },
+        "changedPixels": 204,
+        "newClippedChannels": 0,
+        "brightenedChannels": 0,
+        "maxChannelChange": 1,
+        "maxChannelDifferenceChange": 0,
+        "gradientBefore": 341568,
+        "gradientAfter": 341976,
+        "provenance": "synthetic"
+      },
+      {
+        "name": "colored-cover",
+        "dimensions": {
+          "width": 720,
+          "height": 520
+        },
+        "changedPixels": 8736,
+        "newClippedChannels": 0,
+        "brightenedChannels": 0,
+        "maxChannelChange": 12,
+        "maxChannelDifferenceChange": 0,
+        "gradientBefore": 3014634,
+        "gradientAfter": 3089368,
+        "provenance": "synthetic"
+      },
+      {
+        "name": "paper-noise",
+        "dimensions": {
+          "width": 720,
+          "height": 520
+        },
+        "changedPixels": 0,
+        "newClippedChannels": 0,
+        "brightenedChannels": 0,
+        "maxChannelChange": 0,
+        "maxChannelDifferenceChange": 0,
+        "gradientBefore": 2243280,
+        "gradientAfter": 2243280,
+        "provenance": "synthetic"
+      },
+      {
+        "name": "smartdoc15-datasheet001-frame-0001",
+        "dimensions": {
+          "width": 243,
+          "height": 339
+        },
+        "changedPixels": 2565,
+        "newClippedChannels": 0,
+        "brightenedChannels": 0,
+        "maxChannelChange": 12,
+        "maxChannelDifferenceChange": 0,
+        "gradientBefore": 444014,
+        "gradientAfter": 448526,
+        "provenance": "ICDAR2015 SmartDoc, CC-BY-4.0; attribution in fixture manifest"
+      },
+      {
+        "name": "smartdoc15-datasheet001-frame-0054",
+        "dimensions": {
+          "width": 245,
+          "height": 312
+        },
+        "changedPixels": 3043,
+        "newClippedChannels": 0,
+        "brightenedChannels": 0,
+        "maxChannelChange": 12,
+        "maxChannelDifferenceChange": 0,
+        "gradientBefore": 174717,
+        "gradientAfter": 177289,
+        "provenance": "ICDAR2015 SmartDoc, CC-BY-4.0; attribution in fixture manifest"
+      },
+      {
+        "name": "smartdoc15-datasheet001-frame-0108",
+        "dimensions": {
+          "width": 221,
+          "height": 310
+        },
+        "changedPixels": 1198,
+        "newClippedChannels": 0,
+        "brightenedChannels": 0,
+        "maxChannelChange": 12,
+        "maxChannelDifferenceChange": 0,
+        "gradientBefore": 277845,
+        "gradientAfter": 280063,
+        "provenance": "ICDAR2015 SmartDoc, CC-BY-4.0; attribution in fixture manifest"
+      },
+      {
+        "name": "smartdoc15-datasheet001-frame-0161",
+        "dimensions": {
+          "width": 229,
+          "height": 324
+        },
+        "changedPixels": 2113,
+        "newClippedChannels": 0,
+        "brightenedChannels": 0,
+        "maxChannelChange": 12,
+        "maxChannelDifferenceChange": 0,
+        "gradientBefore": 281497,
+        "gradientAfter": 284169,
+        "provenance": "ICDAR2015 SmartDoc, CC-BY-4.0; attribution in fixture manifest"
+      },
+      {
+        "name": "smartdoc15-datasheet001-frame-0214",
+        "dimensions": {
+          "width": 222,
+          "height": 311
+        },
+        "changedPixels": 1751,
+        "newClippedChannels": 0,
+        "brightenedChannels": 0,
+        "maxChannelChange": 12,
+        "maxChannelDifferenceChange": 0,
+        "gradientBefore": 326817,
+        "gradientAfter": 329587,
+        "provenance": "ICDAR2015 SmartDoc, CC-BY-4.0; attribution in fixture manifest"
+      },
+      {
+        "name": "smartdoc15-letter001-frame-0001",
+        "dimensions": {
+          "width": 234,
+          "height": 329
+        },
+        "changedPixels": 537,
+        "newClippedChannels": 0,
+        "brightenedChannels": 0,
+        "maxChannelChange": 12,
+        "maxChannelDifferenceChange": 0,
+        "gradientBefore": 428464,
+        "gradientAfter": 429538,
+        "provenance": "ICDAR2015 SmartDoc, CC-BY-4.0; attribution in fixture manifest"
+      },
+      {
+        "name": "smartdoc15-letter001-frame-0045",
+        "dimensions": {
+          "width": 213,
+          "height": 293
+        },
+        "changedPixels": 414,
+        "newClippedChannels": 0,
+        "brightenedChannels": 0,
+        "maxChannelChange": 12,
+        "maxChannelDifferenceChange": 0,
+        "gradientBefore": 351185,
+        "gradientAfter": 352145,
+        "provenance": "ICDAR2015 SmartDoc, CC-BY-4.0; attribution in fixture manifest"
+      },
+      {
+        "name": "smartdoc15-letter001-frame-0089",
+        "dimensions": {
+          "width": 204,
+          "height": 288
+        },
+        "changedPixels": 361,
+        "newClippedChannels": 0,
+        "brightenedChannels": 0,
+        "maxChannelChange": 8,
+        "maxChannelDifferenceChange": 0,
+        "gradientBefore": 136150,
+        "gradientAfter": 137034,
+        "provenance": "ICDAR2015 SmartDoc, CC-BY-4.0; attribution in fixture manifest"
+      },
+      {
+        "name": "smartdoc15-letter001-frame-0132",
+        "dimensions": {
+          "width": 204,
+          "height": 289
+        },
+        "changedPixels": 96,
+        "newClippedChannels": 0,
+        "brightenedChannels": 0,
+        "maxChannelChange": 7,
+        "maxChannelDifferenceChange": 0,
+        "gradientBefore": 110243,
+        "gradientAfter": 110509,
+        "provenance": "ICDAR2015 SmartDoc, CC-BY-4.0; attribution in fixture manifest"
+      },
+      {
+        "name": "smartdoc15-letter001-frame-0176",
+        "dimensions": {
+          "width": 210,
+          "height": 299
+        },
+        "changedPixels": 964,
+        "newClippedChannels": 0,
+        "brightenedChannels": 0,
+        "maxChannelChange": 12,
+        "maxChannelDifferenceChange": 0,
+        "gradientBefore": 169284,
+        "gradientAfter": 171758,
+        "provenance": "ICDAR2015 SmartDoc, CC-BY-4.0; attribution in fixture manifest"
+      },
+      {
+        "name": "smartdoc15-magazine001-frame-0001",
+        "dimensions": {
+          "width": 211,
+          "height": 294
+        },
+        "changedPixels": 3053,
+        "newClippedChannels": 0,
+        "brightenedChannels": 0,
+        "maxChannelChange": 12,
+        "maxChannelDifferenceChange": 0,
+        "gradientBefore": 395129,
+        "gradientAfter": 402557,
+        "provenance": "ICDAR2015 SmartDoc, CC-BY-4.0; attribution in fixture manifest"
+      },
+      {
+        "name": "smartdoc15-magazine001-frame-0050",
+        "dimensions": {
+          "width": 203,
+          "height": 286
+        },
+        "changedPixels": 3079,
+        "newClippedChannels": 0,
+        "brightenedChannels": 0,
+        "maxChannelChange": 12,
+        "maxChannelDifferenceChange": 0,
+        "gradientBefore": 540834,
+        "gradientAfter": 551674,
+        "provenance": "ICDAR2015 SmartDoc, CC-BY-4.0; attribution in fixture manifest"
+      },
+      {
+        "name": "smartdoc15-magazine001-frame-0100",
+        "dimensions": {
+          "width": 194,
+          "height": 270
+        },
+        "changedPixels": 1037,
+        "newClippedChannels": 0,
+        "brightenedChannels": 0,
+        "maxChannelChange": 12,
+        "maxChannelDifferenceChange": 0,
+        "gradientBefore": 367791,
+        "gradientAfter": 371961,
+        "provenance": "ICDAR2015 SmartDoc, CC-BY-4.0; attribution in fixture manifest"
+      },
+      {
+        "name": "smartdoc15-magazine001-frame-0149",
+        "dimensions": {
+          "width": 211,
+          "height": 309
+        },
+        "changedPixels": 3317,
+        "newClippedChannels": 0,
+        "brightenedChannels": 0,
+        "maxChannelChange": 12,
+        "maxChannelDifferenceChange": 0,
+        "gradientBefore": 614380,
+        "gradientAfter": 625660,
+        "provenance": "ICDAR2015 SmartDoc, CC-BY-4.0; attribution in fixture manifest"
+      },
+      {
+        "name": "smartdoc15-magazine001-frame-0198",
+        "dimensions": {
+          "width": 205,
+          "height": 294
+        },
+        "changedPixels": 3142,
+        "newClippedChannels": 0,
+        "brightenedChannels": 0,
+        "maxChannelChange": 12,
+        "maxChannelDifferenceChange": 0,
+        "gradientBefore": 539855,
+        "gradientAfter": 550047,
+        "provenance": "ICDAR2015 SmartDoc, CC-BY-4.0; attribution in fixture manifest"
+      }
+    ]
+  },
+  "native": {
+    "notes": "Paired alternating order in one process on this Windows x64 desktop. Enhanced preset, full-frame crop, JPEG96/4:4:4 and PDF; no corner detection, model startup or phone measurement. Median excludes first call. No peak-RAM claim.",
+    "dll_sha256": {
+      "before": "88118ce46f6aa966021c8be6d9389cccdfcd7217798efc3d19def0f93421121e",
+      "after": "b765b12b251892366104facaee8f4aef697ba58f350367190061beb7d42226b7"
+    },
+    "results": [
+      {
+        "source": [
+          4000,
+          3000
+        ],
+        "output": [
+          3000,
+          2250
+        ],
+        "samples": {
+          "before": [
+            {
+              "total_ms": 273.7852999998722,
+              "filter_ms": 0.0131,
+              "analysis_ms": 9.5109,
+              "jpeg_bytes": 571848,
+              "pdf_bytes": 572538
+            },
+            {
+              "total_ms": 254.00380000064615,
+              "filter_ms": 0.0011,
+              "analysis_ms": 9.1935,
+              "jpeg_bytes": 571848,
+              "pdf_bytes": 572538
+            },
+            {
+              "total_ms": 252.7849999969476,
+              "filter_ms": 0.0005,
+              "analysis_ms": 9.6596,
+              "jpeg_bytes": 571848,
+              "pdf_bytes": 572538
+            },
+            {
+              "total_ms": 253.84989999656682,
+              "filter_ms": 0.0009,
+              "analysis_ms": 8.8342,
+              "jpeg_bytes": 571848,
+              "pdf_bytes": 572538
+            },
+            {
+              "total_ms": 252.30310000188183,
+              "filter_ms": 0.0005,
+              "analysis_ms": 8.9561,
+              "jpeg_bytes": 571848,
+              "pdf_bytes": 572538
+            },
+            {
+              "total_ms": 400.75119999892195,
+              "filter_ms": 0.0005,
+              "analysis_ms": 16.6279,
+              "jpeg_bytes": 571848,
+              "pdf_bytes": 572538
+            }
+          ],
+          "after": [
+            {
+              "total_ms": 270.334400000138,
+              "filter_ms": 12.3907,
+              "analysis_ms": 0.8949,
+              "jpeg_bytes": 567393,
+              "pdf_bytes": 568083
+            },
+            {
+              "total_ms": 256.9221000012476,
+              "filter_ms": 12.4535,
+              "analysis_ms": 0.8651,
+              "jpeg_bytes": 567393,
+              "pdf_bytes": 568083
+            },
+            {
+              "total_ms": 254.27959999797167,
+              "filter_ms": 12.028,
+              "analysis_ms": 0.7795,
+              "jpeg_bytes": 567393,
+              "pdf_bytes": 568083
+            },
+            {
+              "total_ms": 258.76530000095954,
+              "filter_ms": 12.1127,
+              "analysis_ms": 0.7921,
+              "jpeg_bytes": 567393,
+              "pdf_bytes": 568083
+            },
+            {
+              "total_ms": 253.02239999655285,
+              "filter_ms": 12.0283,
+              "analysis_ms": 0.7137,
+              "jpeg_bytes": 567393,
+              "pdf_bytes": 568083
+            },
+            {
+              "total_ms": 323.1238000007579,
+              "filter_ms": 19.8766,
+              "analysis_ms": 0.8257,
+              "jpeg_bytes": 567393,
+              "pdf_bytes": 568083
+            }
+          ]
+        },
+        "medians": {
+          "before": {
+            "total_ms": 253.84989999656682,
+            "filter_ms": 0.0005,
+            "analysis_ms": 9.1935
+          },
+          "after": {
+            "total_ms": 256.9221000012476,
+            "filter_ms": 12.1127,
+            "analysis_ms": 0.7921
+          }
+        }
+      },
+      {
+        "source": [
+          8000,
+          6000
+        ],
+        "output": [
+          3000,
+          2250
+        ],
+        "samples": {
+          "before": [
+            {
+              "total_ms": 595.9163000006811,
+              "filter_ms": 8.3197,
+              "analysis_ms": 10.6072,
+              "jpeg_bytes": 839790,
+              "pdf_bytes": 840480
+            },
+            {
+              "total_ms": 547.5900999990699,
+              "filter_ms": 5.9553,
+              "analysis_ms": 11.2204,
+              "jpeg_bytes": 839790,
+              "pdf_bytes": 840480
+            },
+            {
+              "total_ms": 558.6608000012347,
+              "filter_ms": 7.8835,
+              "analysis_ms": 15.4524,
+              "jpeg_bytes": 839790,
+              "pdf_bytes": 840480
+            },
+            {
+              "total_ms": 539.1344999989087,
+              "filter_ms": 5.6782,
+              "analysis_ms": 9.8123,
+              "jpeg_bytes": 839790,
+              "pdf_bytes": 840480
+            },
+            {
+              "total_ms": 577.0751000018208,
+              "filter_ms": 5.4262,
+              "analysis_ms": 10.3016,
+              "jpeg_bytes": 839790,
+              "pdf_bytes": 840480
+            },
+            {
+              "total_ms": 693.8159999990603,
+              "filter_ms": 7.6332,
+              "analysis_ms": 15.5368,
+              "jpeg_bytes": 839790,
+              "pdf_bytes": 840480
+            }
+          ],
+          "after": [
+            {
+              "total_ms": 594.8747000002186,
+              "filter_ms": 21.4571,
+              "analysis_ms": 2.2253,
+              "jpeg_bytes": 740758,
+              "pdf_bytes": 741448
+            },
+            {
+              "total_ms": 596.9771000018227,
+              "filter_ms": 9.1254,
+              "analysis_ms": 0.7397,
+              "jpeg_bytes": 740758,
+              "pdf_bytes": 741448
+            },
+            {
+              "total_ms": 592.4004000007699,
+              "filter_ms": 10.4739,
+              "analysis_ms": 1.1712,
+              "jpeg_bytes": 740758,
+              "pdf_bytes": 741448
+            },
+            {
+              "total_ms": 557.7577000003657,
+              "filter_ms": 9.1994,
+              "analysis_ms": 1.3692,
+              "jpeg_bytes": 740758,
+              "pdf_bytes": 741448
+            },
+            {
+              "total_ms": 606.1082999985956,
+              "filter_ms": 19.0785,
+              "analysis_ms": 1.3479,
+              "jpeg_bytes": 740758,
+              "pdf_bytes": 741448
+            },
+            {
+              "total_ms": 631.8768999990425,
+              "filter_ms": 10.969,
+              "analysis_ms": 0.818,
+              "jpeg_bytes": 740758,
+              "pdf_bytes": 741448
+            }
+          ]
+        },
+        "medians": {
+          "before": {
+            "total_ms": 558.6608000012347,
+            "filter_ms": 5.9553,
+            "analysis_ms": 11.2204
+          },
+          "after": {
+            "total_ms": 596.9771000018227,
+            "filter_ms": 10.4739,
+            "analysis_ms": 1.1712
+          }
+        }
+      }
+    ]
+  },
+  "web": {
+    "notes": "Both production builds, Chrome CPU desktop, nine synthetic 2400x3200 captures; medians over six warm pages (runs1/2). Detector startup excluded. No phone/heat/peak-RAM/OCR accuracy claim.",
+    "before": {
+      "totalMs": 437.7000000011176,
+      "measuredPages": 6,
+      "pagesWithClassifier": 6
+    },
+    "after": {
+      "totalMs": 392.6499999985099,
+      "measuredPages": 6,
+      "pagesWithClassifier": 0
+    },
+    "beforePages": [
+      {
+        "kind": "normal",
+        "run": 0,
+        "processingMs": 1318.300000000745,
+        "analysisPerformed": true,
+        "crop": "document",
+        "dimensions": {
+          "width": 1959,
+          "height": 2823
+        },
+        "bytes": 638476,
+        "thumbnailBytes": 6214,
+        "restoration": {
+          "kind": "applied",
+          "stages": [],
+          "classifierModel": "document-defects@cord-v2-bootstrap-2026-10-18",
+          "provider": "browser-pixel-pipeline@2",
+          "warnings": []
+        },
+        "timings": {}
+      },
+      {
+        "kind": "shadow",
+        "run": 0,
+        "processingMs": 484.5,
+        "analysisPerformed": true,
+        "crop": "document",
+        "dimensions": {
+          "width": 1957,
+          "height": 2825
+        },
+        "bytes": 704544,
+        "thumbnailBytes": 5370,
+        "restoration": {
+          "kind": "applied",
+          "stages": [
+            "deshadow",
+            "appearance"
+          ],
+          "classifierModel": "document-defects@cord-v2-bootstrap-2026-10-18",
+          "provider": "browser-pixel-pipeline@2",
+          "warnings": []
+        },
+        "timings": {}
+      },
+      {
+        "kind": "color",
+        "run": 0,
+        "processingMs": 547.3999999985099,
+        "analysisPerformed": true,
+        "crop": "document",
+        "dimensions": {
+          "width": 1958,
+          "height": 2816
+        },
+        "bytes": 642451,
+        "thumbnailBytes": 6722,
+        "restoration": {
+          "kind": "applied",
+          "stages": [],
+          "classifierModel": "document-defects@cord-v2-bootstrap-2026-10-18",
+          "provider": "browser-pixel-pipeline@2",
+          "warnings": []
+        },
+        "timings": {}
+      },
+      {
+        "kind": "normal",
+        "run": 1,
+        "processingMs": 659.2000000029802,
+        "analysisPerformed": true,
+        "crop": "document",
+        "dimensions": {
+          "width": 1959,
+          "height": 2823
+        },
+        "bytes": 638476,
+        "thumbnailBytes": 6214,
+        "restoration": {
+          "kind": "applied",
+          "stages": [],
+          "classifierModel": "document-defects@cord-v2-bootstrap-2026-10-18",
+          "provider": "browser-pixel-pipeline@2",
+          "warnings": []
+        },
+        "timings": {}
+      },
+      {
+        "kind": "shadow",
+        "run": 1,
+        "processingMs": 565.1000000014901,
+        "analysisPerformed": true,
+        "crop": "document",
+        "dimensions": {
+          "width": 1957,
+          "height": 2825
+        },
+        "bytes": 704544,
+        "thumbnailBytes": 5370,
+        "restoration": {
+          "kind": "applied",
+          "stages": [
+            "deshadow",
+            "appearance"
+          ],
+          "classifierModel": "document-defects@cord-v2-bootstrap-2026-10-18",
+          "provider": "browser-pixel-pipeline@2",
+          "warnings": []
+        },
+        "timings": {}
+      },
+      {
+        "kind": "color",
+        "run": 1,
+        "processingMs": 416.4000000022352,
+        "analysisPerformed": true,
+        "crop": "document",
+        "dimensions": {
+          "width": 1958,
+          "height": 2816
+        },
+        "bytes": 642451,
+        "thumbnailBytes": 6722,
+        "restoration": {
+          "kind": "applied",
+          "stages": [],
+          "classifierModel": "document-defects@cord-v2-bootstrap-2026-10-18",
+          "provider": "browser-pixel-pipeline@2",
+          "warnings": []
+        },
+        "timings": {}
+      },
+      {
+        "kind": "normal",
+        "run": 2,
+        "processingMs": 459,
+        "analysisPerformed": true,
+        "crop": "document",
+        "dimensions": {
+          "width": 1959,
+          "height": 2823
+        },
+        "bytes": 638476,
+        "thumbnailBytes": 6214,
+        "restoration": {
+          "kind": "applied",
+          "stages": [],
+          "classifierModel": "document-defects@cord-v2-bootstrap-2026-10-18",
+          "provider": "browser-pixel-pipeline@2",
+          "warnings": []
+        },
+        "timings": {}
+      },
+      {
+        "kind": "shadow",
+        "run": 2,
+        "processingMs": 413,
+        "analysisPerformed": true,
+        "crop": "document",
+        "dimensions": {
+          "width": 1957,
+          "height": 2825
+        },
+        "bytes": 704544,
+        "thumbnailBytes": 5370,
+        "restoration": {
+          "kind": "applied",
+          "stages": [
+            "deshadow",
+            "appearance"
+          ],
+          "classifierModel": "document-defects@cord-v2-bootstrap-2026-10-18",
+          "provider": "browser-pixel-pipeline@2",
+          "warnings": []
+        },
+        "timings": {}
+      },
+      {
+        "kind": "color",
+        "run": 2,
+        "processingMs": 404.30000000074506,
+        "analysisPerformed": true,
+        "crop": "document",
+        "dimensions": {
+          "width": 1958,
+          "height": 2816
+        },
+        "bytes": 642451,
+        "thumbnailBytes": 6722,
+        "restoration": {
+          "kind": "applied",
+          "stages": [],
+          "classifierModel": "document-defects@cord-v2-bootstrap-2026-10-18",
+          "provider": "browser-pixel-pipeline@2",
+          "warnings": []
+        },
+        "timings": {}
+      }
+    ],
+    "afterPages": [
+      {
+        "kind": "normal",
+        "run": 0,
+        "processingMs": 424.5,
+        "analysisPerformed": false,
+        "crop": "document",
+        "dimensions": {
+          "width": 1959,
+          "height": 2823
+        },
+        "bytes": 643135,
+        "thumbnailBytes": 6254,
+        "restoration": {
+          "kind": "local"
+        },
+        "timings": {}
+      },
+      {
+        "kind": "shadow",
+        "run": 0,
+        "processingMs": 421.30000000074506,
+        "analysisPerformed": false,
+        "crop": "document",
+        "dimensions": {
+          "width": 1957,
+          "height": 2825
+        },
+        "bytes": 708085,
+        "thumbnailBytes": 5409,
+        "restoration": {
+          "kind": "local"
+        },
+        "timings": {}
+      },
+      {
+        "kind": "color",
+        "run": 0,
+        "processingMs": 387.8999999985099,
+        "analysisPerformed": false,
+        "crop": "document",
+        "dimensions": {
+          "width": 1958,
+          "height": 2816
+        },
+        "bytes": 647283,
+        "thumbnailBytes": 6747,
+        "restoration": {
+          "kind": "local"
+        },
+        "timings": {}
+      },
+      {
+        "kind": "normal",
+        "run": 1,
+        "processingMs": 389.19999999925494,
+        "analysisPerformed": false,
+        "crop": "document",
+        "dimensions": {
+          "width": 1959,
+          "height": 2823
+        },
+        "bytes": 643135,
+        "thumbnailBytes": 6254,
+        "restoration": {
+          "kind": "local"
+        },
+        "timings": {}
+      },
+      {
+        "kind": "shadow",
+        "run": 1,
+        "processingMs": 396.0999999977648,
+        "analysisPerformed": false,
+        "crop": "document",
+        "dimensions": {
+          "width": 1957,
+          "height": 2825
+        },
+        "bytes": 708085,
+        "thumbnailBytes": 5409,
+        "restoration": {
+          "kind": "local"
+        },
+        "timings": {}
+      },
+      {
+        "kind": "color",
+        "run": 1,
+        "processingMs": 365.80000000074506,
+        "analysisPerformed": false,
+        "crop": "document",
+        "dimensions": {
+          "width": 1958,
+          "height": 2816
+        },
+        "bytes": 647283,
+        "thumbnailBytes": 6747,
+        "restoration": {
+          "kind": "local"
+        },
+        "timings": {}
+      },
+      {
+        "kind": "normal",
+        "run": 2,
+        "processingMs": 425.5999999977648,
+        "analysisPerformed": false,
+        "crop": "document",
+        "dimensions": {
+          "width": 1959,
+          "height": 2823
+        },
+        "bytes": 643135,
+        "thumbnailBytes": 6254,
+        "restoration": {
+          "kind": "local"
+        },
+        "timings": {}
+      },
+      {
+        "kind": "shadow",
+        "run": 2,
+        "processingMs": 407.19999999925494,
+        "analysisPerformed": false,
+        "crop": "document",
+        "dimensions": {
+          "width": 1957,
+          "height": 2825
+        },
+        "bytes": 708085,
+        "thumbnailBytes": 5409,
+        "restoration": {
+          "kind": "local"
+        },
+        "timings": {}
+      },
+      {
+        "kind": "color",
+        "run": 2,
+        "processingMs": 376.80000000074506,
+        "analysisPerformed": false,
+        "crop": "document",
+        "dimensions": {
+          "width": 1958,
+          "height": 2816
+        },
+        "bytes": 647283,
+        "thumbnailBytes": 6747,
+        "restoration": {
+          "kind": "local"
+        },
+        "timings": {}
+      }
+    ],
+    "networkAuditBefore": {
+      "allRealms": true,
+      "externalRequests": 0,
+      "externalOrigins": []
+    },
+    "networkAuditAfter": {
+      "allRealms": true,
+      "externalRequests": 0,
+      "externalOrigins": []
+    }
+  },
+  "extraDetailScratchBytesAt3000pxWidth": 9000
+}

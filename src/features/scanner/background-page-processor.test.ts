@@ -214,7 +214,7 @@ describe('background page processor', () => {
       crop: result.crop,
       rotation: 0,
       dewarp: { mode: 'perspective-only' },
-      filter: { mode: 'enhanced-color', presetVersion: 'enhanced-color-v1', parameters: {} },
+      filter: { mode: 'enhanced-color', presetVersion: 'enhanced-color-v2', parameters: {} },
     });
     expect(renderPage).toHaveBeenCalledWith(
       {
@@ -314,7 +314,7 @@ describe('background page processor', () => {
     await processor.dispose();
   });
 
-  it('classifies a raw 720 crop then renders the final once without a 1600 preview', async () => {
+  it('renders default enhanced color once without an unused classifier or analysis crop', async () => {
     const source = new Blob(['page'], { type: 'image/jpeg' });
     const { engine, renderPage } = fakeEngine();
     const analyze = vi.fn<NonNullable<LocalRestorationClient['analyze']>>(() =>
@@ -339,51 +339,15 @@ describe('background page processor', () => {
       onPreview,
     });
 
-    expect(analyze).toHaveBeenCalledOnce();
-    const roughSource = analyze.mock.calls[0]?.[0];
-    if (roughSource === undefined || roughSource instanceof Blob) {
-      throw new Error('Expected a transferred rough RGBA crop.');
-    }
-    expect(roughSource).toMatchObject({
-      kind: 'rgba-frame',
-      dimensions: { width: 540, height: 720 },
-    });
-    expect(roughSource.pixels).toBeInstanceOf(Uint8ClampedArray);
-    expect(analyze.mock.calls[0]?.[2]).toEqual({ analysisKey: 'page-1' });
-    const roughRenderOrder = renderPage.mock.invocationCallOrder[0];
-    const analysisOrder = analyze.mock.invocationCallOrder[0];
-    const previewRenderOrder = renderPage.mock.invocationCallOrder[1];
-    if (
-      roughRenderOrder === undefined ||
-      analysisOrder === undefined ||
-      previewRenderOrder === undefined
-    ) {
-      throw new Error('Expected ordered rough, analysis and preview operations.');
-    }
-    expect(roughRenderOrder).toBeLessThan(analysisOrder);
-    expect(analysisOrder).toBeLessThan(previewRenderOrder);
-    expect(renderPage).toHaveBeenCalledTimes(2);
+    expect(analyze).not.toHaveBeenCalled();
+    expect(renderPage).toHaveBeenCalledOnce();
     expect(renderPage.mock.calls[0]?.[0]).toMatchObject({
-      maximumOutputLongSide: 720,
-      preserveOutputPixels: true,
-      recipe: { filter: { mode: 'original' } },
-    });
-    expect(renderPage.mock.calls[1]?.[0]).toMatchObject({
       maximumOutputLongSide: 3000,
       preserveOutputPixels: false,
-      analysis: {
-        kind: 'analysis',
-        stages: ['deshadow', 'appearance'],
-        classifierModel: 'classifier@test',
-        warnings: [],
-        protectColor: false,
-      },
+      recipe: { filter: { mode: 'enhanced-color' } },
     });
     expect(onPreview).not.toHaveBeenCalled();
-    expect(result.restoration).toMatchObject({
-      kind: 'applied',
-      classifierModel: 'classifier@test',
-    });
+    expect(result.restoration).toEqual({ kind: 'local' });
 
     await processor.dispose();
   });
