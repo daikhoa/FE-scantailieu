@@ -36,7 +36,19 @@ beforeEach(async () => {
   receive = null;
   response = vi.fn<(message: unknown, options?: StructuredSerializeOptions) => void>();
   vi.stubGlobal('ImageData', FakeImageData);
-  vi.stubGlobal('OffscreenCanvas', Object);
+  vi.stubGlobal(
+    'OffscreenCanvas',
+    class {
+      getContext() {
+        return {
+          putImageData: vi.fn(),
+          clearRect: vi.fn(),
+          drawImage: vi.fn(),
+          getImageData: () => ({ data: new Uint8ClampedArray(224 * 224 * 4) }),
+        };
+      }
+    },
+  );
   vi.spyOn(globalThis, 'postMessage').mockImplementation(response);
   vi.spyOn(globalThis, 'addEventListener').mockImplementation((type, listener) => {
     if (type === 'message') receive = listener;
@@ -102,6 +114,7 @@ describe('Scanic document detector worker runtime', () => {
         numThreads: 1,
         minScore: 0.5,
         modelFetchTimeoutMs: 30_000,
+        inputData: expect.any(Float32Array) as unknown,
       },
     });
     expect(response).toHaveBeenLastCalledWith({
@@ -120,6 +133,7 @@ describe('Scanic document detector worker runtime', () => {
       input: { dimensions: { width: 2, height: 2 }, pixels: new Uint8ClampedArray(16) },
     });
     expect(vendor.options).toEqual([expect.objectContaining({ detector: 'ml' })]);
+    expect(vendor.scan).toHaveBeenCalledOnce();
     expect(response).toHaveBeenLastCalledWith({ id: 2, kind: 'failure', code: 'failed' });
   });
 
@@ -184,6 +198,7 @@ describe('Scanic document detector worker runtime', () => {
       operation: 'detect',
       input: { dimensions: { width: 2, height: 2 }, pixels: new Uint8ClampedArray(16) },
     });
+    expect(vendor.scan).toHaveBeenCalledOnce();
     expect(response).toHaveBeenLastCalledWith({ id: 2, kind: 'failure', code: 'failed' });
   });
 

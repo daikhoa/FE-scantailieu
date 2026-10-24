@@ -264,6 +264,37 @@ describe('Scanic classical lifecycle', () => {
 });
 
 describe('Scanic result boundary', () => {
+  it.each([
+    { ...documentResult.corners, topLeft: { x: -1, y: 1 } },
+    { ...documentResult.corners, bottomRight: { x: 21, y: 9 } },
+    { ...documentResult.corners, bottomLeft: corners[0] },
+    { ...documentResult.corners, topRight: corners[2], bottomRight: corners[1] },
+    { topLeft: corners[0], topRight: corners[3], bottomRight: corners[2], bottomLeft: corners[1] },
+  ])(
+    'continues detection after an unusable ML prediction instead of restarting the runtime (%j)',
+    async (prediction) => {
+      const { engine, backend } = await ready();
+      const detect = vi
+        .fn()
+        .mockResolvedValueOnce({ ...documentResult, detector: 'ml', corners: prediction })
+        .mockResolvedValueOnce({ ...documentResult, detector: 'ml' });
+      backend.detect = detect;
+      const input = frame();
+      try {
+        await expect(engine.detect(input, signal())).resolves.toMatchObject({
+          kind: 'full-frame',
+          reason: 'low-confidence',
+        });
+        expect(engine.lifecycle.kind).toBe('ready');
+        expect(backend.dispose).not.toHaveBeenCalled();
+        await expect(engine.detect(input, signal())).resolves.toMatchObject({ kind: 'document' });
+      } finally {
+        input.close();
+        await engine.dispose();
+      }
+    },
+  );
+
   it('keeps full frame for a high-score quadrilateral smaller than two percent of the image', async () => {
     const { engine, backend } = await ready();
     backend.detect = () =>

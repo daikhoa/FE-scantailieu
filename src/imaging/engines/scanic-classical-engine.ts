@@ -169,12 +169,16 @@ function detectionResult(
     Math.max(1, dimensions.width * dimensions.height * 0.02),
   );
   if (!geometry.valid) {
-    if (geometry.reason === 'area-too-small')
+    // ML coordinates are predictions, including on blank/partial/moving documents.
+    // Reject an unusable crop without destroying an otherwise healthy ONNX session.
+    if (output.detector === 'ml' || geometry.reason === 'area-too-small')
       return { kind: 'full-frame', dimensions, reason: 'low-confidence' };
     throw new ScannerEngineError('failed');
   }
   const [a, b, c] = corners;
   if ((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x) <= 0) {
+    if (output.detector === 'ml')
+      return { kind: 'full-frame', dimensions, reason: 'low-confidence' };
     throw new ScannerEngineError('failed');
   }
   const detectorMinimum = output.detector === 'ml' ? mlMinimumConfidence : minimumConfidence;

@@ -1,0 +1,153 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Camera detector re-entry smoke</title>
+<pre id="result" data-status="running">Running…</pre>
+<script type="module">
+  import { createBackgroundPageProcessor } from '/src/features/scanner/background-page-processor.ts';
+  import { createLocalRestorationClient } from '/src/imaging/restoration/local-restoration-client.ts';
+  import {
+    createScanicEngine,
+    createRgbaScannerFrame,
+  } from '/src/imaging/engines/scanic-classical-engine.ts';
+  import { createCompatibleScanicBackend } from '/src/imaging/engines/scanic-compatible-backend.ts';
+  import { ScannerEngineError } from '/src/imaging/engines/scanner-engine-error.ts';
+  import { ScanicDetectorRuntime } from '/src/imaging/engines/scanic-detector-runtime.ts';
+  const output = document.querySelector('#result');
+  const fallback = location.search.includes('fallback');
+  const engineFactory = () =>
+    createScanicEngine(
+      fallback
+        ? {
+            createBackend: () =>
+              createCompatibleScanicBackend({
+                createWorker() {
+                  throw new ScannerEngineError('unavailable');
+                },
+              }),
+          }
+        : {},
+    );
+  const client = createLocalRestorationClient();
+  const processor = createBackgroundPageProcessor({ engineFactory, restorationAnalyzer: client });
+  const signal = new AbortController().signal;
+  const pages = [];
+  const cycles = [];
+  let engine;
+  async function checkPreprocessing(image) {
+    // Reference implementation from the pinned Scanic 1.6.0 preprocessing.
+    const source = new OffscreenCanvas(image.width, image.height);
+    source.getContext('2d').putImageData(image, 0, 0);
+    const model = new OffscreenCanvas(224, 224);
+    const context = model.getContext('2d', { willReadFrequently: true });
+    context.imageSmoothingEnabled = true;
+    context.imageSmoothingQuality = 'medium';
+    context.drawImage(source, 0, 0, image.width, image.height, 0, 0, 224, 224);
+    const pixels = context.getImageData(0, 0, 224, 224).data;
+    const reference = new Float32Array(224 * 224 * 3);
+    const mean = [0.485, 0.456, 0.406],
+      std = [0.229, 0.224, 0.225];
+    for (let rgba = 0, rgb = 0; rgba < pixels.length; rgba += 4, rgb += 3)
+      for (let channel = 0; channel < 3; channel++)
+        reference[rgb + channel] = (pixels[rgba + channel] / 255 - mean[channel]) / std[channel];
+    source.width = source.height = model.width = model.height = 1;
+    const OriginalCanvas = globalThis.OffscreenCanvas;
+    let allocations = 0;
+    let input;
+    globalThis.OffscreenCanvas = new Proxy(OriginalCanvas, {
+      construct(target, args) {
+        if (++allocations > 2) throw new Error('Detection canvas allocation budget exceeded.');
+        return Reflect.construct(target, args);
+      },
+    });
+    try {
+      const runtime = new ScanicDetectorRuntime(() => ({
+        initialize: async () => {},
+        scan: async (_, options) => {
+          input = options.ml?.inputData;
+          if (
+            !input ||
+            input.length !== reference.length ||
+            input.some((value, index) => value !== reference[index])
+          )
+            throw new Error('Preprocessing changed model pixels.');
+          return { success: false, corners: null };
+        },
+      }));
+      for (let run = 0; run < 100; run++) {
+        if (run === 50) {
+          image = new ImageData(image.width, image.height);
+          for (let index = 0; index < reference.length; index++)
+            reference[index] = -mean[index % 3] / std[index % 3];
+        }
+        await runtime.scan(image);
+      }
+      return {
+        allocations,
+        frames: 100,
+        modelInputExactlyMatchesVendor: true,
+        transparentFrameClearsPreviousPixels: true,
+      };
+    } finally {
+      globalThis.OffscreenCanvas = OriginalCanvas;
+    }
+  }
+  async function run() {
+    const response = await fetch('/tests/fixtures/synthetic/flat-document.png');
+    const blob = await response.blob();
+    const bitmap = await createImageBitmap(blob);
+    const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(bitmap, 0, 0);
+    bitmap.close();
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const preprocessing = await checkPreprocessing(image);
+    const frame = createRgbaScannerFrame(
+      { width: canvas.width, height: canvas.height },
+      image.data,
+    );
+    canvas.width = canvas.height = 1;
+    try {
+      client.warmup();
+      for (let cycle = 0; cycle < 4; cycle++) {
+        for (let page = 0; page < 3; page++) pages.push(await processor.enqueue(blob, signal));
+        engine = engineFactory();
+        await engine.initialize(signal);
+        let detection;
+        for (let liveFrame = 0; liveFrame < 15; liveFrame++)
+          detection = await engine.detect(frame, signal);
+        cycles.push({ cycle, pages: pages.length, detection: detection.kind });
+        await engine.dispose();
+        engine = null;
+      }
+      await processor.dispose();
+      return {
+        fallback,
+        preprocessing,
+        cycles,
+        liveFrames: 60,
+        retainedPages: pages.length,
+        remainingFrames: document.querySelectorAll('iframe').length,
+      };
+    } finally {
+      frame.close();
+    }
+  }
+  // Avoid a top-level await cycle with the lazy DOM backend import.
+  void run()
+    .then(
+      async (result) => {
+        await processor.dispose();
+        output.textContent = JSON.stringify(result);
+        output.dataset.status = 'complete';
+      },
+      (error) => {
+        output.textContent = JSON.stringify({ error: error.message, code: error.code, cycles });
+        output.dataset.status = 'failed';
+      },
+    )
+    .finally(async () => {
+      await engine?.dispose();
+      await processor.dispose();
+      client.dispose();
+    });
+</script>
