@@ -1,0 +1,19 @@
+{
+  "sources": {
+    "src/filters.cpp": "13a581b1004dd2a32a84f1c3cb4c38b9ce6d65a7c7a9d8853214b321103206db",
+    "src/pixels.hpp": "be801b9ad0b197df41099a6ca4efb6a711c3ed9305f928e32c4f12ee63eb5b20",
+    "src/quality.cpp": "3f6b9478cef85517e5e9fae3bfd3e5908dba0d370f5abf20cacf625ccccc5c41",
+    "src/geometry.cpp": "a9c92d24979c09db04a7023fe24bb0f621ada797603f2509135cecf8909a1883",
+    "wasm/CMakeLists.txt": "c14f633194dbf053aa1abcb94ab41ef46eef4fe554a2d41f71c95a9dfdd208ee",
+    "src/lab.hpp": "c024c306d12442ff2c4872842a7f1ecc684b35b3f0de8a41b50d6341c6c1c399",
+    "wasm/bridge.cpp": "accba91a1b385bb759b033c35368ed622f1fcd36b8cb5b6dd32e174080da5e0c"
+  },
+  "maximum_wasm_bytes": 805306368,
+  "boundary": "shared browser decode -> native warp/measure/enhance -> shared browser encode/PDF",
+  "schema": 1,
+  "maximum_input_pixels": 50000000,
+  "emscripten": "6.0.13",
+  "opencv": "ea8e60798e0319ccbe902f7994153b574f639809",
+  "wasm_sha256": "2e4e7ded270c84c8b07ee6670fd25c43a0d6ee216d5d5911761128fc22ee6d1e",
+  "maximum_output_side": 3000
+}

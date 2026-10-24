@@ -1,0 +1,137 @@
+{
+  "wasmSha256": "2e4e7ded270c84c8b07ee6670fd25c43a0d6ee216d5d5911761128fc22ee6d1e",
+  "cases": [
+    {
+      "kind": "soft-text",
+      "skew": false,
+      "filter": "original",
+      "dimensions": {
+        "width": 160,
+        "height": 225
+      },
+      "maximum": 0,
+      "mean": 0
+    },
+    {
+      "kind": "soft-text",
+      "skew": false,
+      "filter": "enhanced-color",
+      "dimensions": {
+        "width": 160,
+        "height": 225
+      },
+      "maximum": 0,
+      "mean": 0
+    },
+    {
+      "kind": "soft-text",
+      "skew": true,
+      "filter": "original",
+      "dimensions": {
+        "width": 152,
+        "height": 211
+      },
+      "maximum": 0,
+      "mean": 0
+    },
+    {
+      "kind": "soft-text",
+      "skew": true,
+      "filter": "enhanced-color",
+      "dimensions": {
+        "width": 152,
+        "height": 211
+      },
+      "maximum": 0,
+      "mean": 0
+    },
+    {
+      "kind": "color",
+      "skew": false,
+      "filter": "original",
+      "dimensions": {
+        "width": 160,
+        "height": 225
+      },
+      "maximum": 0,
+      "mean": 0
+    },
+    {
+      "kind": "color",
+      "skew": false,
+      "filter": "enhanced-color",
+      "dimensions": {
+        "width": 160,
+        "height": 225
+      },
+      "maximum": 0,
+      "mean": 0
+    },
+    {
+      "kind": "color",
+      "skew": true,
+      "filter": "original",
+      "dimensions": {
+        "width": 152,
+        "height": 211
+      },
+      "maximum": 0,
+      "mean": 0
+    },
+    {
+      "kind": "color",
+      "skew": true,
+      "filter": "enhanced-color",
+      "dimensions": {
+        "width": 152,
+        "height": 211
+      },
+      "maximum": 0,
+      "mean": 0
+    },
+    {
+      "kind": "noise",
+      "skew": false,
+      "filter": "original",
+      "dimensions": {
+        "width": 160,
+        "height": 225
+      },
+      "maximum": 0,
+      "mean": 0
+    },
+    {
+      "kind": "noise",
+      "skew": false,
+      "filter": "enhanced-color",
+      "dimensions": {
+        "width": 160,
+        "height": 225
+      },
+      "maximum": 0,
+      "mean": 0
+    },
+    {
+      "kind": "noise",
+      "skew": true,
+      "filter": "original",
+      "dimensions": {
+        "width": 152,
+        "height": 211
+      },
+      "maximum": 0,
+      "mean": 0
+    },
+    {
+      "kind": "noise",
+      "skew": true,
+      "filter": "enhanced-color",
+      "dimensions": {
+        "width": 152,
+        "height": 211
+      },
+      "maximum": 0,
+      "mean": 0
+    }
+  ]
+}

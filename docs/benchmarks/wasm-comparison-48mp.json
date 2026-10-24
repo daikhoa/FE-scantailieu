@@ -1,0 +1,67 @@
+{
+  "schema": 1,
+  "createdAt": "2026-10-24T14:30:26.918Z",
+  "boundary": "shared browser decode; warp + enhanced/original; shared lossless PNG/PDF",
+  "outputMaximumSide": 3000,
+  "sourceDimensions": {
+    "width": 8064,
+    "height": 6048
+  },
+  "crop": {
+    "kind": "full-frame"
+  },
+  "filter": "enhanced-color",
+  "notes": "",
+  "cpuPercent": null,
+  "processPeakRamBytes": null,
+  "temperatureCelsius": null,
+  "energyJoules": null,
+  "results": [
+    {
+      "engine": "web",
+      "setupMs": 16.300000000046566,
+      "wallMs": 923.1999999999534,
+      "samples": [
+        {
+          "decodeMs": 322.89999999990687,
+          "processMs": 497.4000000001397,
+          "encodeMs": 85.89999999990687,
+          "totalMs": 906.1999999999534,
+          "inputPixelBytes": 195084288,
+          "outputPixelBytes": 27000000,
+          "wasmReservedBytes": null
+        }
+      ],
+      "frameGapsOver50ms": 0,
+      "maximumFrameGapMs": 13.89999999999418,
+      "dimensions": {
+        "width": 3000,
+        "height": 2250
+      },
+      "encodedBytes": 148852
+    },
+    {
+      "engine": "cpp",
+      "setupMs": 48.5999999998603,
+      "wallMs": 1090.3999999999069,
+      "samples": [
+        {
+          "decodeMs": 367.4000000001397,
+          "processMs": 591.3999999999069,
+          "encodeMs": 81.69999999995343,
+          "totalMs": 1040.5,
+          "inputPixelBytes": 195084288,
+          "outputPixelBytes": 27000000,
+          "wasmReservedBytes": 411238400
+        }
+      ],
+      "frameGapsOver50ms": 0,
+      "maximumFrameGapMs": 27.599999999998545,
+      "dimensions": {
+        "width": 3000,
+        "height": 2250
+      },
+      "encodedBytes": 148852
+    }
+  ]
+}

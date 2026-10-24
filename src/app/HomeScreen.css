@@ -11,6 +11,12 @@
   background: #1c1c1e;
 }
 
+.home-comparison-link {
+  display: inline-block;
+  margin-top: var(--space-4);
+  color: var(--color-accent);
+}
+
 .app-shell--home .top-bar {
   border-color: #29292d;
   background: #121213;

@@ -34,6 +34,22 @@ export default defineConfig({
     {
       name: 'self-host-scanic-ml',
       configureServer(server) {
+        // Vite rejects source imports from public/ by default. This generated ES
+        // module must retain its relative .wasm URL in development as in production.
+        const rasterAssets = {
+          'docscan.mjs': 'text/javascript; charset=utf-8',
+          'docscan.wasm': 'application/wasm',
+        } as const;
+        server.middlewares.use('/docscan-wasm/v1', (request, response, next) => {
+          const name = new URL(request.url ?? '/', 'http://localhost').pathname.slice(1);
+          if (!Object.hasOwn(rasterAssets, name)) {
+            next();
+            return;
+          }
+          response.setHeader('Content-Type', rasterAssets[name as keyof typeof rasterAssets]);
+          response.setHeader('Cache-Control', 'no-store');
+          response.end(readFileSync(resolve('public/docscan-wasm/v1', name)));
+        });
         server.middlewares.use(SCANIC_ML_ASSET_BASE.slice(0, -1), (request, response, next) => {
           const fileName = new URL(request.url ?? '/', 'http://localhost').pathname.slice(1);
           if (!Object.hasOwn(SCANIC_ML_ASSETS, fileName)) {

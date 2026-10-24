@@ -167,6 +167,9 @@ export function HomeScreen({
               {importError}
             </p>
           )}
+          <a href="?compare=1" className="home-comparison-link">
+            So sánh Web / C++
+          </a>
           <aside className="home-privacy" aria-label="Quyền riêng tư">
             <HomeIcon name="shield" />
             <p>
