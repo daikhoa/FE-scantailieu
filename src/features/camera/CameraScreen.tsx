@@ -41,6 +41,8 @@ interface CameraScreenProps {
   readonly engineFactory?: () => ScannerEngine;
   readonly frameSourceFactory?: () => VideoFrameSource;
   readonly cameraCapture?: CameraCapture;
+  readonly activationReady?: Promise<void>;
+  readonly onDetectionStopped?: (completion: Promise<void>) => void;
 }
 
 function defaultFrameSourceFactory(): VideoFrameSource {
@@ -58,6 +60,8 @@ export function CameraScreen({
   engineFactory = createScanicEngine,
   frameSourceFactory = defaultFrameSourceFactory,
   cameraCapture,
+  activationReady,
+  onDetectionStopped,
 }: CameraScreenProps) {
   const [state, setState] = useState<CameraViewState>({ kind: 'idle' });
   const [liveDetection, setLiveDetection] = useState<LiveDetectionResult | null>(null);
@@ -153,9 +157,13 @@ export function CameraScreen({
       });
     return () => {
       cancelled = true;
-      if (session !== undefined) detectionCleanup.current = session.stop().catch(() => undefined);
+      if (session !== undefined) {
+        const completion = session.stop();
+        detectionCleanup.current = completion.catch(() => undefined);
+        onDetectionStopped?.(completion);
+      }
     };
-  }, [detectionAttempt, engineFactory, frameSourceFactory, state]);
+  }, [detectionAttempt, engineFactory, frameSourceFactory, onDetectionStopped, state]);
 
   const closeCamera = useCallback(() => {
     request.current?.abort();
@@ -171,10 +179,13 @@ export function CameraScreen({
     request.current?.abort();
     const controller = new AbortController();
     request.current = controller;
+    const isCurrentRequest = () => mounted.current && request.current === controller;
     setState({ kind: 'starting' });
     try {
+      await activationReady;
+      if (!isCurrentRequest()) return;
       const session = await service.start(controller.signal);
-      if (!mounted.current || request.current !== controller) {
+      if (!isCurrentRequest()) {
         session.stop();
         return;
       }
@@ -192,7 +203,7 @@ export function CameraScreen({
     } finally {
       if (request.current === controller) request.current = null;
     }
-  }, [service]);
+  }, [activationReady, service]);
 
   useEffect(() => {
     const launch = window.setTimeout(() => void startCamera(), 0);

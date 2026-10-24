@@ -1,6 +1,6 @@
 import { HomeScreen, type LibraryState } from './HomeScreen';
 import { renderAnalyzedPage } from '../imaging/restoration/analyzed-page-renderer';
-import { useEffect, useReducer, useRef, useState } from 'react';
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 
 import type { EditRecipe } from '../domain/document';
 import { CameraScreen } from '../features/camera/CameraScreen';
@@ -89,6 +89,12 @@ export function App({
   const editorEngine = useRef<ScannerEngine | null>(null);
   const editorEngineInitialization = useRef<Promise<ScannerEngine> | null>(null);
   const editorEngineLifetime = useRef<AbortController | null>(null);
+  const [cameraPreparation, setCameraPreparation] = useState(() => Promise.resolve());
+  const cameraRetirement = useRef<Promise<void>>(Promise.resolve());
+  const recordCameraRetirement = useCallback((completion: Promise<void>) => {
+    cameraRetirement.current = completion;
+    void completion.catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (restorationClient !== undefined) {
@@ -147,10 +153,7 @@ export function App({
   );
 
   useEffect(() => {
-    if (view === 'camera') {
-      restorationClientRef.current?.warmup?.();
-      void pageProcessor.current?.warmup?.().catch(() => undefined);
-    }
+    if (view === 'camera') restorationClientRef.current?.warmup?.();
   }, [view]);
 
   useEffect(() => {
@@ -163,6 +166,24 @@ export function App({
   const navigateTo = (nextView: AppView) => {
     shouldMoveFocus.current = true;
     setView(nextView);
+  };
+
+  const openCamera = () => {
+    // Review engines and the previous CameraScreen can outlive their UI. Retire
+    // them before opening another ML realm, without discarding queued pages.
+    editorEngineLifetime.current?.abort();
+    editorEngineLifetime.current = null;
+    editorEngineInitialization.current = null;
+    const editing = editorEngine.current;
+    editorEngine.current = null;
+    const preparation = Promise.all([
+      pageProcessor.current?.releaseWhenIdle?.(),
+      editing?.dispose(),
+      cameraRetirement.current,
+    ]).then(() => undefined);
+    void preparation.catch(() => undefined);
+    setCameraPreparation(preparation);
+    navigateTo('camera');
   };
 
   const readyEditorEngine = (): Promise<ScannerEngine> => {
@@ -299,7 +320,7 @@ export function App({
     setHomeImportState({ kind: 'idle' });
     resetBatch();
     setCameraReturnView('library');
-    navigateTo('camera');
+    openCamera();
   };
 
   const openHomeImages = (sources: readonly File[]) => {
@@ -359,6 +380,8 @@ export function App({
         <CameraScreen
           service={resolvedCameraService}
           headingRef={viewHeadingRef}
+          activationReady={cameraPreparation}
+          onDetectionStopped={recordCameraRetirement}
           {...(cameraCapture === undefined ? {} : { cameraCapture })}
           {...(cameraEngineFactory === undefined ? {} : { engineFactory: cameraEngineFactory })}
           {...(cameraFrameSourceFactory === undefined
@@ -414,7 +437,7 @@ export function App({
           }}
           onCaptureMore={() => {
             setCameraReturnView('batch-review');
-            navigateTo('camera');
+            openCamera();
           }}
           onApplyRecipe={applyBatchRecipe}
           onRetakePage={(id) => {
@@ -428,7 +451,7 @@ export function App({
             }
             setReplacementPageId(id);
             setCameraReturnView('batch-review');
-            navigateTo('camera');
+            openCamera();
           }}
           onRetryPage={(id) => {
             const selected = batch.pages.find((page) => page.id === id);

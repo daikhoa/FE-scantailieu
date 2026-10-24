@@ -83,6 +83,57 @@ function fakeFrameSource(): ImageAssetFrameSource {
 }
 
 describe('background page processor', () => {
+  it('drains queued pages before releasing its engine and can process another page afterward', async () => {
+    const importing = deferred<ReturnType<typeof imported>>();
+    const first = new Blob(['first'], { type: 'image/jpeg' });
+    const second = new Blob(['second'], { type: 'image/jpeg' });
+    const third = new Blob(['third'], { type: 'image/jpeg' });
+    const engines: ScannerEngine[] = [];
+    const retired: ScannerEngine[] = [];
+    const processor = createBackgroundPageProcessor({
+      importer: (source) =>
+        source === first ? importing.promise : Promise.resolve(imported(source)),
+      frameSource: fakeFrameSource(),
+      engineFactory: () => {
+        const { engine } = fakeEngine();
+        let ready = false;
+        Object.defineProperty(engine, 'lifecycle', {
+          get: () => ({ kind: ready ? 'ready' : 'uninitialized' }),
+        });
+        engine.initialize = vi.fn(() => {
+          ready = true;
+          return Promise.resolve();
+        });
+        engine.dispose = vi.fn(() => {
+          ready = false;
+          retired.push(engine);
+          return Promise.resolve();
+        });
+        engines.push(engine);
+        return engine;
+      },
+    });
+    try {
+      const firstPage = processor.enqueue(first, new AbortController().signal);
+      const secondPage = processor.enqueue(second, new AbortController().signal);
+      if (processor.releaseWhenIdle === undefined) throw new Error('Missing idle release.');
+      const releasing = processor.releaseWhenIdle();
+      expect(engines).toHaveLength(0);
+      importing.resolve(imported(first));
+      const results = await Promise.all([firstPage, secondPage]);
+      await releasing;
+      expect(results.map((page) => page.original.blob)).toEqual([first, second]);
+      expect(engines).toHaveLength(1);
+      expect(retired).toEqual([engines[0]]);
+      const next = await processor.enqueue(third, new AbortController().signal);
+      expect(next.original.blob).toBe(third);
+      expect(engines).toHaveLength(2);
+    } finally {
+      await processor.dispose();
+    }
+    await expect(processor.releaseWhenIdle()).rejects.toMatchObject({ name: 'AbortError' });
+  });
+
   it('owns and terminates an engine that is still initializing on disposal', async () => {
     const initializing = deferred<undefined>();
     const { engine } = fakeEngine();

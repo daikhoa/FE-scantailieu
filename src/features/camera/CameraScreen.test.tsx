@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { createRef, type ComponentProps } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -72,6 +72,22 @@ function videoFrameSource(): VideoFrameSource {
 }
 
 describe('CameraScreen', () => {
+  it('does not open a late camera after leaving while previous runtimes are retiring', async () => {
+    const retirement = deferred<undefined>();
+    const stream = { getTracks: () => [] } as unknown as MediaStream;
+    const start = vi.fn(() => Promise.resolve({ stream, stop: vi.fn() }));
+    const view = renderCamera(fakeService(start), vi.fn(), { activationReady: retirement.promise });
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { name: 'Đang mở camera…' })).toBeInTheDocument();
+    });
+    view.unmount();
+    await act(async () => {
+      retirement.resolve(undefined);
+      await retirement.promise;
+    });
+    expect(start).not.toHaveBeenCalled();
+  });
+
   it('opens the camera immediately and connects its stream to the preview', async () => {
     const stream = { getTracks: () => [] } as unknown as MediaStream;
     const start = vi.fn<CameraService['start']>(() => Promise.resolve({ stream, stop: vi.fn() }));

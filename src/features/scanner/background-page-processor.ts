@@ -51,6 +51,8 @@ export type PageRestorationState =
 
 export interface BackgroundPageProcessor {
   warmup?(): Promise<void>;
+  /** Finish queued pages and release the idle runtime; future pages can initialize a new one. */
+  releaseWhenIdle?(): Promise<void>;
   enqueue(
     source: ScanPageSource,
     signal: AbortSignal,
@@ -228,6 +230,12 @@ export function createBackgroundPageProcessor(
   };
 
   return {
+    releaseWhenIdle() {
+      if (disposePromise !== null) return Promise.reject(abortError());
+      const releasing = tail.then(releaseEngine);
+      tail = releasing.catch(() => undefined);
+      return releasing;
+    },
     warmup() {
       if (disposePromise !== null) return Promise.reject(abortError());
       const warming = tail.then(() => readyEngine(disposal.signal)).then(() => undefined);
