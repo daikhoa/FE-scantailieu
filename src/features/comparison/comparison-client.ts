@@ -1,5 +1,6 @@
 import {
   validateComparisonInput,
+  COMPARISON_LABELS,
   type ComparisonEngine,
   type ComparisonInput,
   type ComparisonReply,
@@ -20,6 +21,7 @@ export async function runComparison(
 ): Promise<ComparisonResult> {
   if (signal.aborted) throw new DOMException('Đã dừng.', 'AbortError');
   validateComparisonInput(input);
+  if (!Object.hasOwn(COMPARISON_LABELS, engine)) throw new Error('invalid-input');
   const start = performance.now();
   const worker = createWorker();
   return await new Promise((resolve, reject) => {
@@ -74,6 +76,14 @@ export async function runComparison(
           wallMs: performance.now() - start,
           samples,
           image: reply.image,
+          filter: input.filter,
+          implementation:
+            engine === 'web'
+              ? 'web-filter-v10'
+              : engine === 'cpp'
+                ? 'custom-cpp-wasm-v2'
+                : 'opencv-clahe-v1-wasm-v2',
+          ...(engine === 'opencv' ? { opencvPreset: input.opencvPreset ?? 'balanced' } : {}),
         });
       } else finish(new Error('failed'));
     };

@@ -40,16 +40,17 @@ export default defineConfig({
           'docscan.mjs': 'text/javascript; charset=utf-8',
           'docscan.wasm': 'application/wasm',
         } as const;
-        server.middlewares.use('/docscan-wasm/v1', (request, response, next) => {
-          const name = new URL(request.url ?? '/', 'http://localhost').pathname.slice(1);
-          if (!Object.hasOwn(rasterAssets, name)) {
-            next();
-            return;
-          }
-          response.setHeader('Content-Type', rasterAssets[name as keyof typeof rasterAssets]);
-          response.setHeader('Cache-Control', 'no-store');
-          response.end(readFileSync(resolve('public/docscan-wasm/v1', name)));
-        });
+        for (const version of ['v1', 'v2'])
+          server.middlewares.use(`/docscan-wasm/${version}`, (request, response, next) => {
+            const name = new URL(request.url ?? '/', 'http://localhost').pathname.slice(1);
+            if (!Object.hasOwn(rasterAssets, name)) {
+              next();
+              return;
+            }
+            response.setHeader('Content-Type', rasterAssets[name as keyof typeof rasterAssets]);
+            response.setHeader('Cache-Control', 'no-store');
+            response.end(readFileSync(resolve(`public/docscan-wasm/${version}`, name)));
+          });
         server.middlewares.use(SCANIC_ML_ASSET_BASE.slice(0, -1), (request, response, next) => {
           const fileName = new URL(request.url ?? '/', 'http://localhost').pathname.slice(1);
           if (!Object.hasOwn(SCANIC_ML_ASSETS, fileName)) {

@@ -1,0 +1,22 @@
+{
+  "wasm_sha256": "c1ce6f62579648cc2929f67c39b1328afa595a25a17072cee09942f55944c981",
+  "boundary": "shared browser decode -> native warp/measure/enhance -> shared browser encode/PDF",
+  "sources": {
+    "src/pixels.hpp": "bef8195fc11066b7f314f5497e7cfa89d03a5b448c6a14a63893c2b1a904271b",
+    "src/opencv-raster.cpp": "0a2e281362bc2c3134be10c4be365f70efccba6a2cb838612d055d068482e323",
+    "src/quality.cpp": "3f6b9478cef85517e5e9fae3bfd3e5908dba0d370f5abf20cacf625ccccc5c41",
+    "src/filters.cpp": "13a581b1004dd2a32a84f1c3cb4c38b9ce6d65a7c7a9d8853214b321103206db",
+    "include/docscan/docscan.h": "5b57d73ce625e59674b15c0fcf7dd59d36a6f19f058c7bde3b7b97294aa6af37",
+    "wasm/bridge.cpp": "de816e9d95721de5c13c8b9535ca44448f1f881da152d4fa00c209f189216dae",
+    "src/lab.hpp": "c024c306d12442ff2c4872842a7f1ecc684b35b3f0de8a41b50d6341c6c1c399",
+    "src/opencv-raster.hpp": "77ec2c99295f910d5b26e2dc82d9af78ab534a3a7e7b3b28f0e9a1173398eb4d",
+    "wasm/CMakeLists.txt": "c9a1e9e1cf3ba474589c2cfff10a88ef6ee7594902b73bd4175ae9bfa5e372fe",
+    "src/geometry.cpp": "a9c92d24979c09db04a7023fe24bb0f621ada797603f2509135cecf8909a1883"
+  },
+  "maximum_input_pixels": 50000000,
+  "emscripten": "6.0.13",
+  "maximum_output_side": 3000,
+  "maximum_wasm_bytes": 805306368,
+  "opencv": "ea8e60798e0319ccbe902f7994153b574f639809",
+  "schema": 1
+}

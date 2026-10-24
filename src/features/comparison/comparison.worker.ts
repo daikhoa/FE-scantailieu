@@ -1,5 +1,6 @@
 import {
   validateComparisonInput,
+  COMPARISON_LABELS,
   type ComparisonCommand,
   type ComparisonEngine,
   type ComparisonReply,
@@ -49,10 +50,10 @@ async function decode(asset: ImageAsset): Promise<RgbaImage> {
 
 async function handle(command: ComparisonCommand) {
   if (command.type === 'initialize') {
-    if (engine !== null || !['web', 'cpp'].includes(command.engine))
+    if (engine !== null || !Object.hasOwn(COMPARISON_LABELS, command.engine))
       throw new Error('invalid-input');
     engine = command.engine;
-    if (engine === 'cpp') wasm = await (await import('./wasm-raster')).loadWasmRaster();
+    if (engine !== 'web') wasm = await (await import('./wasm-raster')).loadWasmRaster();
     scope.postMessage({ type: 'ready' });
     return;
   }
@@ -73,9 +74,14 @@ async function handle(command: ComparisonCommand) {
     const decoded = performance.now();
     let final: RgbaImage;
     let reservedBytes: number | null = null;
-    if (engine === 'cpp') {
+    if (engine !== 'web') {
       if (!wasm) throw new Error('unavailable');
-      const result = wasm.process(source, input.corners, input.filter === 'enhanced-color');
+      const result = wasm.process(
+        source,
+        input.corners,
+        input.filter === 'enhanced-color',
+        engine === 'opencv' ? (input.opencvPreset ?? 'balanced') : undefined,
+      );
       final = result.image;
       reservedBytes = result.reservedBytes;
     } else {

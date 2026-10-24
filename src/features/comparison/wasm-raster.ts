@@ -1,5 +1,6 @@
 import type { DocumentCorners } from '../../domain/document';
 import type { RgbaImage } from '../../imaging/rendering/perspective-warp';
+import type { OpenCvPreset } from './comparison-contract';
 
 interface WasmRaster {
   HEAPU8: Uint8Array<ArrayBuffer>;
@@ -17,15 +18,28 @@ interface WasmRaster {
   _ds_wasm_width(): number;
   _ds_wasm_height(): number;
   _ds_wasm_release(): void;
+  _ds_wasm_process_opencv(
+    input: number,
+    width: number,
+    height: number,
+    corners: number,
+    filter: number,
+    preset: number,
+  ): number;
 }
 
 export async function loadWasmRaster() {
   // Public, versioned assets; lazy import keeps the scanner's normal startup untouched.
-  const path = '/docscan-wasm/v1/docscan.mjs';
+  const path = '/docscan-wasm/v2/docscan.mjs';
   const factory = (await import(/* @vite-ignore */ path)) as { default: () => Promise<WasmRaster> };
   const module = await factory.default();
   return {
-    process(input: RgbaImage, corners: DocumentCorners, enhanced: boolean) {
+    process(
+      input: RgbaImage,
+      corners: DocumentCorners,
+      enhanced: boolean,
+      opencvPreset?: OpenCvPreset,
+    ) {
       let pointer = 0;
       let points = 0;
       try {
@@ -37,13 +51,20 @@ export async function loadWasmRaster() {
           corners.flatMap((p) => [p.x, p.y]),
           points / 8,
         );
-        const status = module._ds_wasm_process(
+        const args = [
           pointer,
           input.dimensions.width,
           input.dimensions.height,
           points,
           enhanced ? 2 : 0,
-        );
+        ] as const;
+        const status =
+          opencvPreset === undefined
+            ? module._ds_wasm_process(...args)
+            : module._ds_wasm_process_opencv(
+                ...args,
+                { gentle: 0, balanced: 1, text: 2 }[opencvPreset],
+              );
         if (status !== 0)
           throw new Error(status === 8 || status === 3 ? 'out-of-memory' : 'failed');
         const dimensions = { width: module._ds_wasm_width(), height: module._ds_wasm_height() };

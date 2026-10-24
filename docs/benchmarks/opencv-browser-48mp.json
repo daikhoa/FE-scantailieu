@@ -1,0 +1,75 @@
+{
+  "schema": 2,
+  "pair": "cpp-opencv",
+  "opencvPreset": "text",
+  "wasmAssets": "/docscan-wasm/v2/",
+  "createdAt": "2026-10-24T15:48:44.128Z",
+  "boundary": "shared browser decode; warp + enhanced/original; shared lossless PNG/PDF",
+  "outputMaximumSide": 3000,
+  "sourceDimensions": {
+    "width": 8064,
+    "height": 6048
+  },
+  "crop": {
+    "kind": "full-frame"
+  },
+  "filter": "enhanced-color",
+  "notes": "",
+  "cpuPercent": null,
+  "processPeakRamBytes": null,
+  "temperatureCelsius": null,
+  "energyJoules": null,
+  "results": [
+    {
+      "engine": "opencv",
+      "setupMs": 37,
+      "wallMs": 1422.9000000003725,
+      "samples": [
+        {
+          "decodeMs": 368.79999999981374,
+          "processMs": 928.0999999996275,
+          "encodeMs": 88.1000000005588,
+          "totalMs": 1385,
+          "inputPixelBytes": 195084288,
+          "outputPixelBytes": 27000000,
+          "wasmReservedBytes": 411959296
+        }
+      ],
+      "filter": "enhanced-color",
+      "implementation": "opencv-clahe-v1-wasm-v2",
+      "opencvPreset": "text",
+      "frameGapsOver50ms": 0,
+      "maximumFrameGapMs": 27.70000000001164,
+      "dimensions": {
+        "width": 3000,
+        "height": 2250
+      },
+      "encodedBytes": 152850
+    },
+    {
+      "engine": "cpp",
+      "setupMs": 68.79999999981374,
+      "wallMs": 1044.9000000003725,
+      "samples": [
+        {
+          "decodeMs": 326.69999999925494,
+          "processMs": 558.3000000007451,
+          "encodeMs": 90.09999999962747,
+          "totalMs": 975.0999999996275,
+          "inputPixelBytes": 195084288,
+          "outputPixelBytes": 27000000,
+          "wasmReservedBytes": 411959296
+        }
+      ],
+      "filter": "enhanced-color",
+      "implementation": "custom-cpp-wasm-v2",
+      "frameGapsOver50ms": 0,
+      "maximumFrameGapMs": 27.70000000001164,
+      "dimensions": {
+        "width": 3000,
+        "height": 2250
+      },
+      "encodedBytes": 148852
+    }
+  ]
+}

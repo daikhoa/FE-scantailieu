@@ -1,156 +1,30 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CropRegion } from '../../domain/document';
 import { importImage, type ImportedImage } from '../camera/image-import';
 import { ManualCropEditor } from '../editor/ManualCropEditor';
 import { downloadBlob } from '../export/download-blob';
-import { createImagePdf } from '../export/image-pdf';
 import { RASTER_MIME_TYPES } from '../../imaging/codecs/raster-metadata';
 import { runComparison } from './comparison-client';
 import {
-  median,
+  COMPARISON_LABELS,
+  COMPARISON_PAIRS,
+  OPENCV_PRESET_LABELS,
+  type OpenCvPreset,
   MAX_COMPARISON_INPUT_PIXELS,
   type ComparisonEngine,
   type ComparisonFilter,
-  type ComparisonResult,
 } from './comparison-contract';
+import { ComparisonResults, type MeasuredResult } from './ComparisonResults';
 import './comparison.css';
 
-type MeasuredResult = ComparisonResult & {
-  readonly frameGapsOver50ms: number;
-  readonly maximumFrameGapMs: number;
-};
-const LABELS = { web: 'Web hiện tại', cpp: 'C++ WebAssembly' } as const;
-const ms = (value: number | null) => (value === null ? 'Chưa có' : `${value.toFixed(1)} ms`);
+const LABELS = COMPARISON_LABELS;
 const mib = (value: number) => `${(value / 1048576).toFixed(1)} MiB`;
-
-function ResultImage({
-  result,
-  zoom,
-  scrollRef,
-  onScroll,
-}: {
-  readonly result: MeasuredResult;
-  readonly zoom: number;
-  readonly scrollRef: React.RefObject<HTMLDivElement | null>;
-  readonly onScroll: () => void;
-}) {
-  const url = useMemo(() => URL.createObjectURL(result.image.blob), [result.image.blob]);
-  useEffect(
-    () => () => {
-      URL.revokeObjectURL(url);
-    },
-    [url],
-  );
-  const [error, setError] = useState('');
-  const [exporting, setExporting] = useState(false);
-  const lifetime = useRef<AbortController | null>(null);
-  useEffect(() => () => lifetime.current?.abort(), []);
-  return (
-    <article className="comparison-result">
-      <h2>{LABELS[result.engine]}</h2>
-      <p>
-        {result.image.dimensions.width} × {result.image.dimensions.height} · PNG không mất dữ liệu
-      </p>
-      <div
-        className="comparison-image"
-        ref={scrollRef}
-        onScroll={onScroll}
-        tabIndex={0}
-        role="region"
-        aria-label={`Phóng to kết quả ${LABELS[result.engine]}`}
-      >
-        <img
-          src={url}
-          alt={`Kết quả ${LABELS[result.engine]}`}
-          style={{ width: `${String(zoom * 100)}%` }}
-        />
-      </div>
-      <div className="comparison-actions">
-        <button
-          onClick={() => {
-            downloadBlob(result.image.blob, `scan-${result.engine}.png`);
-          }}
-        >
-          Tải ảnh PNG
-        </button>
-        <button
-          disabled={exporting}
-          onClick={() => {
-            setExporting(true);
-            setError('');
-            const controller = new AbortController();
-            lifetime.current = controller;
-            void createImagePdf([result.image], controller.signal)
-              .then((blob) => {
-                if (!controller.signal.aborted) downloadBlob(blob, `scan-${result.engine}.pdf`);
-              })
-              .catch(() => {
-                if (!controller.signal.aborted) setError('Chưa xuất được PDF. Hãy thử lại.');
-              })
-              .finally(() => {
-                if (!controller.signal.aborted) setExporting(false);
-              });
-          }}
-        >
-          {exporting ? 'Đang tạo PDF…' : 'Tải PDF'}
-        </button>
-      </div>
-      {error && <p role="alert">{error}</p>}
-      <dl className="comparison-metrics">
-        <div>
-          <dt>Khởi động worker / bộ xử lý</dt>
-          <dd>{ms(result.setupMs)}</dd>
-        </div>
-        <div>
-          <dt>Lần đầu: giải mã → ảnh PNG</dt>
-          <dd>{ms(result.samples[0]?.totalMs ?? null)}</dd>
-        </div>
-        <div>
-          <dt>Trung vị các lần sau</dt>
-          <dd>{ms(median(result.samples.slice(1).map((s) => s.totalMs)))}</dd>
-        </div>
-        <div>
-          <dt>Riêng cắt + bộ lọc (trung vị)</dt>
-          <dd>{ms(median(result.samples.map((s) => s.processMs)))}</dd>
-        </div>
-        <div>
-          <dt>Tổng lượt, gồm khởi động / trao đổi</dt>
-          <dd>{ms(result.wallMs)}</dd>
-        </div>
-        <div>
-          <dt>Khoảng khung hình UI &gt; 50 ms</dt>
-          <dd>
-            {result.frameGapsOver50ms} · lớn nhất {ms(result.maximumFrameGapMs)}
-          </dd>
-        </div>
-        <div>
-          <dt>Buffer ảnh vào / ra đã biết</dt>
-          <dd>
-            {mib(result.samples[0]?.inputPixelBytes ?? 0)} /{' '}
-            {mib(result.samples[0]?.outputPixelBytes ?? 0)}
-          </dd>
-        </div>
-        <div>
-          <dt>Bộ nhớ tuyến tính WASM được cấp</dt>
-          <dd>
-            {result.engine === 'cpp'
-              ? mib(Math.max(...result.samples.map((s) => s.wasmReservedBytes ?? 0)))
-              : 'Không áp dụng'}
-          </dd>
-        </div>
-      </dl>
-      <p className="comparison-note">
-        Các buffer và vùng nhớ WASM không phải tổng RAM cao nhất của trình duyệt. Không cộng hai số
-        này để suy ra tổng RAM.
-      </p>
-    </article>
-  );
-}
-
 export function ComparisonScreen() {
   const [imported, setImported] = useState<ImportedImage | null>(null);
   const [crop, setCrop] = useState<CropRegion>({ kind: 'full-frame' });
   const [editing, setEditing] = useState(false);
+  const [pair, setPair] = useState<keyof typeof COMPARISON_PAIRS>('web-opencv');
+  const [opencvPreset, setOpenCvPreset] = useState<OpenCvPreset>('balanced');
   const [filter, setFilter] = useState<ComparisonFilter>('enhanced-color');
   const [repetitions, setRepetitions] = useState(5);
   const [results, setResults] = useState<Partial<Record<ComparisonEngine, MeasuredResult>>>({});
@@ -161,21 +35,7 @@ export function ComparisonScreen() {
   const [notes, setNotes] = useState('');
   const reverse = useRef(false);
   const lifetime = useRef<AbortController | null>(null);
-  const webScroll = useRef<HTMLDivElement>(null);
-  const cppScroll = useRef<HTMLDivElement>(null);
   useEffect(() => () => lifetime.current?.abort(), []);
-
-  const synchronize = (from: HTMLDivElement | null, to: HTMLDivElement | null) => {
-    if (!from || !to) return;
-    const left =
-      (from.scrollLeft / Math.max(1, from.scrollWidth - from.clientWidth)) *
-      (to.scrollWidth - to.clientWidth);
-    const top =
-      (from.scrollTop / Math.max(1, from.scrollHeight - from.clientHeight)) *
-      (to.scrollHeight - to.clientHeight);
-    if (Math.abs(to.scrollLeft - left) > 1) to.scrollLeft = left;
-    if (Math.abs(to.scrollTop - top) > 1) to.scrollTop = top;
-  };
 
   const choose = async (file: File) => {
     const controller = new AbortController();
@@ -216,11 +76,7 @@ export function ComparisonScreen() {
     lifetime.current = controller;
     setBusy(true);
     setError('');
-    setResults((current) =>
-      Object.fromEntries(
-        Object.entries(current).filter(([key]) => !engines.includes(key as ComparisonEngine)),
-      ),
-    );
+    setResults({});
     const visibility = () => {
       if (document.hidden) controller.abort();
     };
@@ -254,7 +110,7 @@ export function ComparisonScreen() {
         try {
           const result = await runComparison(
             engine,
-            { asset: imported.original, corners, filter, repetitions },
+            { asset: imported.original, corners, filter, repetitions, opencvPreset },
             controller.signal,
             (completed) => {
               setStatus(`${LABELS[engine]}: ${String(completed)}/${String(repetitions)} lần.`);
@@ -295,12 +151,16 @@ export function ComparisonScreen() {
       <header>
         <a href="/">← Về trang chủ</a>
         <p className="eyebrow">Thử nghiệm trên thiết bị</p>
-        <h1>So sánh Web và C++</h1>
+        <h1>So sánh thuật toán và OpenCV</h1>
         <p>
           Cùng ảnh gốc, cùng vùng cắt, đầu ra tối đa 3000 px. Chỉ đo cắt phối cảnh và bộ lọc; giải
           mã, xuất PNG/PDF dùng chung. Không đo AI hay bộ mã hóa của DLL Windows.
         </p>
       </header>
+      <p>
+        OpenCV dùng cắt phối cảnh, CLAHE trên độ sáng và tăng nét nhẹ. Chọn “Giữ nguyên màu” để chỉ
+        đối chiếu bước cắt. Các bản cũ vẫn có trong danh sách cặp so sánh.
+      </p>
       <section className="comparison-controls" aria-label="Cấu hình so sánh">
         <label className="comparison-file">
           Chọn ảnh gốc
@@ -322,6 +182,40 @@ export function ComparisonScreen() {
           </p>
         )}
         <div className="comparison-actions">
+          <label>
+            Cặp so sánh
+            <select
+              aria-label="Cặp so sánh"
+              value={pair}
+              disabled={busy}
+              onChange={(event) => {
+                setPair(event.target.value as keyof typeof COMPARISON_PAIRS);
+                setResults({});
+              }}
+            >
+              <option value="web-opencv">Web hiện tại ↔ OpenCV</option>
+              <option value="cpp-opencv">C++ tự viết ↔ OpenCV</option>
+              <option value="web-cpp">Web hiện tại ↔ C++ tự viết</option>
+            </select>
+          </label>
+          <label>
+            Mức tăng cường OpenCV
+            <select
+              aria-label="Mức tăng cường OpenCV"
+              value={opencvPreset}
+              disabled={busy || filter === 'original'}
+              onChange={(event) => {
+                setOpenCvPreset(event.target.value as OpenCvPreset);
+                setResults({});
+              }}
+            >
+              {Object.entries(OPENCV_PRESET_LABELS).map(([key, label]) => (
+                <option key={key} value={key}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
           <label>
             Bộ lọc
             <select
@@ -394,7 +288,8 @@ export function ComparisonScreen() {
             className="primary-button"
             disabled={!imported || busy || editing}
             onClick={() => {
-              const order: ComparisonEngine[] = reverse.current ? ['cpp', 'web'] : ['web', 'cpp'];
+              const order: ComparisonEngine[] = [...COMPARISON_PAIRS[pair]];
+              if (reverse.current) order.reverse();
               reverse.current = !reverse.current;
               setResults({});
               void run(order);
@@ -406,7 +301,10 @@ export function ComparisonScreen() {
             Chỉ chạy Web
           </button>
           <button disabled={!imported || busy || editing} onClick={() => void run(['cpp'])}>
-            Chỉ chạy C++
+            Chỉ chạy C++ tự viết
+          </button>
+          <button disabled={!imported || busy || editing} onClick={() => void run(['opencv'])}>
+            Chỉ chạy OpenCV
           </button>
           {busy && <button onClick={() => lifetime.current?.abort()}>Dừng đo</button>}
         </div>
@@ -433,28 +331,7 @@ export function ComparisonScreen() {
             }}
           />
         </label>
-        <div className="comparison-results">
-          {results.web && (
-            <ResultImage
-              result={results.web}
-              zoom={zoom}
-              scrollRef={webScroll}
-              onScroll={() => {
-                synchronize(webScroll.current, cppScroll.current);
-              }}
-            />
-          )}
-          {results.cpp && (
-            <ResultImage
-              result={results.cpp}
-              zoom={zoom}
-              scrollRef={cppScroll}
-              onScroll={() => {
-                synchronize(cppScroll.current, webScroll.current);
-              }}
-            />
-          )}
-        </div>
+        <ComparisonResults results={results} zoom={zoom} />
       </section>
       <section className="comparison-guide" aria-labelledby="physical-test-title">
         <h2 id="physical-test-title">Đo nóng máy và hao pin</h2>
@@ -491,10 +368,14 @@ export function ComparisonScreen() {
           />
         </label>
         <button
-          disabled={busy || (!results.web && !results.cpp)}
+          disabled={busy || Object.keys(results).length === 0}
           onClick={() => {
             const report = {
-              schema: 1,
+              schema: 2,
+              selectedPair: pair,
+              measuredEngines: Object.keys(results),
+              opencvPreset,
+              wasmAssets: '/docscan-wasm/v2/',
               createdAt: new Date().toISOString(),
               boundary: 'shared browser decode; warp + enhanced/original; shared lossless PNG/PDF',
               outputMaximumSide: 3000,
