@@ -18,6 +18,7 @@ import {
 import { detectDocumentCrop } from './detect-document-crop';
 import {
   createDocumentRecipe,
+  DEFAULT_DOCUMENT_FILTER,
   DOCUMENT_FILTERS,
   documentFilterLabel,
   type DocumentFilterOption,
@@ -70,7 +71,9 @@ export function DocumentEditor({
   const [initialProcessedUrl] = useState(() =>
     initialPage === undefined ? null : URL.createObjectURL(initialPage.variant.image.blob),
   );
-  const [mode, setMode] = useState<FilterMode>(initialPage?.recipe.filter.mode ?? 'ocr-color');
+  const [mode, setMode] = useState<FilterMode>(
+    initialPage?.recipe.filter.mode ?? DEFAULT_DOCUMENT_FILTER,
+  );
   const [status, setStatus] = useState<EditorStatus>(() =>
     initialPage === undefined
       ? { kind: 'preparing' }
@@ -137,7 +140,7 @@ export function DocumentEditor({
             controller.signal,
           ));
         crop.current = detectedCrop;
-        const initialRecipe = createDocumentRecipe(detectedCrop, 'ocr-color');
+        const initialRecipe = createDocumentRecipe(detectedCrop);
         const activeAnalyzer = analyzer ?? analyzerFactory?.() ?? undefined;
         const result = await renderAnalyzedPage(
           localEngine,
@@ -151,9 +154,9 @@ export function DocumentEditor({
         if (!mounted.current || activeOperation.current !== controller) return;
         ready.current = true;
         setCropKind(detectedCrop.kind);
-        setMode('ocr-color');
+        setMode(initialRecipe.filter.mode);
         showVariant(variant, initialRecipe);
-        setStatus({ kind: 'ready', label: 'Tự động' });
+        setStatus({ kind: 'ready', label: documentFilterLabel(initialRecipe.filter.mode) });
       } catch (error) {
         if (mounted.current && activeOperation.current === controller && !isAbort(error)) {
           setStatus({ kind: 'error' });

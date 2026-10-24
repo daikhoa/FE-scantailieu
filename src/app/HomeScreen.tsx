@@ -103,7 +103,6 @@ interface HomeScreenProps {
   readonly onRetryLibrary: (() => void) | undefined;
   readonly onCamera: () => void;
   readonly onImport: (sources: readonly File[]) => void;
-  readonly importing: boolean;
   readonly importError: string | undefined;
 }
 
@@ -113,7 +112,6 @@ export function HomeScreen({
   onRetryLibrary,
   onCamera,
   onImport,
-  importing,
   importError,
 }: HomeScreenProps) {
   return (
@@ -144,14 +142,11 @@ export function HomeScreen({
               <strong>Chụp tài liệu</strong>
               <small>Quét bằng camera</small>
             </button>
-            <label
-              className={`home-tool home-tool--image${importing ? ' home-tool--busy' : ''}`}
-              aria-busy={importing}
-            >
+            <label className="home-tool home-tool--image">
               <span className="home-tool__icon">
                 <HomeIcon name="image" />
               </span>
-              <strong>{importing ? 'Đang kiểm tra ảnh…' : 'Dùng ảnh có sẵn'}</strong>
+              <strong>Dùng ảnh có sẵn</strong>
               <small>Chọn một hoặc nhiều ảnh</small>
               <input
                 className="visually-hidden"
@@ -159,7 +154,6 @@ export function HomeScreen({
                 aria-label="Dùng ảnh có sẵn"
                 accept={RASTER_MIME_TYPES.join(',')}
                 multiple
-                disabled={importing}
                 onChange={(event) => {
                   const sources = Array.from(event.currentTarget.files ?? []);
                   event.currentTarget.value = '';

@@ -153,7 +153,7 @@ describe('DocumentEditor', () => {
     expect(fixture.renderPage.mock.calls[0]?.[0].recipe.crop).toEqual(captureCrop);
   });
 
-  it('detects a library image and renders the default OCR filter locally', async () => {
+  it('detects a library image and renders enhanced color by default and lets the user switch filters', async () => {
     const fixture = fakeEngine();
     const frameSource = fakeFrameSource();
     render(
@@ -188,15 +188,25 @@ describe('DocumentEditor', () => {
       },
       rotation: 0,
       dewarp: { mode: 'perspective-only' },
-      filter: { mode: 'ocr-color', presetVersion: 'ocr-color-v7', parameters: {} },
+      filter: { mode: 'enhanced-color', presetVersion: 'enhanced-color-v1', parameters: {} },
     });
-    expect(screen.getByRole('button', { name: 'Tự động' })).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByText('Làm nét chữ, giữ màu')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tăng cường' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(screen.getByText('Màu đậm, tương phản rõ hơn')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Bản xem trước tài liệu' })).toHaveAttribute(
       'src',
       'blob:preview-2',
     );
-    expect(screen.getByRole('status')).toHaveTextContent('Đã áp dụng Tự động');
+    expect(screen.getByRole('status')).toHaveTextContent('Đã áp dụng Tăng cường');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tự động' }));
+    await waitFor(() => {
+      expect(fixture.renderPage).toHaveBeenCalledTimes(2);
+    });
+    expect(fixture.renderPage.mock.calls[1]?.[0].recipe.filter.mode).toBe('ocr-color');
+    expect(screen.getByRole('button', { name: 'Tự động' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('uses the shadow-normalized preset version for black-and-white rendering', async () => {

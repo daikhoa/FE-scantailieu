@@ -143,6 +143,7 @@ describe('App shell', () => {
       ),
       dispose: vi.fn(() => Promise.resolve()),
     };
+    const renderPage = vi.spyOn(engine, 'render');
     render(
       <App
         imageImporter={() => Promise.resolve(image)}
@@ -158,25 +159,32 @@ describe('App shell', () => {
       target: { files: [new File(['image'], 'page.png', { type: 'image/png' })] },
     });
 
-    expect(
-      await screen.findByRole('heading', { name: 'Chỉnh chất lượng trang' }),
-    ).toBeInTheDocument();
-    expect(
-      await screen.findByText('Scanic chưa đủ chắc chắn nên giữ toàn bộ ảnh.'),
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Kiểm tra 1 trang' })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Tải PDF 1 trang' })).toBeEnabled();
+    });
+    expect(renderPage).toHaveBeenCalledOnce();
+    expect(renderPage.mock.calls[0]?.[0].recipe.crop).toEqual({ kind: 'full-frame' });
+    expect(renderPage.mock.calls[0]?.[0].recipe.filter.mode).toBe('enhanced-color');
+    expect(screen.getByRole('button', { name: 'Tăng cường' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
   });
 
-  it('keeps image import failures on the library with safe recovery guidance', async () => {
+  it('shows image import failures in the shared batch with retry and remove actions', async () => {
     render(<App imageImporter={() => Promise.reject(new ImageImportError('unsupported-type'))} />);
 
     fireEvent.change(screen.getByLabelText('Dùng ảnh có sẵn'), {
       target: { files: [new File(['not-an-image'], 'page.txt', { type: 'text/plain' })] },
     });
 
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'Hỗ trợ JPEG, PNG, WebP, HEIC/HEIF và AVIF.',
-    );
-    expect(screen.getByRole('heading', { name: 'Tài liệu của tôi' })).toBeInTheDocument();
+    expect(await screen.findByText('Cần xử lý lại')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Kiểm tra 1 trang' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tải PDF 1 trang' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Xử lý lại trang 1' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Xóa trang 1' }));
+    expect(screen.getByText('Chưa còn trang nào')).toBeInTheDocument();
   });
 
   it('captures multiple pages while background processing continues and opens one batch', async () => {

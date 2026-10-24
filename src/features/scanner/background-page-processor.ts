@@ -7,6 +7,7 @@ import type { RestorationWarning } from '../../imaging/restoration/restoration-t
 import type { LocalRestorationClient } from '../../imaging/restoration/local-restoration-client';
 import { createScanicEngine } from '../../imaging/engines/scanic-classical-engine';
 import { detectDocumentCrop } from '../editor/detect-document-crop';
+import { createDocumentRecipe } from '../editor/document-filters';
 import { importImage, type ImageImporter, type ImportedImage } from '../camera/image-import';
 import { mapLiveDetectionToCrop } from '../camera/live-capture-crop';
 import type { LiveDetectionResult } from './detection-scheduler';
@@ -77,13 +78,7 @@ interface BackgroundPageProcessorOptions {
 }
 
 export function createDefaultPageRecipe(crop: CropRegion): EditRecipe {
-  return {
-    version: 1,
-    crop,
-    rotation: 0,
-    dewarp: { mode: 'perspective-only' },
-    filter: { mode: 'ocr-color', presetVersion: 'ocr-color-v7', parameters: {} },
-  };
+  return createDocumentRecipe(crop);
 }
 
 function abortError(): Error {

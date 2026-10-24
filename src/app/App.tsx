@@ -1,23 +1,12 @@
 import { HomeScreen, type LibraryState } from './HomeScreen';
-import {
-  MAX_ENCODED_INPUT_BYTES,
-  MAX_ORIGINAL_IMAGE_PIXELS,
-} from '../imaging/original-image-limits';
 import { renderAnalyzedPage } from '../imaging/restoration/analyzed-page-renderer';
-import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
+import { useEffect, useReducer, useRef, useState } from 'react';
 
 import type { EditRecipe } from '../domain/document';
 import { CameraScreen } from '../features/camera/CameraScreen';
 import type { CameraCapture } from '../features/camera/camera-capture';
 import { createCameraService, type CameraService } from '../features/camera/camera-service';
-import {
-  ImageImportError,
-  importImage,
-  type ImageImporter,
-  type ImageImportFailureCode,
-  type ImportedImage,
-} from '../features/camera/image-import';
-import { DocumentEditor } from '../features/editor/DocumentEditor';
+import type { ImageImporter } from '../features/camera/image-import';
 import {
   createBackgroundPageProcessor,
   type BackgroundPageProcessor,
@@ -52,14 +41,13 @@ interface AppProps {
   readonly restorationClient?: LocalRestorationClient | null;
 }
 
-type AppView = 'library' | 'camera' | 'batch-review' | 'editor';
+type AppView = 'library' | 'camera' | 'batch-review';
 type CameraReturnView = Extract<AppView, 'library' | 'batch-review'>;
 type HomeImportState =
   | { readonly kind: 'idle' }
-  | { readonly kind: 'importing' }
   | {
       readonly kind: 'error';
-      readonly code: ImageImportFailureCode | 'too-many-images' | 'selection-too-large';
+      readonly code: 'too-many-images' | 'selection-too-large';
     };
 
 const EMPTY_LIBRARY: LibraryState = { kind: 'empty' };
@@ -70,12 +58,6 @@ const HOME_IMPORT_ERROR_GUIDANCE: Readonly<
 > = {
   'too-many-images': `Tối đa ${String(MAX_IMPORT_IMAGES)} ảnh mỗi lần. Hãy chọn ít ảnh hơn.`,
   'selection-too-large': `Tổng dung lượng ảnh vượt quá ${String(MAX_IMPORT_SELECTION_BYTES / (1024 * 1024))} MiB. Hãy chọn ít ảnh hơn.`,
-  'unsupported-type': 'Hỗ trợ JPEG, PNG, WebP, HEIC/HEIF và AVIF. RAW/DNG chưa được hỗ trợ.',
-  'too-large': `Tệp ảnh vượt quá giới hạn ${String(MAX_ENCODED_INPUT_BYTES / (1024 * 1024))} MiB.`,
-  'invalid-file': 'Tệp ảnh không hợp lệ hoặc thiếu thông tin kích thước. Hãy chọn ảnh khác.',
-  'image-too-large': `Ảnh vượt quá giới hạn ${String(MAX_ORIGINAL_IMAGE_PIXELS / 1_000_000)} megapixel hoặc cạnh dài 16384 pixel.`,
-  'decode-failed': 'Trình duyệt không thể đọc ảnh này. Hãy chọn ảnh khác.',
-  unavailable: 'Trình duyệt này chưa hỗ trợ đọc ảnh từ thư viện.',
 };
 
 export function App({
@@ -94,18 +76,15 @@ export function App({
   const [view, setView] = useState<AppView>('library');
   const [cameraReturnView, setCameraReturnView] = useState<CameraReturnView>('library');
   const [homeImportState, setHomeImportState] = useState<HomeImportState>({ kind: 'idle' });
-  const [editorImage, setEditorImage] = useState<ImportedImage | null>(null);
   const [replacementPageId, setReplacementPageId] = useState<string | null>(null);
   const [batch, dispatchBatch] = useReducer(scanBatchReducer, { pages: [] });
   const [processorGeneration, setProcessorGeneration] = useState(0);
   const [resolvedCameraService] = useState(() => cameraService ?? createCameraService());
   const restorationClientRef = useRef<LocalRestorationClient | null>(null);
-  const editorAnalyzerFactory = useCallback(() => restorationClientRef.current, []);
   const viewHeadingRef = useRef<HTMLHeadingElement>(null);
   const shouldMoveFocus = useRef(false);
   const pageProcessor = useRef<BackgroundPageProcessor | null>(null);
   const pageOperations = useRef(new Map<string, AbortController>());
-  const homeImportRequest = useRef<AbortController | null>(null);
   const pageSequence = useRef(0);
   const editorEngine = useRef<ScannerEngine | null>(null);
   const editorEngineInitialization = useRef<Promise<ScannerEngine> | null>(null);
@@ -133,6 +112,7 @@ export function App({
       createBackgroundPageProcessor({
         ...(imageImporter === undefined ? {} : { importer: imageImporter }),
         ...(editorEngineFactory === undefined ? {} : { engineFactory: editorEngineFactory }),
+        ...(editorFrameSource === undefined ? {} : { frameSource: editorFrameSource }),
         ...(restorationClientRef.current === null
           ? {}
           : { restorationAnalyzer: restorationClientRef.current }),
@@ -143,12 +123,11 @@ export function App({
       if (pageProcessor.current === processor) pageProcessor.current = null;
       for (const operation of operations.values()) operation.abort();
       operations.clear();
-      homeImportRequest.current?.abort();
-      homeImportRequest.current = null;
       void processor.dispose().catch(() => undefined);
     };
   }, [
     editorEngineFactory,
+    editorFrameSource,
     imageImporter,
     pageProcessorFactory,
     processorGeneration,
@@ -256,12 +235,17 @@ export function App({
       });
   };
 
+  const appendPage = (source: ScanPageSource, liveDetection: LiveDetectionResult | null = null) => {
+    const id = `page-${String(++pageSequence.current)}`;
+    dispatchBatch({ type: 'captured', id, source });
+    processPage(id, source, liveDetection);
+  };
+
   const resetBatch = () => {
     for (const operation of pageOperations.current.values()) operation.abort();
     pageOperations.current.clear();
     dispatchBatch({ type: 'reset' });
     setReplacementPageId(null);
-    setEditorImage(null);
   };
 
   const applyBatchRecipe = async (id: string, recipe: EditRecipe): Promise<void> => {
@@ -312,39 +296,10 @@ export function App({
   };
 
   const startNewCameraBatch = () => {
-    homeImportRequest.current?.abort();
-    homeImportRequest.current = null;
     setHomeImportState({ kind: 'idle' });
     resetBatch();
     setCameraReturnView('library');
     navigateTo('camera');
-  };
-
-  const openHomeImage = async (source: Blob) => {
-    homeImportRequest.current?.abort();
-    const controller = new AbortController();
-    homeImportRequest.current = controller;
-    setHomeImportState({ kind: 'importing' });
-    try {
-      const image = await (imageImporter ?? importImage)(source, controller.signal);
-      if (homeImportRequest.current !== controller) return;
-      resetBatch();
-      setEditorImage(image);
-      setHomeImportState({ kind: 'idle' });
-      navigateTo('editor');
-    } catch (error) {
-      if (homeImportRequest.current !== controller) return;
-      if (error instanceof Error && error.name === 'AbortError') {
-        setHomeImportState({ kind: 'idle' });
-      } else {
-        setHomeImportState({
-          kind: 'error',
-          code: error instanceof ImageImportError ? error.code : 'decode-failed',
-        });
-      }
-    } finally {
-      if (homeImportRequest.current === controller) homeImportRequest.current = null;
-    }
   };
 
   const openHomeImages = (sources: readonly File[]) => {
@@ -356,25 +311,12 @@ export function App({
           ? 'selection-too-large'
           : null;
     if (selectionFailure !== null) {
-      homeImportRequest.current?.abort();
-      homeImportRequest.current = null;
       setHomeImportState({ kind: 'error', code: selectionFailure });
       return;
     }
-    const first = sources[0];
-    if (sources.length === 1 && first !== undefined) {
-      void openHomeImage(first);
-      return;
-    }
-    homeImportRequest.current?.abort();
-    homeImportRequest.current = null;
     setHomeImportState({ kind: 'idle' });
     resetBatch();
-    for (const source of sources) {
-      const id = `page-${String(++pageSequence.current)}`;
-      dispatchBatch({ type: 'captured', id, source });
-      processPage(id, source);
-    }
+    for (const source of sources) appendPage(source);
     navigateTo('batch-review');
   };
 
@@ -406,7 +348,6 @@ export function App({
           libraryState={libraryState}
           onRetryLibrary={onRetryLibrary}
           onCamera={startNewCameraBatch}
-          importing={homeImportState.kind === 'importing'}
           importError={
             homeImportState.kind === 'error'
               ? HOME_IMPORT_ERROR_GUIDANCE[homeImportState.code]
@@ -432,12 +373,11 @@ export function App({
                 )}`
           }
           onPhotoCaptured={(source, liveDetection) => {
-            const nextId = `page-${String(++pageSequence.current)}`;
             if (replacementPageId === null) {
-              dispatchBatch({ type: 'captured', id: nextId, source });
-              processPage(nextId, source, liveDetection);
+              appendPage(source, liveDetection);
               return;
             }
+            const nextId = `page-${String(++pageSequence.current)}`;
 
             pageOperations.current.get(replacementPageId)?.abort();
             pageOperations.current.delete(replacementPageId);
@@ -463,7 +403,7 @@ export function App({
             navigateTo(cameraReturnView);
           }}
         />
-      ) : view === 'batch-review' ? (
+      ) : (
         <ScanBatchReview
           pages={batch.pages}
           headingRef={viewHeadingRef}
@@ -500,18 +440,6 @@ export function App({
             pageOperations.current.get(id)?.abort();
             pageOperations.current.delete(id);
             dispatchBatch({ type: 'removed', id });
-          }}
-        />
-      ) : editorImage === null ? null : (
-        <DocumentEditor
-          analyzerFactory={editorAnalyzerFactory}
-          image={editorImage}
-          headingRef={viewHeadingRef}
-          {...(editorEngineFactory === undefined ? {} : { engineFactory: editorEngineFactory })}
-          {...(editorFrameSource === undefined ? {} : { frameSource: editorFrameSource })}
-          onBack={() => {
-            setEditorImage(null);
-            navigateTo('library');
           }}
         />
       )}

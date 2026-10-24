@@ -51,7 +51,113 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('multiple library images', () => {
+describe('library images share the camera batch flow', () => {
+  it.each([1, 2])(
+    'processes %i selected images through the shared queue and review screen',
+    async (count) => {
+      const files = Array.from(
+        { length: count },
+        (_, index) => new File(['image'], `page-${String(index)}.png`, { type: 'image/png' }),
+      );
+      const enqueue = vi.fn<BackgroundPageProcessor['enqueue']>((source) =>
+        Promise.resolve(processed(source as Blob)),
+      );
+      setup(enqueue);
+
+      select(files);
+
+      expect(
+        await screen.findByRole('heading', { name: `Kiểm tra ${String(count)} trang` }),
+      ).toBeInTheDocument();
+      await waitFor(() => {
+        expect(
+          screen.getByRole('button', { name: `Tải PDF ${String(count)} trang` }),
+        ).toBeEnabled();
+      });
+      expect(enqueue.mock.calls.map((call) => call[0])).toEqual(files);
+      expect(screen.getByRole('button', { name: 'Tăng cường' })).toHaveAttribute(
+        'aria-pressed',
+        'true',
+      );
+      expect(
+        screen.queryByRole('heading', { name: 'Chỉnh chất lượng trang' }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Chụp thêm trang' })).toBeEnabled();
+      fireEvent.click(screen.getByRole('button', { name: 'Cắt trang 1' }));
+      expect(screen.getByRole('heading', { name: 'Điều chỉnh 4 góc' })).toBeInTheDocument();
+    },
+  );
+
+  it('can retry a failed single imported image in the shared batch', async () => {
+    const file = new File(['image'], 'page.png', { type: 'image/png' });
+    const enqueue = vi
+      .fn<BackgroundPageProcessor['enqueue']>()
+      .mockRejectedValueOnce(new Error('Decode failed'))
+      .mockResolvedValueOnce(processed(file));
+    setup(enqueue);
+    select([file]);
+    expect(await screen.findByText('Cần xử lý lại')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tải PDF 1 trang' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Xử lý lại trang 1' }));
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Tải PDF 1 trang' })).toBeEnabled();
+    });
+    expect(enqueue).toHaveBeenCalledTimes(2);
+    expect(enqueue.mock.calls.map((call) => call[0])).toEqual([file, file]);
+  });
+
+  it('keeps an imported page and a new camera capture in the same batch', async () => {
+    const file = new File(['imported'], 'page.png', { type: 'image/png' });
+    const captured = new Blob(['captured'], { type: 'image/jpeg' });
+    const enqueue = vi.fn<BackgroundPageProcessor['enqueue']>((source) =>
+      Promise.resolve(processed(source as Blob)),
+    );
+    const cameraEngine: ScannerEngine = {
+      lifecycle: { kind: 'ready' },
+      initialize: () => Promise.resolve(),
+      detect: (frame) =>
+        Promise.resolve({
+          kind: 'full-frame',
+          dimensions: frame.dimensions,
+          reason: 'no-document',
+        }),
+      render: () => Promise.reject(new Error('Live camera does not render pages')),
+      dispose: () => Promise.resolve(),
+    };
+    const stream = {
+      getTracks: () => [],
+      getVideoTracks: () => [{} as MediaStreamTrack],
+    } as unknown as MediaStream;
+    render(
+      <App
+        restorationClient={null}
+        pageProcessorFactory={() => ({ enqueue, dispose: () => Promise.resolve() })}
+        cameraCapture={{ capture: () => Promise.resolve(captured) }}
+        cameraService={{
+          lifecycle: { kind: 'idle' },
+          start: () => Promise.resolve({ stream, stop: () => undefined }),
+          stop: () => undefined,
+        }}
+        cameraEngineFactory={() => cameraEngine}
+        cameraFrameSourceFactory={() => ({
+          capture: () => ({ dimensions: { width: 100, height: 100 }, close: () => undefined }),
+          dispose: () => undefined,
+        })}
+      />,
+    );
+    select([file]);
+    await screen.findByRole('heading', { name: 'Kiểm tra 1 trang' });
+    fireEvent.click(screen.getByRole('button', { name: 'Chụp thêm trang' }));
+    await screen.findByRole('heading', { name: 'Camera đã sẵn sàng' });
+    fireEvent.click(screen.getByRole('button', { name: 'Chụp tài liệu' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Hoàn tất chụp 2 trang' }));
+    expect(await screen.findByRole('heading', { name: 'Kiểm tra 2 trang' })).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Tải PDF 2 trang' })).toBeEnabled(),
+    );
+    expect(enqueue.mock.calls.map((call) => call[0])).toEqual([file, captured]);
+  });
+
   it('allows multiple files and retains their order even if results complete out of order', async () => {
     const files = ['third.png', 'first.png', 'second.png'].map(
       (name) => new File(['image'], name, { type: 'image/png' }),
@@ -117,13 +223,15 @@ describe('multiple library images', () => {
     expect(enqueue).not.toHaveBeenCalled();
   });
 
-  it('aborts all imported page jobs on unmount', () => {
+  it.each([1, 2])('aborts %i imported page jobs on unmount', (count) => {
     const enqueue = vi.fn<BackgroundPageProcessor['enqueue']>(() => new Promise(() => undefined));
     const view = setup(enqueue);
-    select([new File(['1'], 'one.png'), new File(['2'], 'two.png')]);
+    select(
+      Array.from({ length: count }, (_, index) => new File(['image'], `page-${String(index)}.png`)),
+    );
     const signals = enqueue.mock.calls.map((call) => call[1]);
     view.unmount();
-    expect(signals).toHaveLength(2);
+    expect(signals).toHaveLength(count);
     expect(signals.every((signal) => signal.aborted)).toBe(true);
   });
 

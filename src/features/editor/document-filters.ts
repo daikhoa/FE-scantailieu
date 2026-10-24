@@ -1,5 +1,7 @@
 import type { CropRegion, EditRecipe, FilterMode, QuarterTurn } from '../../domain/document';
 
+export const DEFAULT_DOCUMENT_FILTER: FilterMode = 'enhanced-color';
+
 export interface DocumentFilterOption {
   readonly mode: FilterMode;
   readonly label: string;
@@ -25,7 +27,7 @@ function presetVersion(mode: FilterMode): string {
 
 export function createDocumentRecipe(
   crop: CropRegion,
-  mode: FilterMode,
+  mode: FilterMode = DEFAULT_DOCUMENT_FILTER,
   rotation: QuarterTurn = 0,
 ): EditRecipe {
   return {
