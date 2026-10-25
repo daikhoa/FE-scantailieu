@@ -6,10 +6,22 @@ export function enhanceColorContrast(
   input: RgbaBackendInput,
   brightness: Pick<DocumentQualityProfile['brightness'], 'darkPercentile' | 'brightPercentile'>,
   detail?: Pick<DocumentQualityProfile['detail'], 'edgeScore' | 'periodicRatio'>,
+  color?: DocumentQualityProfile['color'],
 ): void {
   const { darkPercentile, brightPercentile } = brightness;
   // A nearly flat surface has no reliable black/white reference to stretch.
   const stretch = brightPercentile - darkPercentile >= 32;
+  const range = brightPercentile - darkPercentile;
+  // Sparse, faint neutral strokes have edge evidence but much less high-frequency
+  // energy than grain. Keep paper fixed; avoid stretching a noisy/colored field.
+  const faintInk =
+    !stretch &&
+    range >= 8 &&
+    color?.kind === 'mostly-neutral' &&
+    detail !== undefined &&
+    detail.edgeScore >= 0.3 &&
+    detail.edgeScore <= range * 0.18 &&
+    (detail.periodicRatio ?? 0) < 0.18;
   const black = Math.max(0, Math.min(40, darkPercentile - 8));
   const white = Math.max(215, Math.min(255, brightPercentile + 8));
   const blackTarget = black * 0.35;
@@ -17,7 +29,12 @@ export function enhanceColorContrast(
   const curve = new Uint8Array(256);
   for (let value = 1; value < 255; value += 1) {
     if (!stretch) {
-      curve[value] = value;
+      curve[value] = faintInk
+        ? Math.max(
+            1,
+            Math.round(value - Math.min(12, Math.max(0, brightPercentile - value) * 0.35)),
+          )
+        : value;
       continue;
     }
     let mapped: number;
@@ -37,7 +54,7 @@ export function enhanceColorContrast(
     (detail?.edgeScore ?? 0) < 42 &&
     (detail?.periodicRatio ?? 0) < 0.25;
   if (!sharpen) {
-    if (!stretch) return;
+    if (!stretch && !faintInk) return;
     for (let offset = 0; offset < pixels.length; offset += 4) {
       if (pixels[offset + 3] === 0) continue;
       pixels[offset] = curve[pixels[offset] ?? 0] ?? 0;

@@ -19,7 +19,7 @@ await build({
   platform: 'node',
 });
 const web = await import(pathToFileURL(resolve('.tmp-wasm/web-raster.mjs')));
-const base = resolve('public/docscan-wasm/v3');
+const base = resolve('public/docscan-wasm/v4');
 const manifest = JSON.parse(await readFile(`${base}/build.json`, 'utf8'));
 const bytes = await readFile(`${base}/docscan.wasm`);
 assert.equal(createHash('sha256').update(bytes).digest('hex'), manifest.wasm_sha256);
@@ -27,7 +27,7 @@ const { default: factory } = await import(pathToFileURL(`${base}/docscan.mjs`));
 const wasm = await factory({ wasmBinary: bytes });
 const records = [];
 const opencvRecords = [];
-for (const kind of ['soft-text', 'color', 'noise']) {
+for (const kind of ['soft-text', 'color', 'noise', 'faint-structured']) {
   const width = 160,
     height = 224;
   const pixels = new Uint8ClampedArray(width * height * 4);
@@ -40,9 +40,13 @@ for (const kind of ['soft-text', 'color', 'noise']) {
           ? stroke
             ? 130
             : 225
-          : kind === 'noise'
-            ? 215 + ((x * 13 + y * 7) % 7)
-            : (x * 3 + y * 5) % 256;
+          : kind === 'faint-structured'
+            ? x % 16 < 2
+              ? 200
+              : 220
+            : kind === 'noise'
+              ? 215 + ((x * 13 + y * 7) % 7)
+              : (x * 3 + y * 5) % 256;
       pixels.set(
         [
           value,

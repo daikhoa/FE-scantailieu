@@ -138,6 +138,9 @@ export function DocumentEditor({
             detectionSource,
             image.original,
             controller.signal,
+            { kind: 'full-frame' },
+            undefined,
+            image.preview,
           ));
         crop.current = detectedCrop;
         const initialRecipe = createDocumentRecipe(detectedCrop);
@@ -185,6 +188,7 @@ export function DocumentEditor({
     engineFactory,
     image.captureCrop,
     image.original,
+    image.preview,
     initialPage,
     originalUrl,
   ]);

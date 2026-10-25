@@ -188,7 +188,7 @@ describe('DocumentEditor', () => {
       },
       rotation: 0,
       dewarp: { mode: 'perspective-only' },
-      filter: { mode: 'enhanced-color', presetVersion: 'enhanced-color-v2', parameters: {} },
+      filter: { mode: 'enhanced-color', presetVersion: 'enhanced-color-v3', parameters: {} },
     });
     expect(screen.getByRole('button', { name: 'Tăng cường' })).toHaveAttribute(
       'aria-pressed',

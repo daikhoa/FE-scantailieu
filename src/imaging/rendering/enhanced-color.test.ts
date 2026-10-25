@@ -29,6 +29,43 @@ function patches(colors: readonly (readonly [number, number, number, number])[])
 describe('enhanced color preset', () => {
   const mode = 'enhanced-color' as FilterMode;
 
+  it('makes faint neutral ink more legible while retaining its paper level', () => {
+    const width = 64,
+      height = 48;
+    const pixels = new Uint8ClampedArray(width * height * 4);
+    for (let y = 0; y < height; y++)
+      for (let x = 0; x < width; x++) {
+        const value = x % 16 === 7 || x % 16 === 8 ? 200 : 220;
+        pixels.set([value, value, value, 255], (y * width + x) * 4);
+      }
+    const output = applyDocumentFilter({ dimensions: { width, height }, pixels }, mode);
+    const paper = output.pixels[(24 * width + 3) * 4] ?? 0;
+    const ink = output.pixels[(24 * width + 7) * 4] ?? 255;
+    expect(paper).toBe(220);
+    expect(paper - ink).toBeGreaterThanOrEqual(26);
+    expect(ink).toBeGreaterThan(0);
+  });
+
+  it('does not treat colored low-contrast strokes or periodic grain as faint neutral ink', () => {
+    for (const kind of ['color', 'grain'] as const) {
+      const width = 64,
+        height = 48;
+      const pixels = new Uint8ClampedArray(width * height * 4);
+      for (let y = 0; y < height; y++)
+        for (let x = 0; x < width; x++) {
+          const ink = x % 16 === 7 || x % 16 === 8;
+          const value = kind === 'grain' ? 210 + ((x + y) % 2) * 18 : ink ? 200 : 220;
+          pixels.set(
+            kind === 'color' ? [value, value - 40, value - 40, 255] : [value, value, value, 255],
+            (y * width + x) * 4,
+          );
+        }
+      const before = pixels.slice();
+      applyDocumentFilter({ dimensions: { width, height }, pixels }, mode);
+      expect(pixels).toEqual(before);
+    }
+  });
+
   it('clarifies soft ink edges without brightening surrounding paper or clipping ink', () => {
     const input = softLines();
     const before = input.pixels.slice();

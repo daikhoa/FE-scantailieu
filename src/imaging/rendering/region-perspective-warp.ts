@@ -4,13 +4,22 @@ import { ScannerEngineError } from '../engines/scanner-engine-error';
 import { getProjectiveTransform, validateQuad } from '../geometry/quad';
 import { MAX_WORKING_IMAGE_PIXELS, MAX_WORKING_IMAGE_SIDE } from '../working-image-limits';
 import { resolveHighQualityOutputDimensions } from './output-resolution';
-import { sampleBilinear, type RgbaImage } from './perspective-warp';
+import { isFullFrameCopy, isOpaqueRgba, sampleBilinear, type RgbaImage } from './perspective-warp';
 
 export const MAX_REGION_PIXELS = 1024 * 1024;
 export const MAX_REGION_SIDE = 4096;
 export interface PixelRegion extends ImageDimensions {
   readonly x: number;
   readonly y: number;
+}
+
+function validatePatch(patch: RgbaBackendInput, region: PixelRegion): void {
+  if (
+    patch.dimensions.width !== region.width ||
+    patch.dimensions.height !== region.height ||
+    patch.pixels.length !== region.width * region.height * 4
+  )
+    throw new ScannerEngineError('invalid-input');
 }
 
 /** Read original pixels in bounded regions; never resize/re-encode the source. */
@@ -41,7 +50,22 @@ export async function warpPerspectiveRegions(
     };
   };
   const pixels = new Uint8ClampedArray(dimensions.width * dimensions.height * 4);
+  const fullFrameCopy = isFullFrameCopy(corners, source, dimensions);
   const tile = (x: number, y: number, width: number, height: number): void => {
+    if (fullFrameCopy) {
+      const region = { x, y, width, height };
+      const patch = read(region);
+      validatePatch(patch, region);
+      // Transparent input retains the existing premultiplied-alpha sampler.
+      if (isOpaqueRgba(patch.pixels)) {
+        for (let row = 0; row < height; row++)
+          pixels.set(
+            patch.pixels.subarray(row * width * 4, (row + 1) * width * 4),
+            ((y + row) * dimensions.width + x) * 4,
+          );
+        return;
+      }
+    }
     const bounds = [
       project(x, y),
       project(x + width - 1, y),
@@ -82,12 +106,7 @@ export async function warpPerspectiveRegions(
       return;
     }
     const patch = read(region);
-    if (
-      patch.dimensions.width !== region.width ||
-      patch.dimensions.height !== region.height ||
-      patch.pixels.length !== region.width * region.height * 4
-    )
-      throw new ScannerEngineError('invalid-input');
+    validatePatch(patch, region);
     for (let row = y; row < y + height; row++)
       for (let column = x; column < x + width; column++) {
         const point = project(column, row);

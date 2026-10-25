@@ -11,6 +11,31 @@ export interface RgbaImage {
   readonly pixels: Uint8ClampedArray<ArrayBuffer>;
 }
 
+export function isFullFrameCopy(
+  corners: DocumentCorners,
+  source: ImageDimensions,
+  output: ImageDimensions,
+): boolean {
+  return (
+    source.width === output.width &&
+    source.height === output.height &&
+    corners[0].x === 0 &&
+    corners[0].y === 0 &&
+    corners[1].x === source.width &&
+    corners[1].y === 0 &&
+    corners[2].x === source.width &&
+    corners[2].y === source.height &&
+    corners[3].x === 0 &&
+    corners[3].y === source.height
+  );
+}
+
+export function isOpaqueRgba(pixels: Uint8ClampedArray): boolean {
+  for (let offset = 3; offset < pixels.length; offset += 4)
+    if (pixels[offset] !== 255) return false;
+  return true;
+}
+
 function pixelOffset(width: number, x: number, y: number): number {
   return (y * width + x) * 4;
 }
@@ -104,6 +129,8 @@ export function warpPerspectiveRgba(
   maximumOutputLongSide?: number,
 ): RgbaImage {
   const dimensions = validateInput(input, corners, maximumOutputLongSide);
+  if (isFullFrameCopy(corners, input.dimensions, dimensions) && isOpaqueRgba(input.pixels))
+    return { dimensions, pixels: input.pixels.slice() };
   const transform = getProjectiveTransform(corners);
   if (transform === null) throw new ScannerEngineError('invalid-input');
   const pixels = new Uint8ClampedArray(dimensions.width * dimensions.height * 4);

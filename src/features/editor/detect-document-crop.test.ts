@@ -13,12 +13,121 @@ const original: ImageAsset = {
 function dependencies(result: Awaited<ReturnType<ScannerEngine['detect']>>) {
   const close = vi.fn();
   const frame: ScannerFrame = { dimensions: { width: 400, height: 600 }, close };
-  const source: ImageAssetFrameSource = { create: vi.fn(() => Promise.resolve(frame)) };
+  const create = vi.fn<ImageAssetFrameSource['create']>(() => Promise.resolve(frame));
+  const source: ImageAssetFrameSource = { create };
   const engine = { detect: vi.fn(() => Promise.resolve(result)) } as Pick<ScannerEngine, 'detect'>;
-  return { source, engine, close };
+  return { source, engine, close, create };
 }
 
 describe('post-capture document detection', () => {
+  it('uses a bounded aligned preview for detection and returns corners in original pixels', async () => {
+    const preview: ImageAsset = {
+      blob: new Blob(['preview'], { type: 'image/png' }),
+      dimensions: { width: 800, height: 1200 },
+    };
+    const fixture = dependencies({
+      kind: 'document',
+      dimensions: { width: 400, height: 600 },
+      confidence: 0.9,
+      corners: [
+        { x: 20, y: 30 },
+        { x: 380, y: 30 },
+        { x: 380, y: 570 },
+        { x: 20, y: 570 },
+      ],
+    });
+    const signal = new AbortController().signal;
+    const crop = await detectDocumentCrop(
+      fixture.engine,
+      fixture.source,
+      original,
+      signal,
+      { kind: 'full-frame' },
+      undefined,
+      preview,
+    );
+    expect(fixture.create).toHaveBeenCalledWith(preview, signal);
+    expect(crop).toMatchObject({
+      kind: 'document',
+      corners: [
+        { x: 100, y: 150 },
+        { x: 1900, y: 150 },
+        { x: 1900, y: 2850 },
+        { x: 100, y: 2850 },
+      ],
+    });
+    expect(fixture.close).toHaveBeenCalledOnce();
+  });
+
+  it('falls back to the original if preview decoding fails, without hiding cancellation', async () => {
+    const preview: ImageAsset = {
+      blob: new Blob(['preview'], { type: 'image/png' }),
+      dimensions: { width: 800, height: 1200 },
+    };
+    const fixture = dependencies({
+      kind: 'full-frame',
+      dimensions: { width: 400, height: 600 },
+      reason: 'no-document',
+    });
+    const create = fixture.create;
+    const frame = { dimensions: { width: 400, height: 600 }, close: fixture.close };
+    create.mockRejectedValueOnce(new Error('Preview decode failed')).mockResolvedValueOnce(frame);
+    const signal = new AbortController().signal;
+    await detectDocumentCrop(
+      fixture.engine,
+      fixture.source,
+      original,
+      signal,
+      { kind: 'full-frame' },
+      undefined,
+      preview,
+    );
+    expect(create.mock.calls.map((call) => call[0])).toEqual([preview, original]);
+    const abort = new DOMException('Cancelled', 'AbortError');
+    create.mockClear().mockRejectedValueOnce(abort);
+    await expect(
+      detectDocumentCrop(
+        fixture.engine,
+        fixture.source,
+        original,
+        signal,
+        { kind: 'full-frame' },
+        undefined,
+        preview,
+      ),
+    ).rejects.toBe(abort);
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores previews with different axes or a lossy encoding', async () => {
+    for (const preview of [
+      {
+        blob: new Blob(['preview'], { type: 'image/png' }),
+        dimensions: { width: 1200, height: 800 },
+      },
+      {
+        blob: new Blob(['preview'], { type: 'image/jpeg' }),
+        dimensions: { width: 800, height: 1200 },
+      },
+    ]) {
+      const fixture = dependencies({
+        kind: 'full-frame',
+        dimensions: { width: 400, height: 600 },
+        reason: 'no-document',
+      });
+      const signal = new AbortController().signal;
+      await detectDocumentCrop(
+        fixture.engine,
+        fixture.source,
+        original,
+        signal,
+        { kind: 'full-frame' },
+        undefined,
+        preview,
+      );
+      expect(fixture.create).toHaveBeenCalledWith(original, signal);
+    }
+  });
   it('uses the last live ML corners when frozen-frame ML throws and releases the frame', async () => {
     const fixture = dependencies({
       kind: 'full-frame',

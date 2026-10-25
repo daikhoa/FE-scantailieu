@@ -1,0 +1,888 @@
+{
+  "boundary": "Node desktop; warm raster; native includes heap input/output copy, excludes malloc/free; not phone/DLL/end-to-end/peak RAM",
+  "baselineWebCommit": "ac792f610ddab8688e0a56cc18c126e9e4b52210",
+  "wasm": {
+    "before": {
+      "maximum_wasm_bytes": 805306368,
+      "maximum_output_side": 3000,
+      "maximum_input_pixels": 50000000,
+      "wasm_sha256": "4ea8b1a0b57f7b4b3ec5475cab6237828c7a8b0a5a7345423556f6717e2e903d",
+      "emscripten": "6.0.13",
+      "sources": {
+        "wasm/bridge.cpp": "de816e9d95721de5c13c8b9535ca44448f1f881da152d4fa00c209f189216dae",
+        "include/docscan/docscan.h": "5b57d73ce625e59674b15c0fcf7dd59d36a6f19f058c7bde3b7b97294aa6af37",
+        "src/filters.cpp": "13a581b1004dd2a32a84f1c3cb4c38b9ce6d65a7c7a9d8853214b321103206db",
+        "src/opencv-raster.cpp": "5b504562fdc094b85a1357fde38986615001e221e2fca16deadf585ad500fbff",
+        "src/quality.cpp": "3f6b9478cef85517e5e9fae3bfd3e5908dba0d370f5abf20cacf625ccccc5c41",
+        "src/pixels.hpp": "bef8195fc11066b7f314f5497e7cfa89d03a5b448c6a14a63893c2b1a904271b",
+        "src/geometry.cpp": "a9c92d24979c09db04a7023fe24bb0f621ada797603f2509135cecf8909a1883",
+        "src/lab.hpp": "c024c306d12442ff2c4872842a7f1ecc684b35b3f0de8a41b50d6341c6c1c399",
+        "src/opencv-raster.hpp": "77ec2c99295f910d5b26e2dc82d9af78ab534a3a7e7b3b28f0e9a1173398eb4d",
+        "wasm/CMakeLists.txt": "c9a1e9e1cf3ba474589c2cfff10a88ef6ee7594902b73bd4175ae9bfa5e372fe"
+      },
+      "schema": 1,
+      "opencv": "ea8e60798e0319ccbe902f7994153b574f639809",
+      "boundary": "shared browser decode -> native warp/measure/enhance -> shared browser encode/PDF"
+    },
+    "after": {
+      "boundary": "shared browser decode -> native warp/measure/enhance -> shared browser encode/PDF",
+      "maximum_input_pixels": 50000000,
+      "emscripten": "6.0.13",
+      "maximum_output_side": 3000,
+      "schema": 1,
+      "wasm_sha256": "66a9a1aacfe3005a4fbd0c2d3541c600b5428e2cbe2a234c0bb2242b25a7c6ff",
+      "maximum_wasm_bytes": 805306368,
+      "opencv": "ea8e60798e0319ccbe902f7994153b574f639809",
+      "sources": {
+        "src/geometry.cpp": "5f9236fa4d71268dc8f422ed722494072d90d06cf9a8e2dd718ed928e9ae1f97",
+        "wasm/bridge.cpp": "de816e9d95721de5c13c8b9535ca44448f1f881da152d4fa00c209f189216dae",
+        "src/lab.hpp": "c024c306d12442ff2c4872842a7f1ecc684b35b3f0de8a41b50d6341c6c1c399",
+        "src/opencv-raster.hpp": "77ec2c99295f910d5b26e2dc82d9af78ab534a3a7e7b3b28f0e9a1173398eb4d",
+        "src/filters.cpp": "5547e68ec77de544fe5afe0a04d05a485c1f49103a29461d9c92a6d061413ee8",
+        "src/pixels.hpp": "d14a70f20b92cabde4b4fed9701068dc06fc4ebbe2179d3d96251eb244229efb",
+        "src/quality.cpp": "3f6b9478cef85517e5e9fae3bfd3e5908dba0d370f5abf20cacf625ccccc5c41",
+        "src/opencv-raster.cpp": "9edfda26974bc6c355301af3bf1e3a0d0a44c925e72d1b5c9ab662c78aebc5eb",
+        "wasm/CMakeLists.txt": "c9a1e9e1cf3ba474589c2cfff10a88ef6ee7594902b73bd4175ae9bfa5e372fe",
+        "include/docscan/docscan.h": "5b57d73ce625e59674b15c0fcf7dd59d36a6f19f058c7bde3b7b97294aa6af37"
+      }
+    }
+  },
+  "timings": [
+    {
+      "width": 960,
+      "height": 720,
+      "engine": "web",
+      "filter": "original",
+      "beforeMs": 27.351249999999993,
+      "afterMs": 0.8625000000000114,
+      "samples": {
+        "before": [
+          31.708699999999993,
+          28.402900000000017,
+          27.161099999999976,
+          27.4572,
+          26.457400000000007,
+          27.245299999999986
+        ],
+        "after": [
+          0.9616000000000042,
+          0.7968999999999937,
+          0.9406000000000176,
+          0.8367000000000075,
+          0.8883000000000152,
+          0.7658999999999878
+        ]
+      },
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "width": 960,
+      "height": 720,
+      "engine": "web",
+      "filter": "enhanced-color",
+      "beforeMs": 33.43455000000006,
+      "afterMs": 7.361950000000007,
+      "samples": {
+        "before": [
+          40.04450000000003,
+          32.81690000000003,
+          34.15960000000007,
+          34.052200000000084,
+          32.26529999999991,
+          32.3655
+        ],
+        "after": [
+          13.88820000000004,
+          7.357000000000028,
+          7.0697999999999865,
+          7.594999999999914,
+          7.366899999999987,
+          7.124899999999911
+        ]
+      },
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "width": 960,
+      "height": 720,
+      "engine": "cpp",
+      "filter": "original",
+      "beforeMs": 19.29110000000003,
+      "afterMs": 1.9254499999999553,
+      "samples": {
+        "before": [
+          19.0942,
+          19.488000000000056,
+          18.944500000000062,
+          20.046500000000037,
+          19.682000000000016,
+          18.860900000000015
+        ],
+        "after": [
+          1.9344999999999573,
+          1.9140999999999622,
+          3.6137999999999693,
+          1.9163999999999533,
+          2.142600000000016,
+          1.7026999999999362
+        ]
+      },
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      },
+      "beforeReservedBytes": 16777216,
+      "afterReservedBytes": 16777216
+    },
+    {
+      "width": 960,
+      "height": 720,
+      "engine": "cpp",
+      "filter": "enhanced-color",
+      "beforeMs": 20.572850000000017,
+      "afterMs": 3.702699999999993,
+      "samples": {
+        "before": [
+          21.709199999999896,
+          20.618400000000065,
+          20.419599999999946,
+          20.42070000000001,
+          20.52729999999997,
+          20.74290000000019
+        ],
+        "after": [
+          3.786799999999971,
+          3.618600000000015,
+          3.6072000000000344,
+          4.1614000000000715,
+          3.7894000000001142,
+          3.587400000000116
+        ]
+      },
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      },
+      "beforeReservedBytes": 16777216,
+      "afterReservedBytes": 16777216
+    },
+    {
+      "width": 960,
+      "height": 720,
+      "engine": "opencv",
+      "filter": "original",
+      "beforeMs": 13.336250000000064,
+      "afterMs": 1.9256000000000313,
+      "samples": {
+        "before": [
+          15.739299999999957,
+          14.436899999999923,
+          13.376400000000103,
+          13.296100000000024,
+          12.577599999999848,
+          12.331399999999803
+        ],
+        "after": [
+          1.942199999999957,
+          1.9090000000001055,
+          2.1321000000000367,
+          2.353800000000092,
+          1.818899999999985,
+          1.74350000000004
+        ]
+      },
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      },
+      "beforeReservedBytes": 16777216,
+      "afterReservedBytes": 16777216
+    },
+    {
+      "width": 960,
+      "height": 720,
+      "engine": "opencv",
+      "filter": "enhanced-color",
+      "beforeMs": 30.401500000000055,
+      "afterMs": 20.75400000000002,
+      "samples": {
+        "before": [
+          30.631700000000137,
+          30.776200000000017,
+          33.028999999999996,
+          29.05009999999993,
+          30.171299999999974,
+          29.855999999999995
+        ],
+        "after": [
+          22.52710000000002,
+          21.8587,
+          21.165300000000116,
+          19.988000000000056,
+          20.342699999999923,
+          20.033699999999953
+        ]
+      },
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      },
+      "beforeReservedBytes": 16777216,
+      "afterReservedBytes": 16777216
+    },
+    {
+      "width": 3000,
+      "height": 2250,
+      "engine": "web",
+      "filter": "original",
+      "beforeMs": 311.30444999999986,
+      "afterMs": 9.603849999999738,
+      "samples": {
+        "before": [
+          264.0300000000002,
+          274.43129999999974,
+          260.40239999999994,
+          348.1776,
+          362.24580000000014,
+          387.2449999999999
+        ],
+        "after": [
+          11.320500000000266,
+          9.629999999999654,
+          9.13169999999991,
+          9.577699999999822,
+          9.46160000000009,
+          11.364800000000287
+        ]
+      },
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "width": 3000,
+      "height": 2250,
+      "engine": "web",
+      "filter": "enhanced-color",
+      "beforeMs": 440.0436500000005,
+      "afterMs": 75.1907000000001,
+      "samples": {
+        "before": [
+          466.01680000000033,
+          446.76910000000044,
+          430.8606,
+          433.3182000000006,
+          462.7623999999996,
+          385.27469999999994
+        ],
+        "after": [
+          107.02599999999984,
+          57.88130000000001,
+          75.48320000000058,
+          89.60530000000017,
+          74.89819999999963,
+          59.92019999999957
+        ]
+      },
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "width": 3000,
+      "height": 2250,
+      "engine": "cpp",
+      "filter": "original",
+      "beforeMs": 262.0884499999993,
+      "afterMs": 32.11904999999933,
+      "samples": {
+        "before": [
+          252.84519999999975,
+          262.6858999999986,
+          269.59869999999864,
+          241.18199999999888,
+          270.34689999999864,
+          261.491
+        ],
+        "after": [
+          31.78989999999976,
+          34.73569999999927,
+          24.47690000000148,
+          32.448199999998906,
+          34.23489999999947,
+          23.66480000000047
+        ]
+      },
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      },
+      "beforeReservedBytes": 99155968,
+      "afterReservedBytes": 99155968
+    },
+    {
+      "width": 3000,
+      "height": 2250,
+      "engine": "cpp",
+      "filter": "enhanced-color",
+      "beforeMs": 295.9974999999995,
+      "afterMs": 54.43080000000009,
+      "samples": {
+        "before": [
+          292.40489999999954,
+          277.78729999999996,
+          299.59009999999944,
+          268.3783000000003,
+          300.46680000000015,
+          303.8245999999999
+        ],
+        "after": [
+          39.58100000000013,
+          37.479199999999764,
+          51.829100000000835,
+          57.1893,
+          57.032499999999345,
+          63.40609999999833
+        ]
+      },
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      },
+      "beforeReservedBytes": 99155968,
+      "afterReservedBytes": 99155968
+    },
+    {
+      "width": 3000,
+      "height": 2250,
+      "engine": "opencv",
+      "filter": "original",
+      "beforeMs": 177.1828999999998,
+      "afterMs": 30.626800000000003,
+      "samples": {
+        "before": [
+          214.83510000000024,
+          227.31880000000092,
+          142.5008999999991,
+          194.59709999999905,
+          159.76870000000054,
+          157.9434000000001
+        ],
+        "after": [
+          33.05989999999838,
+          30.761599999999817,
+          30.49200000000019,
+          31.362199999999575,
+          30.353299999998853,
+          28.10910000000149
+        ]
+      },
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      },
+      "beforeReservedBytes": 99155968,
+      "afterReservedBytes": 99155968
+    },
+    {
+      "width": 3000,
+      "height": 2250,
+      "engine": "opencv",
+      "filter": "enhanced-color",
+      "beforeMs": 414.81704999999965,
+      "afterMs": 283.08339999999953,
+      "samples": {
+        "before": [
+          386.3166000000001,
+          481.9868000000006,
+          411.7502999999997,
+          452.5060999999987,
+          417.8837999999996,
+          330.84909999999945
+        ],
+        "after": [
+          313.51590000000033,
+          342.72810000000027,
+          283.93689999999697,
+          232.41019999999844,
+          277.9711000000025,
+          282.2299000000021
+        ]
+      },
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      },
+      "beforeReservedBytes": 99155968,
+      "afterReservedBytes": 99155968
+    }
+  ],
+  "quality": [
+    {
+      "name": "soft-text",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "name": "faint-text",
+      "delta": {
+        "max": 10,
+        "mean": 0.42814903846153846,
+        "changed": 134784
+      }
+    },
+    {
+      "name": "colored-cover",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "name": "paper-noise",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "name": "smartdoc15-datasheet001-frame-0001",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "name": "smartdoc15-datasheet001-frame-0054",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "name": "smartdoc15-datasheet001-frame-0108",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "name": "smartdoc15-datasheet001-frame-0161",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "name": "smartdoc15-datasheet001-frame-0214",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "name": "smartdoc15-letter001-frame-0001",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "name": "smartdoc15-letter001-frame-0045",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "name": "smartdoc15-letter001-frame-0089",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "name": "smartdoc15-letter001-frame-0132",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "name": "smartdoc15-letter001-frame-0176",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "name": "smartdoc15-magazine001-frame-0001",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "name": "smartdoc15-magazine001-frame-0050",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "name": "smartdoc15-magazine001-frame-0100",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "name": "smartdoc15-magazine001-frame-0149",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "name": "smartdoc15-magazine001-frame-0198",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "name": "development-faint",
+      "delta": {
+        "max": 10,
+        "mean": 0.3595377604166667,
+        "changed": 211725
+      },
+      "before": {
+        "paper": 235.83203083181672,
+        "ink": 213.22585034013605,
+        "contrast": 22.606180491680675
+      },
+      "after": {
+        "paper": 235.77552157786357,
+        "ink": 204.94421768707483,
+        "contrast": 30.831303890788746
+      }
+    },
+    {
+      "name": "development-shadow",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      },
+      "before": {
+        "paper": 139.88298582466922,
+        "ink": 5.827210884353741,
+        "contrast": 134.05577494031547
+      },
+      "after": {
+        "paper": 139.88298582466922,
+        "ink": 5.827210884353741,
+        "contrast": 134.05577494031547
+      }
+    },
+    {
+      "name": "development-uneven",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      },
+      "before": {
+        "paper": 171.01131318601736,
+        "ink": 9.014784580498866,
+        "contrast": 161.9965286055185
+      },
+      "after": {
+        "paper": 171.01131318601736,
+        "ink": 9.014784580498866,
+        "contrast": 161.9965286055185
+      }
+    },
+    {
+      "name": "development-noisy",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      },
+      "before": {
+        "paper": 235.80829612650112,
+        "ink": 31.766802721088435,
+        "contrast": 204.0414934054127
+      },
+      "after": {
+        "paper": 235.80829612650112,
+        "ink": 31.766802721088435,
+        "contrast": 204.0414934054127
+      }
+    },
+    {
+      "name": "development-crisp",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      },
+      "before": {
+        "paper": 245,
+        "ink": 5.391836734693878,
+        "contrast": 239.60816326530613
+      },
+      "after": {
+        "paper": 245,
+        "ink": 5.391836734693878,
+        "contrast": 239.60816326530613
+      }
+    },
+    {
+      "name": "development-color",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      },
+      "before": {
+        "paper": 242,
+        "ink": 28.517687074829933,
+        "contrast": 213.48231292517008
+      },
+      "after": {
+        "paper": 242,
+        "ink": 28.517687074829933,
+        "contrast": 213.48231292517008
+      }
+    },
+    {
+      "name": "development-underexposed",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      },
+      "before": {
+        "paper": 161,
+        "ink": 6.619047619047619,
+        "contrast": 154.38095238095238
+      },
+      "after": {
+        "paper": 161,
+        "ink": 6.619047619047619,
+        "contrast": 154.38095238095238
+      }
+    },
+    {
+      "name": "holdout-faint",
+      "delta": {
+        "max": 10,
+        "mean": 0.5083944169826652,
+        "changed": 380589
+      },
+      "before": {
+        "paper": 235.8144470571309,
+        "ink": 212.16712479384276,
+        "contrast": 23.647322263288146
+      },
+      "after": {
+        "paper": 235.75266726313848,
+        "ink": 203.72072567344694,
+        "contrast": 32.03194158969154
+      }
+    },
+    {
+      "name": "holdout-shadow",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      },
+      "before": {
+        "paper": 168.65461583767575,
+        "ink": 13.880587945950637,
+        "contrast": 154.7740278917251
+      },
+      "after": {
+        "paper": 168.65461583767575,
+        "ink": 13.880587945950637,
+        "contrast": 154.7740278917251
+      }
+    },
+    {
+      "name": "holdout-uneven",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      },
+      "before": {
+        "paper": 171.39007009293272,
+        "ink": 10.755099678828737,
+        "contrast": 160.63497041410398
+      },
+      "after": {
+        "paper": 171.39007009293272,
+        "ink": 10.755099678828737,
+        "contrast": 160.63497041410398
+      }
+    },
+    {
+      "name": "holdout-noisy",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      },
+      "before": {
+        "paper": 235.8207819475854,
+        "ink": 31.749139203148058,
+        "contrast": 204.07164274443736
+      },
+      "after": {
+        "paper": 235.8207819475854,
+        "ink": 31.749139203148058,
+        "contrast": 204.07164274443736
+      }
+    },
+    {
+      "name": "holdout-crisp",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      },
+      "before": {
+        "paper": 246,
+        "ink": 6.150082462891699,
+        "contrast": 239.8499175371083
+      },
+      "after": {
+        "paper": 246,
+        "ink": 6.150082462891699,
+        "contrast": 239.8499175371083
+      }
+    },
+    {
+      "name": "holdout-color",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      },
+      "before": {
+        "paper": 242,
+        "ink": 30.10995052226498,
+        "contrast": 211.89004947773503
+      },
+      "after": {
+        "paper": 242,
+        "ink": 30.10995052226498,
+        "contrast": 211.89004947773503
+      }
+    },
+    {
+      "name": "holdout-underexposed",
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      },
+      "before": {
+        "paper": 162,
+        "ink": 9.617372182517867,
+        "contrast": 152.38262781748213
+      },
+      "after": {
+        "paper": 162,
+        "ink": 9.617372182517867,
+        "contrast": 152.38262781748213
+      }
+    }
+  ],
+  "geometry": [
+    {
+      "width": 91,
+      "height": 137,
+      "skew": false,
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "width": 91,
+      "height": 137,
+      "skew": true,
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "width": 3200,
+      "height": 2400,
+      "skew": false,
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    },
+    {
+      "width": 3200,
+      "height": 2400,
+      "skew": true,
+      "delta": {
+        "max": 0,
+        "mean": 0,
+        "changed": 0
+      }
+    }
+  ]
+}

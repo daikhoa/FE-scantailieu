@@ -23,7 +23,7 @@ Run-Cmake @('-S', $cvSource, '-B', "$buildRoot/opencv", '-G', 'Ninja', "-DCMAKE_
 Run-Cmake @('--build', "$buildRoot/opencv", '--parallel', '4')
 Run-Cmake @('-S', "$LibraryRoot/wasm", '-B', "$buildRoot/docscan", '-G', 'Ninja', "-DCMAKE_MAKE_PROGRAM=$Ninja", "-DCMAKE_TOOLCHAIN_FILE=$toolchain", "-DOpenCV_DIR=$buildRoot/opencv", '-DCMAKE_BUILD_TYPE=Release')
 Run-Cmake @('--build', "$buildRoot/docscan", '--parallel', '4')
-$destination = Join-Path $webRoot 'public/docscan-wasm/v3'
+$destination = Join-Path $webRoot 'public/docscan-wasm/v4'
 New-Item -ItemType Directory -Force $destination | Out-Null
 Copy-Item -LiteralPath "$buildRoot/docscan/docscan.mjs", "$buildRoot/docscan/docscan.wasm" -Destination $destination
 $sources = @('include/docscan/docscan.h', 'src/pixels.hpp', 'src/geometry.cpp', 'src/quality.cpp', 'src/filters.cpp', 'src/lab.hpp', 'src/opencv-raster.hpp', 'src/opencv-raster.cpp', 'wasm/bridge.cpp', 'wasm/CMakeLists.txt')

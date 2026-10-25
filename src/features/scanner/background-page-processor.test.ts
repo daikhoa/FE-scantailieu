@@ -83,6 +83,34 @@ function fakeFrameSource(): ImageAssetFrameSource {
 }
 
 describe('background page processor', () => {
+  it('detects from an import preview but always renders the original full-resolution asset', async () => {
+    const original = imported(new Blob(['large'], { type: 'image/png' })).original;
+    const preview = {
+      blob: new Blob(['preview'], { type: 'image/png' }),
+      dimensions: { width: 900, height: 1200 },
+    };
+    const fixture = fakeEngine(),
+      frames = {
+        create: vi.fn(() =>
+          Promise.resolve({ dimensions: { width: 600, height: 800 }, close: vi.fn() }),
+        ),
+      };
+    const processor = createBackgroundPageProcessor({
+      importer: vi.fn(() => Promise.resolve({ original, preview })),
+      engineFactory: () => fixture.engine,
+      frameSource: frames,
+    });
+    const signal = new AbortController().signal;
+    try {
+      const result = await processor.enqueue(original.blob, signal, vi.fn());
+      expect(frames.create).toHaveBeenCalledWith(preview, expect.any(AbortSignal));
+      expect(fixture.renderPage.mock.calls[0]?.[0].original).toBe(original);
+      expect(result.original).toBe(original);
+      expect(result.originalPreview).toBe(preview);
+    } finally {
+      await processor.dispose();
+    }
+  });
   it('drains queued pages before releasing its engine and can process another page afterward', async () => {
     const importing = deferred<ReturnType<typeof imported>>();
     const first = new Blob(['first'], { type: 'image/jpeg' });
@@ -214,7 +242,7 @@ describe('background page processor', () => {
       crop: result.crop,
       rotation: 0,
       dewarp: { mode: 'perspective-only' },
-      filter: { mode: 'enhanced-color', presetVersion: 'enhanced-color-v2', parameters: {} },
+      filter: { mode: 'enhanced-color', presetVersion: 'enhanced-color-v3', parameters: {} },
     });
     expect(renderPage).toHaveBeenCalledWith(
       {

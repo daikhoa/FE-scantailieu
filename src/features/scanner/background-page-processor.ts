@@ -188,6 +188,7 @@ export function createBackgroundPageProcessor(
         signal,
         liveCrop,
         source instanceof Blob ? undefined : source,
+        imported.preview,
       );
       const frozenDetection = performance.now() - detectionStarted;
       const recipe = createDefaultPageRecipe(crop);

@@ -2,11 +2,11 @@ import type { DocumentCorners, ImageAsset } from '../../domain/document';
 
 export type ComparisonEngine = 'web' | 'cpp' | 'opencv';
 export type OpenCvPreset = 'gentle' | 'balanced' | 'text';
-export const COMPARISON_WASM_BASE = '/docscan-wasm/v3/';
+export const COMPARISON_WASM_BASE = '/docscan-wasm/v4/';
 export const COMPARISON_IMPLEMENTATIONS = {
-  web: 'web-filter-v10',
-  cpp: 'custom-cpp-wasm-v3',
-  opencv: 'opencv-adaptive-v2-wasm-v3',
+  web: 'web-filter-v11',
+  cpp: 'custom-cpp-wasm-v4',
+  opencv: 'opencv-adaptive-v2-wasm-v4',
 } as const;
 export const COMPARISON_LABELS = {
   web: 'Web hiện tại',

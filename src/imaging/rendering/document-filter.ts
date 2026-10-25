@@ -463,7 +463,7 @@ export function applyDocumentFilter(
   if (mode === 'original') return input;
   if (mode === 'enhanced-color') {
     const quality = analyzeDocumentQuality(input);
-    enhanceColorContrast(input, quality.brightness, quality.detail);
+    enhanceColorContrast(input, quality.brightness, quality.detail, quality.color);
     return input;
   }
   if (
