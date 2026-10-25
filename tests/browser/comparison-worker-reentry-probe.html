@@ -1,0 +1,83 @@
+<!doctype html>
+<meta charset="utf-8" />
+<title>Comparison worker module-map regression</title>
+<h1>Comparison worker module-map regression</h1>
+<p>
+  Runs the production worker with a distinct entry URL so a lazy back-import would evaluate the
+  entry again.
+</p>
+<label
+  ><input id="reentry" type="checkbox" checked /> Reproduce missing worker entry module-map
+  registration</label
+>
+<button id="run">Run Web, C++, OpenCV — 20 iterations each</button>
+<pre id="result">Ready</pre>
+<script type="module">
+  const entry = '__WORKER_ENTRY__';
+  const button = document.querySelector('#run'),
+    output = document.querySelector('#result');
+  function runEngine(engine, asset, reentry) {
+    return new Promise((resolve) => {
+      const url = new URL(entry, location.href);
+      if (reentry) url.searchParams.set('entry-module-map-probe', '1');
+      const worker = new Worker(url, { type: 'module' });
+      let samples = 0,
+        finished = false;
+      const finish = (result) => {
+        if (finished) return;
+        finished = true;
+        clearTimeout(timer);
+        worker.terminate();
+        resolve({ engine, ...result });
+      };
+      const timer = setTimeout(() => finish({ error: 'timeout' }), 15000);
+      worker.onerror = () => finish({ error: 'worker-error' });
+      worker.onmessage = ({ data }) => {
+        if (data.type === 'ready')
+          worker.postMessage({
+            type: 'run',
+            input: {
+              asset,
+              filter: 'enhanced-color',
+              repetitions: 20,
+              opencvPreset: 'balanced',
+              corners: [
+                { x: 5, y: 6 },
+                { x: 76, y: 3 },
+                { x: 78, y: 107 },
+                { x: 4, y: 109 },
+              ],
+            },
+          });
+        else if (data.type === 'sample') samples++;
+        else if (data.type === 'error') finish({ error: `${data.stage}/${data.code}`, samples });
+        else if (data.type === 'done')
+          finish({ ok: samples === 20, samples, dimensions: data.image.dimensions });
+      };
+      worker.postMessage({ type: 'initialize', engine });
+    });
+  }
+  button.onclick = async () => {
+    button.disabled = true;
+    output.textContent = 'Running…';
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = 80;
+      canvas.height = 112;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = 'white';
+      ctx.fillRect(0, 0, 80, 112);
+      ctx.fillStyle = '#555';
+      for (let y = 10; y < 100; y += 10) ctx.fillRect(10, y, 60, 2);
+      const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+      const asset = { blob, dimensions: { width: 80, height: 112 } },
+        results = [];
+      for (const engine of ['web', 'cpp', 'opencv']) {
+        results.push(await runEngine(engine, asset, document.querySelector('#reentry').checked));
+        output.textContent = JSON.stringify(results, null, 2);
+      }
+    } finally {
+      button.disabled = false;
+    }
+  };
+</script>

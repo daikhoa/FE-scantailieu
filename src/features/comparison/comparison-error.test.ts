@@ -6,6 +6,12 @@ import {
 } from './comparison-error';
 
 describe('comparison failure classification', () => {
+  it('reports lost worker state without blaming the photo or crop', () => {
+    const error = classifyComparisonError(new Error('invalid-state'), 'initialize');
+    expect(error).toMatchObject({ code: 'invalid-state', stage: 'initialize' });
+    expect(comparisonErrorMessage(error)).toContain('Trạng thái bộ xử lý');
+    expect(comparisonErrorMessage(error)).not.toContain('vùng cắt');
+  });
   it('distinguishes load, unsupported WASM and heap failures', () => {
     expect(classifyComparisonError(new TypeError('Fetch failed'), 'initialize')).toMatchObject({
       code: 'load-failed',

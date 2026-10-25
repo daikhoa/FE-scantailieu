@@ -1,6 +1,6 @@
 import type { DocumentCorners } from '../../domain/document';
 import type { RgbaImage } from '../../imaging/rendering/perspective-warp';
-import { COMPARISON_WASM_BASE, type OpenCvPreset } from './comparison-contract';
+import type { OpenCvPreset } from './comparison-contract';
 
 interface WasmRaster {
   HEAPU8: Uint8Array<ArrayBuffer>;
@@ -28,9 +28,10 @@ interface WasmRaster {
   ): number;
 }
 
-export async function loadWasmRaster() {
+export async function loadWasmRaster(assetBase: string) {
   // Public, versioned assets; lazy import keeps the scanner's normal startup untouched.
-  const path = `${COMPARISON_WASM_BASE}docscan.mjs`;
+  // Pass config into the lazy chunk so it cannot import the worker entry back in WebKit.
+  const path = `${assetBase}docscan.mjs`;
   const factory = (await import(/* @vite-ignore */ path)) as { default: () => Promise<WasmRaster> };
   const module = await factory.default();
   return {

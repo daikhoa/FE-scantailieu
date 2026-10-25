@@ -1,6 +1,12 @@
-export type ComparisonStage = 'initialize' | 'decode' | 'process' | 'encode';
+export type ComparisonStage = 'initialize' | 'validate' | 'decode' | 'process' | 'encode';
 export type ComparisonFailureCode =
-  'invalid-input' | 'unavailable' | 'load-failed' | 'wasm-unsupported' | 'out-of-memory' | 'failed';
+  | 'invalid-input'
+  | 'invalid-state'
+  | 'unavailable'
+  | 'load-failed'
+  | 'wasm-unsupported'
+  | 'out-of-memory'
+  | 'failed';
 
 export class ComparisonError extends Error {
   constructor(
@@ -29,6 +35,7 @@ export function classifyComparisonError(error: unknown, stage: ComparisonStage):
   )
     return new ComparisonError('out-of-memory', stage);
   if (message === 'invalid-input') return new ComparisonError('invalid-input', stage);
+  if (message === 'invalid-state') return new ComparisonError('invalid-state', stage);
   if (stage === 'initialize')
     return new ComparisonError(
       name === 'CompileError' ||
@@ -56,12 +63,14 @@ export function comparisonErrorMessage(error: unknown): string {
         ? 'Không tải được bộ xử lý. Kiểm tra kết nối rồi tải lại trang.'
         : code === 'wasm-unsupported'
           ? 'Trình duyệt không khởi tạo được lõi C++. Hãy thử mở link bằng trình duyệt khác hoặc cập nhật trình duyệt.'
-          : code === 'invalid-input'
-            ? 'Ảnh hoặc vùng cắt không hợp lệ. Hãy chọn lại vùng cắt.'
-            : stage === 'decode'
-              ? 'Không giải mã được ảnh gốc để chạy lượt so sánh.'
-              : stage === 'encode'
-                ? 'Không tạo được ảnh PNG sau khi xử lý.'
-                : 'Không chạy được bộ xử lý. Lượt đo chưa có kết quả cho bản này.';
+          : code === 'invalid-state'
+            ? 'Trạng thái bộ xử lý bị gián đoạn. Hãy bắt đầu lại lượt đo.'
+            : code === 'invalid-input'
+              ? 'Ảnh hoặc vùng cắt không hợp lệ. Hãy chọn lại vùng cắt.'
+              : stage === 'decode'
+                ? 'Không giải mã được ảnh gốc để chạy lượt so sánh.'
+                : stage === 'encode'
+                  ? 'Không tạo được ảnh PNG sau khi xử lý.'
+                  : 'Không chạy được bộ xử lý. Lượt đo chưa có kết quả cho bản này.';
   return `${message}${stage === undefined ? '' : ` Mã kiểm tra: ${stage}/${code}.`}`;
 }

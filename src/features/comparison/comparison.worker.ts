@@ -1,6 +1,7 @@
 import {
   validateComparisonInput,
   COMPARISON_LABELS,
+  COMPARISON_WASM_BASE,
   type ComparisonCommand,
   type ComparisonEngine,
   type ComparisonReply,
@@ -52,15 +53,17 @@ async function decode(asset: ImageAsset): Promise<RgbaImage> {
 
 async function handle(command: ComparisonCommand) {
   if (command.type === 'initialize') {
-    if (engine !== null || !Object.hasOwn(COMPARISON_LABELS, command.engine))
-      throw new Error('invalid-input');
+    if (engine !== null) throw new Error('invalid-state');
+    if (!Object.hasOwn(COMPARISON_LABELS, command.engine)) throw new Error('invalid-input');
     engine = command.engine;
-    if (engine !== 'web') wasm = await (await import('./wasm-raster')).loadWasmRaster();
+    if (engine !== 'web')
+      wasm = await (await import('./wasm-raster')).loadWasmRaster(COMPARISON_WASM_BASE);
     scope.postMessage({ type: 'ready' });
     return;
   }
-  if (engine === null || running) throw new Error('invalid-input');
+  if (engine === null || running) throw new Error('invalid-state');
   running = true;
+  stage = 'validate';
   const { input } = command;
   validateComparisonInput(input);
   if (

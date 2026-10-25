@@ -10,7 +10,7 @@
   },
   "scripts": {
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc -p tsconfig.json && vite build",
+    "build": "tsc -p tsconfig.json && vite build && node scripts/test-comparison-build.mjs",
     "fixtures:generate": "node scripts/generate-synthetic-fixtures.ts tests/fixtures",
     "fixtures:smartdoc-sample": "node scripts/prepare-smartdoc-sample.ts tests/datasets/smartdoc15-sample/sampleDataset tests/fixtures/smartdoc15",
     "benchmark:scanic-smartdoc": "node scripts/run-browser-benchmark.mjs http://127.0.0.1:5173/tests/browser/scanic-smartdoc-benchmark.html",
