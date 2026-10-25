@@ -19,7 +19,7 @@ await build({
   platform: 'node',
 });
 const web = await import(pathToFileURL(resolve('.tmp-wasm/web-raster.mjs')));
-const base = resolve('public/docscan-wasm/v2');
+const base = resolve('public/docscan-wasm/v3');
 const manifest = JSON.parse(await readFile(`${base}/build.json`, 'utf8'));
 const bytes = await readFile(`${base}/docscan.wasm`);
 assert.equal(createHash('sha256').update(bytes).digest('hex'), manifest.wasm_sha256);

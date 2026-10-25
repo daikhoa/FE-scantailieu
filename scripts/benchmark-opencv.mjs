@@ -6,9 +6,9 @@ import assert from 'node:assert/strict';
 
 // Test-only RGB inputs: use the existing quality sample generator, then Pillow's
 // lossless PPM conversion. No browser/JPEG/color-management cost is timed here.
-const root = resolve('.tmp-opencv');
+const root = resolve(process.argv[3] ?? '.tmp-opencv');
 await mkdir(`${root}/outputs`, { recursive: true });
-const base = resolve('public/docscan-wasm/v2');
+const base = resolve(process.argv[2] ?? 'public/docscan-wasm/v3');
 const manifest = JSON.parse(await readFile(`${base}/build.json`, 'utf8'));
 const { default: factory } = await import(pathToFileURL(`${base}/docscan.mjs`));
 const module = await factory({ wasmBinary: await readFile(`${base}/docscan.wasm`) });

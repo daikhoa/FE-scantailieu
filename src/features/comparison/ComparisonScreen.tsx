@@ -8,6 +8,7 @@ import { runComparison } from './comparison-client';
 import {
   COMPARISON_LABELS,
   COMPARISON_PAIRS,
+  COMPARISON_WASM_BASE,
   OPENCV_PRESET_LABELS,
   type OpenCvPreset,
   MAX_COMPARISON_INPUT_PIXELS,
@@ -158,8 +159,9 @@ export function ComparisonScreen() {
         </p>
       </header>
       <p>
-        OpenCV dùng cắt phối cảnh, CLAHE trên độ sáng và tăng nét nhẹ. Chọn “Giữ nguyên màu” để chỉ
-        đối chiếu bước cắt. Các bản cũ vẫn có trong danh sách cặp so sánh.
+        OpenCV đã được cải tiến để cân bằng bóng sáng trên nền giấy, tăng rõ chữ và hạn chế khuếch
+        đại nhiễu, giữ màu. Chọn “Giữ nguyên màu” để chỉ đối chiếu bước cắt. Web và C++ tự viết vẫn
+        có trong danh sách cặp so sánh.
       </p>
       <section className="comparison-controls" aria-label="Cấu hình so sánh">
         <label className="comparison-file">
@@ -375,7 +377,7 @@ export function ComparisonScreen() {
               selectedPair: pair,
               measuredEngines: Object.keys(results),
               opencvPreset,
-              wasmAssets: '/docscan-wasm/v2/',
+              wasmAssets: COMPARISON_WASM_BASE,
               createdAt: new Date().toISOString(),
               boundary: 'shared browser decode; warp + enhanced/original; shared lossless PNG/PDF',
               outputMaximumSide: 3000,

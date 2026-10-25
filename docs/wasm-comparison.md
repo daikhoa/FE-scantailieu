@@ -1,5 +1,8 @@
 # Web / C++ browser comparison
 
+Current update 2026-10-25: both C++ runners load WASM v3, with adaptive OpenCV v2.
+V1/v2 assets are retained for provenance. See [the tuning report](opencv-tuning-v2.md).
+
 Update 2026-10-24: the comparison now has Web/OpenCV, custom C++/OpenCV and the
 original Web/custom C++ pair, plus three OpenCV profiles. Both C++ runners use
 the new v2 WASM; the normal scanner and v1 assets remain unchanged. See
@@ -79,9 +82,9 @@ node scripts/test-docscan-wasm.mjs
 
 Pass `-LibraryRoot`, `-SdkRoot`, `-Cmake` and `-Ninja` when those locations differ.
 The build script verifies the SDK version. The tracked output under
-`public/docscan-wasm/v2/` includes a SHA-256 manifest of native source and WASM.
+`public/docscan-wasm/v3/` includes a SHA-256 manifest of native source and WASM.
 Ordinary npm builds use these assets and do not require a C++ compiler.
-WASM/glue are approximately 1.45 MiB uncompressed and are only requested when
+WASM/glue are approximately 1.75 MiB uncompressed and are only requested when
 running C++. The comparison screen/worker are lazy; normal scan processing and
 defaults are preserved. Public generated modules have a narrow Vite dev middleware
 because Vite otherwise rejects source imports from public; production serves them

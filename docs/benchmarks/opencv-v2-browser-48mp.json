@@ -1,0 +1,53 @@
+{
+  "schema": 2,
+  "selectedPair": "cpp-opencv",
+  "measuredEngines": [
+    "opencv"
+  ],
+  "opencvPreset": "balanced",
+  "wasmAssets": "/docscan-wasm/v3/",
+  "createdAt": "2026-10-25T05:50:06.746Z",
+  "boundary": "shared browser decode; warp + enhanced/original; shared lossless PNG/PDF",
+  "outputMaximumSide": 3000,
+  "sourceDimensions": {
+    "width": 8064,
+    "height": 6048
+  },
+  "crop": {
+    "kind": "full-frame"
+  },
+  "filter": "enhanced-color",
+  "notes": "",
+  "cpuPercent": null,
+  "processPeakRamBytes": null,
+  "temperatureCelsius": null,
+  "energyJoules": null,
+  "results": [
+    {
+      "engine": "opencv",
+      "setupMs": 32.300000000046566,
+      "wallMs": 1003.3000000000466,
+      "samples": [
+        {
+          "decodeMs": 281.30000000004657,
+          "processMs": 614.9000000001397,
+          "encodeMs": 74.19999999995343,
+          "totalMs": 970.4000000001397,
+          "inputPixelBytes": 195084288,
+          "outputPixelBytes": 27000000,
+          "wasmReservedBytes": 411959296
+        }
+      ],
+      "filter": "enhanced-color",
+      "implementation": "opencv-adaptive-v2-wasm-v3",
+      "opencvPreset": "balanced",
+      "frameGapsOver50ms": 0,
+      "maximumFrameGapMs": 27.70000000001164,
+      "dimensions": {
+        "width": 3000,
+        "height": 2250
+      },
+      "encodedBytes": 153721
+    }
+  ]
+}

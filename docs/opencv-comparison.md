@@ -1,5 +1,8 @@
 # OpenCV raster experiment — 2026-10-24
 
+Historical v1 implementation below. Current implementation is adaptive OpenCV v2
+in WASM v3; see [tuning, parameters and before/after results](opencv-tuning-v2.md).
+
 Keep the web scanner and existing custom web/C++ algorithms. Add an explicit
 OpenCV candidate, not a replacement default. Compare pairs: Web/OpenCV (default),
 custom C++/OpenCV, and the existing Web/custom C++ pair. Both sides share decoded

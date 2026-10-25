@@ -1,6 +1,7 @@
 import {
   validateComparisonInput,
   COMPARISON_LABELS,
+  COMPARISON_IMPLEMENTATIONS,
   type ComparisonEngine,
   type ComparisonInput,
   type ComparisonReply,
@@ -77,12 +78,7 @@ export async function runComparison(
           samples,
           image: reply.image,
           filter: input.filter,
-          implementation:
-            engine === 'web'
-              ? 'web-filter-v10'
-              : engine === 'cpp'
-                ? 'custom-cpp-wasm-v2'
-                : 'opencv-clahe-v1-wasm-v2',
+          implementation: COMPARISON_IMPLEMENTATIONS[engine],
           ...(engine === 'opencv' ? { opencvPreset: input.opencvPreset ?? 'balanced' } : {}),
         });
       } else finish(new Error('failed'));

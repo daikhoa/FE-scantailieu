@@ -40,7 +40,7 @@ export default defineConfig({
           'docscan.mjs': 'text/javascript; charset=utf-8',
           'docscan.wasm': 'application/wasm',
         } as const;
-        for (const version of ['v1', 'v2'])
+        for (const version of ['v1', 'v2', 'v3'])
           server.middlewares.use(`/docscan-wasm/${version}`, (request, response, next) => {
             const name = new URL(request.url ?? '/', 'http://localhost').pathname.slice(1);
             if (!Object.hasOwn(rasterAssets, name)) {

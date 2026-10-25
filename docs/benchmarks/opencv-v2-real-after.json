@@ -1,0 +1,995 @@
+{
+  "schema": 1,
+  "wasmSha256": "4ea8b1a0b57f7b4b3ec5475cab6237828c7a8b0a5a7345423556f6717e2e903d",
+  "boundary": "Shared annotated document crop (full frame for synthetic); native WASM raster and copies only. No OCR/thermal score; single timings are observational.",
+  "cases": [
+    {
+      "sample": "colored-cover.ppm",
+      "profile": "custom",
+      "dimensions": {
+        "width": 720,
+        "height": 520
+      },
+      "kernelAndCopyMs": 13.47189999999999,
+      "meanAbsoluteRgbChange": 10.635300035612536,
+      "changedChannels": 1066910,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 8.001248831463675
+    },
+    {
+      "sample": "colored-cover.ppm",
+      "profile": "gentle",
+      "dimensions": {
+        "width": 720,
+        "height": 520
+      },
+      "kernelAndCopyMs": 35.333200000000005,
+      "meanAbsoluteRgbChange": 1.1632852564102565,
+      "changedChannels": 914274,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 6.744111661992521
+    },
+    {
+      "sample": "colored-cover.ppm",
+      "profile": "balanced",
+      "dimensions": {
+        "width": 720,
+        "height": 520
+      },
+      "kernelAndCopyMs": 21.108100000000007,
+      "meanAbsoluteRgbChange": 2.2981837606837607,
+      "changedChannels": 1042674,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 6.912979433760683
+    },
+    {
+      "sample": "colored-cover.ppm",
+      "profile": "text",
+      "dimensions": {
+        "width": 720,
+        "height": 520
+      },
+      "kernelAndCopyMs": 18.62349999999998,
+      "meanAbsoluteRgbChange": 3.040982905982906,
+      "changedChannels": 1005024,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 7.047468449519231
+    },
+    {
+      "sample": "faint-text.ppm",
+      "profile": "custom",
+      "dimensions": {
+        "width": 720,
+        "height": 520
+      },
+      "kernelAndCopyMs": 13.088599999999929,
+      "meanAbsoluteRgbChange": 0.0005448717948717948,
+      "changedChannels": 612,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 0.9133974358974359
+    },
+    {
+      "sample": "faint-text.ppm",
+      "profile": "gentle",
+      "dimensions": {
+        "width": 720,
+        "height": 520
+      },
+      "kernelAndCopyMs": 19.155099999999948,
+      "meanAbsoluteRgbChange": 1.436519764957265,
+      "changedChannels": 711444,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 1.3160042735042734
+    },
+    {
+      "sample": "faint-text.ppm",
+      "profile": "balanced",
+      "dimensions": {
+        "width": 720,
+        "height": 520
+      },
+      "kernelAndCopyMs": 17.748000000000047,
+      "meanAbsoluteRgbChange": 2.8472596153846155,
+      "changedChannels": 1098708,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 1.683798076923077
+    },
+    {
+      "sample": "faint-text.ppm",
+      "profile": "text",
+      "dimensions": {
+        "width": 720,
+        "height": 520
+      },
+      "kernelAndCopyMs": 18.307699999999954,
+      "meanAbsoluteRgbChange": 3.5326842948717947,
+      "changedChannels": 1090995,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 1.9993856837606838
+    },
+    {
+      "sample": "paper-noise.ppm",
+      "profile": "custom",
+      "dimensions": {
+        "width": 720,
+        "height": 520
+      },
+      "kernelAndCopyMs": 11.727700000000027,
+      "meanAbsoluteRgbChange": 0,
+      "changedChannels": 0,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 5.991666666666666
+    },
+    {
+      "sample": "paper-noise.ppm",
+      "profile": "gentle",
+      "dimensions": {
+        "width": 720,
+        "height": 520
+      },
+      "kernelAndCopyMs": 7.530700000000024,
+      "meanAbsoluteRgbChange": 0,
+      "changedChannels": 0,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 5.991666666666666
+    },
+    {
+      "sample": "paper-noise.ppm",
+      "profile": "balanced",
+      "dimensions": {
+        "width": 720,
+        "height": 520
+      },
+      "kernelAndCopyMs": 7.363000000000056,
+      "meanAbsoluteRgbChange": 0,
+      "changedChannels": 0,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 5.991666666666666
+    },
+    {
+      "sample": "paper-noise.ppm",
+      "profile": "text",
+      "dimensions": {
+        "width": 720,
+        "height": 520
+      },
+      "kernelAndCopyMs": 7.340799999999945,
+      "meanAbsoluteRgbChange": 0,
+      "changedChannels": 0,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 5.991666666666666
+    },
+    {
+      "sample": "smartdoc15-datasheet001-frame-0001.ppm",
+      "profile": "custom",
+      "dimensions": {
+        "width": 243,
+        "height": 339
+      },
+      "kernelAndCopyMs": 3.9319000000000415,
+      "meanAbsoluteRgbChange": 14.298319514751286,
+      "changedChannels": 244784,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 5.359214106713646
+    },
+    {
+      "sample": "smartdoc15-datasheet001-frame-0001.ppm",
+      "profile": "gentle",
+      "dimensions": {
+        "width": 243,
+        "height": 339
+      },
+      "kernelAndCopyMs": 5.701600000000099,
+      "meanAbsoluteRgbChange": 2.308472024958423,
+      "changedChannels": 222321,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 4.667084524503199
+    },
+    {
+      "sample": "smartdoc15-datasheet001-frame-0001.ppm",
+      "profile": "balanced",
+      "dimensions": {
+        "width": 243,
+        "height": 339
+      },
+      "kernelAndCopyMs": 5.337600000000066,
+      "meanAbsoluteRgbChange": 4.189482501183583,
+      "changedChannels": 224724,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 5.214838676147468
+    },
+    {
+      "sample": "smartdoc15-datasheet001-frame-0001.ppm",
+      "profile": "text",
+      "dimensions": {
+        "width": 243,
+        "height": 339
+      },
+      "kernelAndCopyMs": 5.488900000000058,
+      "meanAbsoluteRgbChange": 6.019398618546439,
+      "changedChannels": 229965,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 5.763134639371427
+    },
+    {
+      "sample": "smartdoc15-datasheet001-frame-0054.ppm",
+      "profile": "custom",
+      "dimensions": {
+        "width": 245,
+        "height": 312
+      },
+      "kernelAndCopyMs": 3.567099999999982,
+      "meanAbsoluteRgbChange": 18.030298273155417,
+      "changedChannels": 228363,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 2.28230612858124
+    },
+    {
+      "sample": "smartdoc15-datasheet001-frame-0054.ppm",
+      "profile": "gentle",
+      "dimensions": {
+        "width": 245,
+        "height": 312
+      },
+      "kernelAndCopyMs": 4.888200000000097,
+      "meanAbsoluteRgbChange": 2.051753008895866,
+      "changedChannels": 195336,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 2.060664716607797
+    },
+    {
+      "sample": "smartdoc15-datasheet001-frame-0054.ppm",
+      "profile": "balanced",
+      "dimensions": {
+        "width": 245,
+        "height": 312
+      },
+      "kernelAndCopyMs": 4.776600000000144,
+      "meanAbsoluteRgbChange": 4.44887493458922,
+      "changedChannels": 210354,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 2.3799696861917843
+    },
+    {
+      "sample": "smartdoc15-datasheet001-frame-0054.ppm",
+      "profile": "text",
+      "dimensions": {
+        "width": 245,
+        "height": 312
+      },
+      "kernelAndCopyMs": 4.707699999999932,
+      "meanAbsoluteRgbChange": 6.981763474620617,
+      "changedChannels": 215007,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 2.7106112637362636
+    },
+    {
+      "sample": "smartdoc15-datasheet001-frame-0108.ppm",
+      "profile": "custom",
+      "dimensions": {
+        "width": 221,
+        "height": 310
+      },
+      "kernelAndCopyMs": 3.028500000000122,
+      "meanAbsoluteRgbChange": 18.18416776139736,
+      "changedChannels": 204679,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 4.0054370484235875
+    },
+    {
+      "sample": "smartdoc15-datasheet001-frame-0108.ppm",
+      "profile": "gentle",
+      "dimensions": {
+        "width": 221,
+        "height": 310
+      },
+      "kernelAndCopyMs": 4.413900000000012,
+      "meanAbsoluteRgbChange": 1.968763684133703,
+      "changedChannels": 163791,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 3.6073112615858998
+    },
+    {
+      "sample": "smartdoc15-datasheet001-frame-0108.ppm",
+      "profile": "balanced",
+      "dimensions": {
+        "width": 221,
+        "height": 310
+      },
+      "kernelAndCopyMs": 4.352699999999913,
+      "meanAbsoluteRgbChange": 4.2822507663114875,
+      "changedChannels": 188457,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 4.142127118760035
+    },
+    {
+      "sample": "smartdoc15-datasheet001-frame-0108.ppm",
+      "profile": "text",
+      "dimensions": {
+        "width": 221,
+        "height": 310
+      },
+      "kernelAndCopyMs": 4.316400000000158,
+      "meanAbsoluteRgbChange": 6.620478762224493,
+      "changedChannels": 188715,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 4.691863014979565
+    },
+    {
+      "sample": "smartdoc15-datasheet001-frame-0161.ppm",
+      "profile": "custom",
+      "dimensions": {
+        "width": 229,
+        "height": 324
+      },
+      "kernelAndCopyMs": 3.614599999999882,
+      "meanAbsoluteRgbChange": 17.90750624472119,
+      "changedChannels": 221533,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 3.7499000219856864
+    },
+    {
+      "sample": "smartdoc15-datasheet001-frame-0161.ppm",
+      "profile": "gentle",
+      "dimensions": {
+        "width": 229,
+        "height": 324
+      },
+      "kernelAndCopyMs": 4.61649999999986,
+      "meanAbsoluteRgbChange": 2.2485578737398244,
+      "changedChannels": 192027,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 3.3753210457774006
+    },
+    {
+      "sample": "smartdoc15-datasheet001-frame-0161.ppm",
+      "profile": "balanced",
+      "dimensions": {
+        "width": 229,
+        "height": 324
+      },
+      "kernelAndCopyMs": 4.6638000000000375,
+      "meanAbsoluteRgbChange": 4.571284166262332,
+      "changedChannels": 203946,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 3.8825582115275754
+    },
+    {
+      "sample": "smartdoc15-datasheet001-frame-0161.ppm",
+      "profile": "text",
+      "dimensions": {
+        "width": 229,
+        "height": 324
+      },
+      "kernelAndCopyMs": 4.700700000000097,
+      "meanAbsoluteRgbChange": 7.00183298291013,
+      "changedChannels": 206958,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 4.396167119858213
+    },
+    {
+      "sample": "smartdoc15-datasheet001-frame-0214.ppm",
+      "profile": "custom",
+      "dimensions": {
+        "width": 222,
+        "height": 311
+      },
+      "kernelAndCopyMs": 3.000400000000127,
+      "meanAbsoluteRgbChange": 18.09462356246922,
+      "changedChannels": 206233,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 4.777638237866081
+    },
+    {
+      "sample": "smartdoc15-datasheet001-frame-0214.ppm",
+      "profile": "gentle",
+      "dimensions": {
+        "width": 222,
+        "height": 311
+      },
+      "kernelAndCopyMs": 4.343599999999924,
+      "meanAbsoluteRgbChange": 2.043306972567423,
+      "changedChannels": 175029,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 4.277933461244605
+    },
+    {
+      "sample": "smartdoc15-datasheet001-frame-0214.ppm",
+      "profile": "balanced",
+      "dimensions": {
+        "width": 222,
+        "height": 311
+      },
+      "kernelAndCopyMs": 4.436899999999923,
+      "meanAbsoluteRgbChange": 4.372715158888792,
+      "changedChannels": 187641,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 4.847823663947308
+    },
+    {
+      "sample": "smartdoc15-datasheet001-frame-0214.ppm",
+      "profile": "text",
+      "dimensions": {
+        "width": 222,
+        "height": 311
+      },
+      "kernelAndCopyMs": 4.651600000000144,
+      "meanAbsoluteRgbChange": 6.841429854291591,
+      "changedChannels": 191874,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 5.421178130250428
+    },
+    {
+      "sample": "smartdoc15-letter001-frame-0001.ppm",
+      "profile": "custom",
+      "dimensions": {
+        "width": 234,
+        "height": 329
+      },
+      "kernelAndCopyMs": 3.2556999999999334,
+      "meanAbsoluteRgbChange": 14.728894431022091,
+      "changedChannels": 229737,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 5.5592695526621725
+    },
+    {
+      "sample": "smartdoc15-letter001-frame-0001.ppm",
+      "profile": "gentle",
+      "dimensions": {
+        "width": 234,
+        "height": 329
+      },
+      "kernelAndCopyMs": 4.809400000000096,
+      "meanAbsoluteRgbChange": 2.4313121866313354,
+      "changedChannels": 200136,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 4.933929951549632
+    },
+    {
+      "sample": "smartdoc15-letter001-frame-0001.ppm",
+      "profile": "balanced",
+      "dimensions": {
+        "width": 234,
+        "height": 329
+      },
+      "kernelAndCopyMs": 4.970599999999877,
+      "meanAbsoluteRgbChange": 5.814524718780038,
+      "changedChannels": 219972,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 5.423147248363339
+    },
+    {
+      "sample": "smartdoc15-letter001-frame-0001.ppm",
+      "profile": "text",
+      "dimensions": {
+        "width": 234,
+        "height": 329
+      },
+      "kernelAndCopyMs": 5.070699999999988,
+      "meanAbsoluteRgbChange": 9.924129062426935,
+      "changedChannels": 223605,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 5.97374116722521
+    },
+    {
+      "sample": "smartdoc15-letter001-frame-0045.ppm",
+      "profile": "custom",
+      "dimensions": {
+        "width": 213,
+        "height": 293
+      },
+      "kernelAndCopyMs": 3.5142000000000735,
+      "meanAbsoluteRgbChange": 13.593124923221543,
+      "changedChannels": 186110,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 5.583243828013588
+    },
+    {
+      "sample": "smartdoc15-letter001-frame-0045.ppm",
+      "profile": "gentle",
+      "dimensions": {
+        "width": 213,
+        "height": 293
+      },
+      "kernelAndCopyMs": 4.8745000000001255,
+      "meanAbsoluteRgbChange": 2.7668925956192214,
+      "changedChannels": 163638,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 5.006862929925973
+    },
+    {
+      "sample": "smartdoc15-letter001-frame-0045.ppm",
+      "profile": "balanced",
+      "dimensions": {
+        "width": 213,
+        "height": 293
+      },
+      "kernelAndCopyMs": 4.792899999999918,
+      "meanAbsoluteRgbChange": 6.527536092550754,
+      "changedChannels": 179415,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 5.495952419222387
+    },
+    {
+      "sample": "smartdoc15-letter001-frame-0045.ppm",
+      "profile": "text",
+      "dimensions": {
+        "width": 213,
+        "height": 293
+      },
+      "kernelAndCopyMs": 4.823499999999967,
+      "meanAbsoluteRgbChange": 10.490394013683924,
+      "changedChannels": 181014,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 6.049104558737522
+    },
+    {
+      "sample": "smartdoc15-letter001-frame-0089.ppm",
+      "profile": "custom",
+      "dimensions": {
+        "width": 204,
+        "height": 288
+      },
+      "kernelAndCopyMs": 3.447400000000016,
+      "meanAbsoluteRgbChange": 15.17068922476398,
+      "changedChannels": 175941,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 2.2697759225217866
+    },
+    {
+      "sample": "smartdoc15-letter001-frame-0089.ppm",
+      "profile": "gentle",
+      "dimensions": {
+        "width": 204,
+        "height": 288
+      },
+      "kernelAndCopyMs": 4.636399999999867,
+      "meanAbsoluteRgbChange": 2.787717864923747,
+      "changedChannels": 147753,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 2.170103717213882
+    },
+    {
+      "sample": "smartdoc15-letter001-frame-0089.ppm",
+      "profile": "balanced",
+      "dimensions": {
+        "width": 204,
+        "height": 288
+      },
+      "kernelAndCopyMs": 4.552099999999882,
+      "meanAbsoluteRgbChange": 6.3305930010893245,
+      "changedChannels": 166653,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 2.570995787909348
+    },
+    {
+      "sample": "smartdoc15-letter001-frame-0089.ppm",
+      "profile": "text",
+      "dimensions": {
+        "width": 204,
+        "height": 288
+      },
+      "kernelAndCopyMs": 4.8297000000000025,
+      "meanAbsoluteRgbChange": 10.295002723311546,
+      "changedChannels": 169266,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 3.0063639455890865
+    },
+    {
+      "sample": "smartdoc15-letter001-frame-0132.ppm",
+      "profile": "custom",
+      "dimensions": {
+        "width": 204,
+        "height": 289
+      },
+      "kernelAndCopyMs": 3.3236000000001695,
+      "meanAbsoluteRgbChange": 14.016639527783433,
+      "changedChannels": 176605,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 1.8222339541352874
+    },
+    {
+      "sample": "smartdoc15-letter001-frame-0132.ppm",
+      "profile": "gentle",
+      "dimensions": {
+        "width": 204,
+        "height": 289
+      },
+      "kernelAndCopyMs": 4.882499999999936,
+      "meanAbsoluteRgbChange": 3.212056448877129,
+      "changedChannels": 165288,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 1.767707657511534
+    },
+    {
+      "sample": "smartdoc15-letter001-frame-0132.ppm",
+      "profile": "balanced",
+      "dimensions": {
+        "width": 204,
+        "height": 289
+      },
+      "kernelAndCopyMs": 4.50630000000001,
+      "meanAbsoluteRgbChange": 7.129452473030735,
+      "changedChannels": 172182,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 2.128068297225897
+    },
+    {
+      "sample": "smartdoc15-letter001-frame-0132.ppm",
+      "profile": "text",
+      "dimensions": {
+        "width": 204,
+        "height": 289
+      },
+      "kernelAndCopyMs": 4.656399999999849,
+      "meanAbsoluteRgbChange": 11.52425537689124,
+      "changedChannels": 173316,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 2.558811536887679
+    },
+    {
+      "sample": "smartdoc15-letter001-frame-0176.ppm",
+      "profile": "custom",
+      "dimensions": {
+        "width": 210,
+        "height": 299
+      },
+      "kernelAndCopyMs": 4.379799999999932,
+      "meanAbsoluteRgbChange": 14.985178106917237,
+      "changedChannels": 187556,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 2.644565030757286
+    },
+    {
+      "sample": "smartdoc15-letter001-frame-0176.ppm",
+      "profile": "gentle",
+      "dimensions": {
+        "width": 210,
+        "height": 299
+      },
+      "kernelAndCopyMs": 5.114499999999907,
+      "meanAbsoluteRgbChange": 2.5819079471253383,
+      "changedChannels": 156507,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 2.4217751508002867
+    },
+    {
+      "sample": "smartdoc15-letter001-frame-0176.ppm",
+      "profile": "balanced",
+      "dimensions": {
+        "width": 210,
+        "height": 299
+      },
+      "kernelAndCopyMs": 4.935900000000174,
+      "meanAbsoluteRgbChange": 6.163927376970856,
+      "changedChannels": 178737,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 2.7738272540412487
+    },
+    {
+      "sample": "smartdoc15-letter001-frame-0176.ppm",
+      "profile": "text",
+      "dimensions": {
+        "width": 210,
+        "height": 299
+      },
+      "kernelAndCopyMs": 4.842000000000098,
+      "meanAbsoluteRgbChange": 9.89192546583851,
+      "changedChannels": 182658,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 3.1474865996774963
+    },
+    {
+      "sample": "smartdoc15-magazine001-frame-0001.ppm",
+      "profile": "custom",
+      "dimensions": {
+        "width": 211,
+        "height": 294
+      },
+      "kernelAndCopyMs": 3.9758999999999105,
+      "meanAbsoluteRgbChange": 16.78086748127371,
+      "changedChannels": 185023,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 6.205371940689783
+    },
+    {
+      "sample": "smartdoc15-magazine001-frame-0001.ppm",
+      "profile": "gentle",
+      "dimensions": {
+        "width": 211,
+        "height": 294
+      },
+      "kernelAndCopyMs": 4.992999999999938,
+      "meanAbsoluteRgbChange": 2.7622916465164264,
+      "changedChannels": 162801,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 5.727310640636587
+    },
+    {
+      "sample": "smartdoc15-magazine001-frame-0001.ppm",
+      "profile": "balanced",
+      "dimensions": {
+        "width": 211,
+        "height": 294
+      },
+      "kernelAndCopyMs": 5.114499999999907,
+      "meanAbsoluteRgbChange": 5.817954670019667,
+      "changedChannels": 174993,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 6.338164290449592
+    },
+    {
+      "sample": "smartdoc15-magazine001-frame-0001.ppm",
+      "profile": "text",
+      "dimensions": {
+        "width": 211,
+        "height": 294
+      },
+      "kernelAndCopyMs": 5.178900000000112,
+      "meanAbsoluteRgbChange": 9.023938485346745,
+      "changedChannels": 177177,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 7.009824690391559
+    },
+    {
+      "sample": "smartdoc15-magazine001-frame-0050.ppm",
+      "profile": "custom",
+      "dimensions": {
+        "width": 203,
+        "height": 286
+      },
+      "kernelAndCopyMs": 3.5453999999999724,
+      "meanAbsoluteRgbChange": 16.413902189764258,
+      "changedChannels": 172389,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 9.175497791540357
+    },
+    {
+      "sample": "smartdoc15-magazine001-frame-0050.ppm",
+      "profile": "gentle",
+      "dimensions": {
+        "width": 203,
+        "height": 286
+      },
+      "kernelAndCopyMs": 5.491999999999962,
+      "meanAbsoluteRgbChange": 2.5595439043714907,
+      "changedChannels": 152883,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 8.446107569693238
+    },
+    {
+      "sample": "smartdoc15-magazine001-frame-0050.ppm",
+      "profile": "balanced",
+      "dimensions": {
+        "width": 203,
+        "height": 286
+      },
+      "kernelAndCopyMs": 4.691199999999981,
+      "meanAbsoluteRgbChange": 5.022839229735782,
+      "changedChannels": 161109,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 9.165639115733404
+    },
+    {
+      "sample": "smartdoc15-magazine001-frame-0050.ppm",
+      "profile": "text",
+      "dimensions": {
+        "width": 203,
+        "height": 286
+      },
+      "kernelAndCopyMs": 4.804399999999987,
+      "meanAbsoluteRgbChange": 7.269661373109649,
+      "changedChannels": 166947,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 9.846805740057356
+    },
+    {
+      "sample": "smartdoc15-magazine001-frame-0100.ppm",
+      "profile": "custom",
+      "dimensions": {
+        "width": 194,
+        "height": 270
+      },
+      "kernelAndCopyMs": 3.1787000000001626,
+      "meanAbsoluteRgbChange": 16.85978108692885,
+      "changedChannels": 156517,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 6.806282067344406
+    },
+    {
+      "sample": "smartdoc15-magazine001-frame-0100.ppm",
+      "profile": "gentle",
+      "dimensions": {
+        "width": 194,
+        "height": 270
+      },
+      "kernelAndCopyMs": 4.650200000000041,
+      "meanAbsoluteRgbChange": 2.0754104620084,
+      "changedChannels": 134484,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 6.173311169578083
+    },
+    {
+      "sample": "smartdoc15-magazine001-frame-0100.ppm",
+      "profile": "balanced",
+      "dimensions": {
+        "width": 194,
+        "height": 270
+      },
+      "kernelAndCopyMs": 4.769199999999955,
+      "meanAbsoluteRgbChange": 4.4651775486827034,
+      "changedChannels": 143697,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 6.753682673491791
+    },
+    {
+      "sample": "smartdoc15-magazine001-frame-0100.ppm",
+      "profile": "text",
+      "dimensions": {
+        "width": 194,
+        "height": 270
+      },
+      "kernelAndCopyMs": 6.2496000000001,
+      "meanAbsoluteRgbChange": 7.14413898434517,
+      "changedChannels": 150648,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 7.464538588201604
+    },
+    {
+      "sample": "smartdoc15-magazine001-frame-0149.ppm",
+      "profile": "custom",
+      "dimensions": {
+        "width": 211,
+        "height": 309
+      },
+      "kernelAndCopyMs": 4.1878999999999,
+      "meanAbsoluteRgbChange": 16.449035516904654,
+      "changedChannels": 194351,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 9.339412138702281
+    },
+    {
+      "sample": "smartdoc15-magazine001-frame-0149.ppm",
+      "profile": "gentle",
+      "dimensions": {
+        "width": 211,
+        "height": 309
+      },
+      "kernelAndCopyMs": 5.540899999999965,
+      "meanAbsoluteRgbChange": 2.2782558014693475,
+      "changedChannels": 167595,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 8.549276481905398
+    },
+    {
+      "sample": "smartdoc15-magazine001-frame-0149.ppm",
+      "profile": "balanced",
+      "dimensions": {
+        "width": 211,
+        "height": 309
+      },
+      "kernelAndCopyMs": 5.4996000000001,
+      "meanAbsoluteRgbChange": 4.76237365603767,
+      "changedChannels": 179538,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 9.319166189761345
+    },
+    {
+      "sample": "smartdoc15-magazine001-frame-0149.ppm",
+      "profile": "text",
+      "dimensions": {
+        "width": 211,
+        "height": 309
+      },
+      "kernelAndCopyMs": 5.229399999999941,
+      "meanAbsoluteRgbChange": 7.12671973496526,
+      "changedChannels": 186582,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 10.06384965403994
+    },
+    {
+      "sample": "smartdoc15-magazine001-frame-0198.ppm",
+      "profile": "custom",
+      "dimensions": {
+        "width": 205,
+        "height": 294
+      },
+      "kernelAndCopyMs": 4.712700000000041,
+      "meanAbsoluteRgbChange": 16.98119573032465,
+      "changedChannels": 179777,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 8.870160449850673
+    },
+    {
+      "sample": "smartdoc15-magazine001-frame-0198.ppm",
+      "profile": "gentle",
+      "dimensions": {
+        "width": 205,
+        "height": 294
+      },
+      "kernelAndCopyMs": 4.823699999999917,
+      "meanAbsoluteRgbChange": 2.256479177036668,
+      "changedChannels": 153072,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 8.052957330035673
+    },
+    {
+      "sample": "smartdoc15-magazine001-frame-0198.ppm",
+      "profile": "balanced",
+      "dimensions": {
+        "width": 205,
+        "height": 294
+      },
+      "kernelAndCopyMs": 5.805199999999786,
+      "meanAbsoluteRgbChange": 4.752745976439356,
+      "changedChannels": 164631,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 8.746610759395221
+    },
+    {
+      "sample": "smartdoc15-magazine001-frame-0198.ppm",
+      "profile": "text",
+      "dimensions": {
+        "width": 205,
+        "height": 294
+      },
+      "kernelAndCopyMs": 5.156399999999849,
+      "meanAbsoluteRgbChange": 7.339505558320889,
+      "changedChannels": 172635,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 9.438139634664841
+    },
+    {
+      "sample": "soft-text.ppm",
+      "profile": "custom",
+      "dimensions": {
+        "width": 720,
+        "height": 520
+      },
+      "kernelAndCopyMs": 14.202800000000025,
+      "meanAbsoluteRgbChange": 9.818344017094017,
+      "changedChannels": 1120212,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 7.932101862980769
+    },
+    {
+      "sample": "soft-text.ppm",
+      "profile": "gentle",
+      "dimensions": {
+        "width": 720,
+        "height": 520
+      },
+      "kernelAndCopyMs": 17.241799999999785,
+      "meanAbsoluteRgbChange": 2.88357905982906,
+      "changedChannels": 965817,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 7.056290544037126
+    },
+    {
+      "sample": "soft-text.ppm",
+      "profile": "balanced",
+      "dimensions": {
+        "width": 720,
+        "height": 520
+      },
+      "kernelAndCopyMs": 17.530499999999847,
+      "meanAbsoluteRgbChange": 5.375606303418803,
+      "changedChannels": 1113516,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 7.515011685363248
+    },
+    {
+      "sample": "soft-text.ppm",
+      "profile": "text",
+      "dimensions": {
+        "width": 720,
+        "height": 520
+      },
+      "kernelAndCopyMs": 17.168499999999767,
+      "meanAbsoluteRgbChange": 7.028151709401709,
+      "changedChannels": 988434,
+      "newlyClippedChannels": 0,
+      "horizontalLuminanceGradient": 7.8783675547542735
+    }
+  ]
+}
