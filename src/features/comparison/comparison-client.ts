@@ -8,6 +8,7 @@ import {
   type ComparisonResult,
   type ComparisonSample,
 } from './comparison-contract';
+import { ComparisonError } from './comparison-error';
 
 export async function runComparison(
   engine: ComparisonEngine,
@@ -47,7 +48,7 @@ export async function runComparison(
     }, 180_000);
     signal.addEventListener('abort', abort, { once: true });
     worker.onerror = () => {
-      finish(new Error('unavailable'));
+      finish(new ComparisonError('unavailable', ready ? 'process' : 'initialize'));
     };
     worker.onmessageerror = () => {
       finish(new Error('failed'));
@@ -56,7 +57,7 @@ export async function runComparison(
       if (settled) return;
       const reply = event.data;
       if (reply.type === 'error') {
-        finish(new Error(reply.code));
+        finish(new ComparisonError(reply.code, reply.stage ?? (ready ? 'process' : 'initialize')));
         return;
       }
       if (reply.type === 'ready' && !ready) {

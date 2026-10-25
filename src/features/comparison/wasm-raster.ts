@@ -7,7 +7,7 @@ interface WasmRaster {
   HEAPF64: Float64Array<ArrayBuffer>;
   _malloc(bytes: number): number;
   _free(pointer: number): void;
-  _ds_wasm_process(
+  _ds_wasm_process_owned(
     input: number,
     width: number,
     height: number,
@@ -18,7 +18,7 @@ interface WasmRaster {
   _ds_wasm_width(): number;
   _ds_wasm_height(): number;
   _ds_wasm_release(): void;
-  _ds_wasm_process_opencv(
+  _ds_wasm_process_opencv_owned(
     input: number,
     width: number,
     height: number,
@@ -60,13 +60,19 @@ export async function loadWasmRaster() {
         ] as const;
         const status =
           opencvPreset === undefined
-            ? module._ds_wasm_process(...args)
-            : module._ds_wasm_process_opencv(
+            ? module._ds_wasm_process_owned(...args)
+            : module._ds_wasm_process_opencv_owned(
                 ...args,
                 { gentle: 0, balanced: 1, text: 2 }[opencvPreset],
               );
         if (status !== 0)
-          throw new Error(status === 8 || status === 3 ? 'out-of-memory' : 'failed');
+          throw new Error(
+            status === 8
+              ? 'out-of-memory'
+              : status === 1 || status === 3
+                ? 'invalid-input'
+                : 'failed',
+          );
         const dimensions = { width: module._ds_wasm_width(), height: module._ds_wasm_height() };
         const length = dimensions.width * dimensions.height * 4;
         if (

@@ -28,6 +28,18 @@ function fakeWorker() {
   return { worker, terminate };
 }
 describe('comparison measurement contract', () => {
+  it('preserves the failed stage and memory code from the native worker', async () => {
+    const { worker, terminate } = fakeWorker();
+    const result = runComparison('cpp', input, new AbortController().signal, vi.fn(), () => worker);
+    worker.onmessage?.(new MessageEvent('message', { data: { type: 'ready' } }));
+    worker.onmessage?.(
+      new MessageEvent('message', {
+        data: { type: 'error', code: 'out-of-memory', stage: 'process' },
+      }),
+    );
+    await expect(result).rejects.toMatchObject({ code: 'out-of-memory', stage: 'process' });
+    expect(terminate).toHaveBeenCalledOnce();
+  });
   it('bounds repeated work and rejects oversized input without downsampling', () => {
     expect(() => {
       validateComparisonInput(input);
@@ -75,7 +87,7 @@ describe('comparison measurement contract', () => {
     worker.onmessage?.(new MessageEvent('message', { data: { type: 'done', image: input.asset } }));
     await expect(result).resolves.toMatchObject({
       engine: 'opencv',
-      implementation: 'opencv-adaptive-v2-wasm-v4',
+      implementation: 'opencv-adaptive-v2-wasm-v5',
       opencvPreset: 'text',
       filter: 'enhanced-color',
     });

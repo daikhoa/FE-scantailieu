@@ -13,6 +13,7 @@ import { warpPerspectiveRegions } from '../../imaging/rendering/region-perspecti
 import { validateQuad } from '../../imaging/geometry/quad';
 import { MAX_ENCODED_INPUT_BYTES } from '../../imaging/original-image-limits';
 import type { ImageAsset } from '../../domain/document';
+import { classifyComparisonError, type ComparisonStage } from './comparison-error';
 
 const scope = self as unknown as {
   onmessage: ((event: MessageEvent<ComparisonCommand>) => void) | null;
@@ -21,6 +22,7 @@ const scope = self as unknown as {
 let engine: ComparisonEngine | null = null;
 let wasm: Awaited<ReturnType<typeof import('./wasm-raster').loadWasmRaster>> | null = null;
 let running = false;
+let stage: ComparisonStage = 'initialize';
 const signal = new AbortController().signal;
 
 async function decode(asset: ImageAsset): Promise<RgbaImage> {
@@ -70,10 +72,12 @@ async function handle(command: ComparisonCommand) {
   let image: ImageAsset | null = null;
   for (let repetition = 0; repetition < input.repetitions; repetition++) {
     const started = performance.now();
+    stage = 'decode';
     const source = await decode(input.asset);
     const decoded = performance.now();
     let final: RgbaImage;
     let reservedBytes: number | null = null;
+    stage = 'process';
     if (engine !== 'web') {
       if (!wasm) throw new Error('unavailable');
       const result = wasm.process(
@@ -108,6 +112,7 @@ async function handle(command: ComparisonCommand) {
       final = applyDocumentFilter(final, input.filter);
     }
     const processed = performance.now();
+    stage = 'encode';
     // The same lossless encoder on both paths isolates raster quality from JPEG differences.
     image = {
       blob: await codec.encode(final, { type: 'image/png' }, signal),
@@ -133,15 +138,11 @@ async function handle(command: ComparisonCommand) {
 
 scope.onmessage = (event) => {
   void handle(event.data).catch((error: unknown) => {
-    const message = error instanceof Error ? error.message : '';
+    const failure = classifyComparisonError(error, stage);
     scope.postMessage({
       type: 'error',
-      code:
-        message === 'invalid-input'
-          ? 'invalid-input'
-          : message === 'unavailable'
-            ? 'unavailable'
-            : 'failed',
+      code: failure.code,
+      stage: failure.stage,
     });
   });
 };

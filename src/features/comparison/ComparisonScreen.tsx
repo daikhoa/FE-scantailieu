@@ -5,6 +5,7 @@ import { ManualCropEditor } from '../editor/ManualCropEditor';
 import { downloadBlob } from '../export/download-blob';
 import { RASTER_MIME_TYPES } from '../../imaging/codecs/raster-metadata';
 import { runComparison } from './comparison-client';
+import { comparisonErrorMessage } from './comparison-error';
 import {
   COMPARISON_LABELS,
   COMPARISON_PAIRS,
@@ -83,6 +84,7 @@ export function ComparisonScreen() {
     };
     document.addEventListener('visibilitychange', visibility);
     const dimensions = imported.original.dimensions;
+    let activeEngine: ComparisonEngine = engines[0] ?? 'web';
     const corners =
       crop.kind === 'document'
         ? crop.corners
@@ -94,6 +96,7 @@ export function ComparisonScreen() {
           ] as const);
     try {
       for (const engine of engines) {
+        activeEngine = engine;
         if (controller.signal.aborted) break;
         setStatus(`${LABELS[engine]}: đang khởi động…`);
         let previous = performance.now();
@@ -138,7 +141,7 @@ export function ComparisonScreen() {
         setError(
           cause instanceof Error && cause.message === 'timeout'
             ? 'Lượt đo quá lâu nên đã dừng. Hãy giảm số lần hoặc dùng ảnh khác.'
-            : 'Không chạy được bộ xử lý trên thiết bị này, hoặc bộ nhớ không đủ. Không có kết quả thay thế giả lập; hãy thử ít lần hơn hoặc ảnh khác.',
+            : `${LABELS[activeEngine]}: ${comparisonErrorMessage(cause)}`,
         );
       }
     } finally {

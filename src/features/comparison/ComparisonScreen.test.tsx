@@ -4,6 +4,7 @@ import { ComparisonScreen } from './ComparisonScreen';
 import { runComparison } from './comparison-client';
 import { importImage } from '../camera/image-import';
 import type { ComparisonResult } from './comparison-contract';
+import { ComparisonError } from './comparison-error';
 
 vi.mock('./comparison-client', () => ({ runComparison: vi.fn() }));
 vi.mock('../camera/image-import', () => ({ importImage: vi.fn() }));
@@ -25,6 +26,21 @@ afterEach(() => {
 });
 
 describe('comparison screen', () => {
+  it('identifies memory failure without claiming that the device cannot run C++', async () => {
+    vi.mocked(importImage).mockResolvedValue({ original: asset });
+    vi.mocked(runComparison).mockRejectedValue(new ComparisonError('out-of-memory', 'process'));
+    render(<ComparisonScreen />);
+    fireEvent.change(screen.getByLabelText('Chọn ảnh gốc'), {
+      target: { files: [new File(['image'], 'scan.png', { type: 'image/png' })] },
+    });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Chỉ chạy OpenCV' })).toBeEnabled(),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Chỉ chạy OpenCV' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('C++ OpenCV: Không đủ bộ nhớ');
+    expect(screen.getByRole('alert')).toHaveTextContent('process/out-of-memory');
+    expect(screen.queryByRole('heading', { name: 'C++ OpenCV' })).not.toBeInTheDocument();
+  });
   it('keeps comparison opt-in and explains unsupported thermal/CPU measurements', () => {
     render(<ComparisonScreen />);
     expect(screen.getByRole('button', { name: 'So sánh cả hai' })).toBeDisabled();

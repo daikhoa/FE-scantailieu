@@ -1,12 +1,13 @@
 import type { DocumentCorners, ImageAsset } from '../../domain/document';
+import type { ComparisonFailureCode, ComparisonStage } from './comparison-error';
 
 export type ComparisonEngine = 'web' | 'cpp' | 'opencv';
 export type OpenCvPreset = 'gentle' | 'balanced' | 'text';
-export const COMPARISON_WASM_BASE = '/docscan-wasm/v4/';
+export const COMPARISON_WASM_BASE = '/docscan-wasm/v5/';
 export const COMPARISON_IMPLEMENTATIONS = {
   web: 'web-filter-v11',
-  cpp: 'custom-cpp-wasm-v4',
-  opencv: 'opencv-adaptive-v2-wasm-v4',
+  cpp: 'custom-cpp-wasm-v5',
+  opencv: 'opencv-adaptive-v2-wasm-v5',
 } as const;
 export const COMPARISON_LABELS = {
   web: 'Web hiện tại',
@@ -49,7 +50,11 @@ export type ComparisonReply =
   | { readonly type: 'ready' }
   | { readonly type: 'sample'; readonly sample: ComparisonSample }
   | { readonly type: 'done'; readonly image: ImageAsset }
-  | { readonly type: 'error'; readonly code: 'invalid-input' | 'unavailable' | 'failed' };
+  | {
+      readonly type: 'error';
+      readonly code: ComparisonFailureCode;
+      readonly stage?: ComparisonStage;
+    };
 export interface ComparisonResult {
   readonly engine: ComparisonEngine;
   readonly setupMs: number;

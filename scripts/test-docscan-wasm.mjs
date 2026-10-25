@@ -19,7 +19,7 @@ await build({
   platform: 'node',
 });
 const web = await import(pathToFileURL(resolve('.tmp-wasm/web-raster.mjs')));
-const base = resolve('public/docscan-wasm/v4');
+const base = resolve('public/docscan-wasm/v5');
 const manifest = JSON.parse(await readFile(`${base}/build.json`, 'utf8'));
 const bytes = await readFile(`${base}/docscan.wasm`);
 assert.equal(createHash('sha256').update(bytes).digest('hex'), manifest.wasm_sha256);
@@ -105,6 +105,28 @@ for (const kind of ['soft-text', 'color', 'noise', 'faint-structured']) {
           total += delta;
         }
         const mean = total / actual.length;
+        const compatibleOutput = actual.slice();
+        assert.deepEqual(
+          moduleInput(wasm, pointer, pixels.length),
+          new Uint8Array(pixels.buffer),
+          'Legacy input remains read-only',
+        );
+        assert.equal(
+          wasm._ds_wasm_process_owned(
+            pointer,
+            width,
+            height,
+            points,
+            filter === 'original' ? 0 : 2,
+          ),
+          0,
+        );
+        assert.deepEqual(
+          moduleInput(wasm, wasm._ds_wasm_output(), compatibleOutput.length),
+          compatibleOutput,
+          'Owned staging preserves every output byte',
+        );
+        wasm.HEAPU8.set(pixels, pointer);
         // Native bilinear rounds half values differently. Branches in the bounded detail
         // kernel can magnify a 1-level difference, so retain both maximum and mean.
         assert.ok(
@@ -150,6 +172,28 @@ for (const kind of ['soft-text', 'color', 'noise', 'faint-structured']) {
             )
               clipped++;
           assert.equal(clipped, 0, 'OpenCV enhancement introduced clipped channels');
+          const compatibleCv = actualCv.slice();
+          assert.deepEqual(
+            moduleInput(wasm, pointer, pixels.length),
+            new Uint8Array(pixels.buffer),
+          );
+          assert.equal(
+            wasm._ds_wasm_process_opencv_owned(
+              pointer,
+              width,
+              height,
+              points,
+              filter === 'original' ? 0 : 2,
+              preset,
+            ),
+            0,
+          );
+          assert.deepEqual(
+            moduleInput(wasm, wasm._ds_wasm_output(), compatibleCv.length),
+            compatibleCv,
+            'OpenCV owned staging preserves every output byte',
+          );
+          wasm.HEAPU8.set(pixels, pointer);
           opencvRecords.push({ kind, skew, filter, preset, clipped });
         }
         assert.equal(wasm._ds_wasm_process_opencv(pointer, width, height, points, 2, 99), 1);
@@ -175,3 +219,8 @@ console.log(
 console.log(
   `OpenCV: ${opencvRecords.length} crop/filter/preset cases passed, no newly clipped filter channels.`,
 );
+console.log('All cases also passed exact owned/read-only staging parity.');
+
+function moduleInput(module, pointer, length) {
+  return module.HEAPU8.subarray(pointer, pointer + length);
+}
