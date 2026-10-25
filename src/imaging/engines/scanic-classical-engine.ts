@@ -33,7 +33,7 @@ export interface ScanicEngineOptions {
   readonly codec?: RgbaImageCodec;
 }
 
-const ENGINE_VERSION = 'scanic-1.6.0+ml-only-perspective-v2-filter-v10';
+const ENGINE_VERSION = 'scanic-1.6.0+ml-only-perspective-v2-filter-v11-paper-v1';
 const FILTER_MODES: readonly FilterMode[] = [
   'original',
   'ocr-color',

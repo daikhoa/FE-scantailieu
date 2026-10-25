@@ -23,14 +23,14 @@ Run-Cmake @('-S', $cvSource, '-B', "$buildRoot/opencv", '-G', 'Ninja', "-DCMAKE_
 Run-Cmake @('--build', "$buildRoot/opencv", '--parallel', '4')
 Run-Cmake @('-S', "$LibraryRoot/wasm", '-B', "$buildRoot/docscan", '-G', 'Ninja', "-DCMAKE_MAKE_PROGRAM=$Ninja", "-DCMAKE_TOOLCHAIN_FILE=$toolchain", "-DOpenCV_DIR=$buildRoot/opencv", '-DCMAKE_BUILD_TYPE=Release')
 Run-Cmake @('--build', "$buildRoot/docscan", '--parallel', '4')
-$destination = Join-Path $webRoot 'public/docscan-wasm/v5'
+$destination = Join-Path $webRoot 'public/docscan-wasm/v6'
 New-Item -ItemType Directory -Force $destination | Out-Null
 Copy-Item -LiteralPath "$buildRoot/docscan/docscan.mjs", "$buildRoot/docscan/docscan.wasm" -Destination $destination
-$sources = @('include/docscan/docscan.h', 'src/pixels.hpp', 'src/geometry.cpp', 'src/quality.cpp', 'src/filters.cpp', 'src/lab.hpp', 'src/opencv-raster.hpp', 'src/opencv-raster.cpp', 'wasm/bridge.cpp', 'wasm/CMakeLists.txt')
+$sources = @('include/docscan/docscan.h', 'src/pixels.hpp', 'src/geometry.cpp', 'src/quality.cpp', 'src/filters.cpp', 'src/paper-restoration.hpp', 'src/paper-restoration.cpp', 'src/lab.hpp', 'src/opencv-raster.hpp', 'src/opencv-raster.cpp', 'wasm/bridge.cpp', 'wasm/CMakeLists.txt')
 $hashes = @{}
 foreach ($name in $sources) { $hashes[$name] = (Get-FileHash -LiteralPath (Join-Path $LibraryRoot $name) -Algorithm SHA256).Hash.ToLowerInvariant() }
 $manifest = @{ schema = 1; emscripten = '6.0.13'; opencv = 'ea8e60798e0319ccbe902f7994153b574f639809'; sources = $hashes; wasm_sha256 = (Get-FileHash "$destination/docscan.wasm" -Algorithm SHA256).Hash.ToLowerInvariant(); boundary = 'shared browser decode -> native warp/measure/enhance -> shared browser encode/PDF'; maximum_input_pixels = 50000000; maximum_output_side = 3000; maximum_wasm_bytes = 805306368 }
-$manifest | ConvertTo-Json -Depth 4 | Set-Content -Encoding utf8 "$destination/build.json"
+[System.IO.File]::WriteAllText("$destination/build.json", ($manifest | ConvertTo-Json -Depth 4) + "`n", (New-Object System.Text.UTF8Encoding $false))
 Copy-Item -LiteralPath (Join-Path $cvSource 'LICENSE') -Destination "$destination/OpenCV-LICENSE.txt"
 Copy-Item -LiteralPath (Join-Path $SdkRoot 'upstream/emscripten/LICENSE') -Destination "$destination/Emscripten-LICENSE.txt"
 $licenseText = (Get-Content -Raw "$destination/Emscripten-LICENSE.txt") -replace '(?m)[ \t]+$', ''

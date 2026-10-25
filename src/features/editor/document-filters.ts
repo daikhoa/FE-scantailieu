@@ -17,7 +17,7 @@ export const DOCUMENT_FILTERS: readonly DocumentFilterOption[] = [
 ];
 
 function presetVersion(mode: FilterMode): string {
-  if (mode === 'enhanced-color') return 'enhanced-color-v3';
+  if (mode === 'enhanced-color') return 'enhanced-color-v4';
   return mode === 'original'
     ? 'original-v1'
     : mode === 'black-and-white'

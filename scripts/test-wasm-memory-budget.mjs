@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
 
-const version = process.argv[2] ?? 'v5';
+const version = process.argv[2] ?? 'v6';
 await mkdir('.tmp-wasm-ios', { recursive: true });
 const base = resolve(`public/docscan-wasm/${version}`);
 const { default: factory } = await import(pathToFileURL(`${base}/docscan.mjs`));

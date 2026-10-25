@@ -3,11 +3,11 @@ import type { ComparisonFailureCode, ComparisonStage } from './comparison-error'
 
 export type ComparisonEngine = 'web' | 'cpp' | 'opencv';
 export type OpenCvPreset = 'gentle' | 'balanced' | 'text';
-export const COMPARISON_WASM_BASE = '/docscan-wasm/v5/';
+export const COMPARISON_WASM_BASE = '/docscan-wasm/v6/';
 export const COMPARISON_IMPLEMENTATIONS = {
-  web: 'web-filter-v11',
-  cpp: 'custom-cpp-wasm-v5',
-  opencv: 'opencv-adaptive-v2-wasm-v5',
+  web: 'web-paper-v1',
+  cpp: 'custom-cpp-paper-v1-wasm-v6',
+  opencv: 'opencv-paper-v1-wasm-v6',
 } as const;
 export const COMPARISON_LABELS = {
   web: 'Web hiện tại',

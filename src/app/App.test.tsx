@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type { ScannerEngine } from '../imaging/contracts/scanner-engine';
@@ -246,16 +246,25 @@ describe('App shell', () => {
       enqueue,
       dispose: vi.fn(() => Promise.resolve()),
     };
+    // Hold live detection until the first captures: null is otherwise a race
+    // against requestAnimationFrame, unrelated to background page processing.
+    let resumeDetection = () => {
+      throw new Error('Detection gate is not initialized');
+    };
+    const detectionGate = new Promise<void>((resolve) => {
+      resumeDetection = resolve;
+    });
     const cameraEngine: ScannerEngine = {
       lifecycle: { kind: 'uninitialized' },
       initialize: vi.fn(() => Promise.resolve()),
-      detect: vi.fn<ScannerEngine['detect']>((frame) =>
-        Promise.resolve({
+      detect: vi.fn<ScannerEngine['detect']>(async (frame) => {
+        await detectionGate;
+        return {
           kind: 'full-frame' as const,
           dimensions: frame.dimensions,
           reason: 'no-document' as const,
-        }),
-      ),
+        };
+      }),
       render: vi.fn(() => Promise.reject(new Error('not used'))),
       dispose: vi.fn(() => Promise.resolve()),
     };
@@ -306,6 +315,10 @@ describe('App shell', () => {
       expect(enqueue).toHaveBeenCalledTimes(2);
     });
     expect(enqueue.mock.calls[0]?.[3]).toBeNull();
+    await act(async () => {
+      resumeDetection();
+      await detectionGate;
+    });
 
     fireEvent.click(await screen.findByRole('button', { name: 'Hoàn tất chụp 2 trang' }));
     expect(await screen.findByRole('heading', { name: 'Kiểm tra 2 trang' })).toBeInTheDocument();

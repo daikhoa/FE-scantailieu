@@ -242,7 +242,7 @@ describe('background page processor', () => {
       crop: result.crop,
       rotation: 0,
       dewarp: { mode: 'perspective-only' },
-      filter: { mode: 'enhanced-color', presetVersion: 'enhanced-color-v3', parameters: {} },
+      filter: { mode: 'enhanced-color', presetVersion: 'enhanced-color-v4', parameters: {} },
     });
     expect(renderPage).toHaveBeenCalledWith(
       {

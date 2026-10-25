@@ -87,7 +87,7 @@ describe('comparison measurement contract', () => {
     worker.onmessage?.(new MessageEvent('message', { data: { type: 'done', image: input.asset } }));
     await expect(result).resolves.toMatchObject({
       engine: 'opencv',
-      implementation: 'opencv-adaptive-v2-wasm-v5',
+      implementation: 'opencv-paper-v1-wasm-v6',
       opencvPreset: 'text',
       filter: 'enhanced-color',
     });

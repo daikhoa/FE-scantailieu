@@ -1,3 +1,4 @@
+import { restorePaperAppearance } from './paper-restoration';
 import { applyClaheLightness } from './clahe-lightness';
 import { enhanceColorContrast } from './enhanced-color';
 import { adjustLabLightness } from './lab-lightness';
@@ -463,6 +464,7 @@ export function applyDocumentFilter(
   if (mode === 'original') return input;
   if (mode === 'enhanced-color') {
     const quality = analyzeDocumentQuality(input);
+    restorePaperAppearance(input);
     enhanceColorContrast(input, quality.brightness, quality.detail, quality.color);
     return input;
   }
