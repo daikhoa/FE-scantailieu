@@ -248,7 +248,7 @@ describe('App shell', () => {
     };
     // Hold live detection until the first captures: null is otherwise a race
     // against requestAnimationFrame, unrelated to background page processing.
-    let resumeDetection = () => {
+    let resumeDetection: () => void = () => {
       throw new Error('Detection gate is not initialized');
     };
     const detectionGate = new Promise<void>((resolve) => {
