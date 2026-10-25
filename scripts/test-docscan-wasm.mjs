@@ -19,14 +19,15 @@ await build({
   platform: 'node',
 });
 const web = await import(pathToFileURL(resolve('.tmp-wasm/web-raster.mjs')));
-const base = resolve('public/docscan-wasm/v6');
+const base = resolve('public/docscan-wasm/v7');
 const manifest = JSON.parse(await readFile(`${base}/build.json`, 'utf8'));
 const bytes = await readFile(`${base}/docscan.wasm`);
 assert.equal(createHash('sha256').update(bytes).digest('hex'), manifest.wasm_sha256);
 const { default: factory } = await import(pathToFileURL(`${base}/docscan.mjs`));
 const wasm = await factory({ wasmBinary: bytes });
 const records = [];
-const opencvRecords = [];
+assert.equal(wasm._ds_wasm_process_opencv, undefined);
+assert.equal(wasm._ds_wasm_process_opencv_owned, undefined);
 for (const kind of ['soft-text', 'color', 'noise', 'faint-structured']) {
   const width = 160,
     height = 224;
@@ -137,67 +138,6 @@ for (const kind of ['soft-text', 'color', 'noise', 'faint-structured']) {
         assert.equal(wasm._ds_wasm_output(), 0);
         assert.equal(wasm._ds_wasm_process(pointer, 16385, height, points, 0), 1);
         records.push({ kind, skew, filter, dimensions: expected.dimensions, maximum, mean });
-        assert.equal(wasm._ds_wasm_process_opencv(pointer, width, height, points, 0, 1), 0);
-        const originalOpenCv = wasm.HEAPU8.slice(
-          wasm._ds_wasm_output(),
-          wasm._ds_wasm_output() + expected.pixels.length,
-        );
-        for (const preset of [0, 1, 2]) {
-          assert.equal(
-            wasm._ds_wasm_process_opencv(
-              pointer,
-              width,
-              height,
-              points,
-              filter === 'original' ? 0 : 2,
-              preset,
-            ),
-            0,
-          );
-          assert.deepEqual(
-            { width: wasm._ds_wasm_width(), height: wasm._ds_wasm_height() },
-            expected.dimensions,
-          );
-          const actualCv = wasm.HEAPU8.subarray(
-            wasm._ds_wasm_output(),
-            wasm._ds_wasm_output() + expected.pixels.length,
-          );
-          let clipped = 0;
-          for (let i = 0; i < actualCv.length; i++)
-            if (
-              i % 4 !== 3 &&
-              originalOpenCv[i] > 0 &&
-              originalOpenCv[i] < 255 &&
-              (actualCv[i] === 0 || actualCv[i] === 255)
-            )
-              clipped++;
-          assert.equal(clipped, 0, 'OpenCV enhancement introduced clipped channels');
-          const compatibleCv = actualCv.slice();
-          assert.deepEqual(
-            moduleInput(wasm, pointer, pixels.length),
-            new Uint8Array(pixels.buffer),
-          );
-          assert.equal(
-            wasm._ds_wasm_process_opencv_owned(
-              pointer,
-              width,
-              height,
-              points,
-              filter === 'original' ? 0 : 2,
-              preset,
-            ),
-            0,
-          );
-          assert.deepEqual(
-            moduleInput(wasm, wasm._ds_wasm_output(), compatibleCv.length),
-            compatibleCv,
-            'OpenCV owned staging preserves every output byte',
-          );
-          wasm.HEAPU8.set(pixels, pointer);
-          opencvRecords.push({ kind, skew, filter, preset, clipped });
-        }
-        assert.equal(wasm._ds_wasm_process_opencv(pointer, width, height, points, 2, 99), 1);
-        assert.equal(wasm._ds_wasm_output(), 0);
       } finally {
         wasm._ds_wasm_release();
         wasm._free(points);
@@ -207,17 +147,10 @@ for (const kind of ['soft-text', 'color', 'noise', 'faint-structured']) {
 }
 await writeFile(
   '.tmp-wasm/parity-results.json',
-  JSON.stringify(
-    { wasmSha256: manifest.wasm_sha256, cases: records, opencvCases: opencvRecords },
-    null,
-    2,
-  ),
+  JSON.stringify({ wasmSha256: manifest.wasm_sha256, cases: records }, null, 2),
 );
 console.log(
   `WASM raster parity: ${records.length} image/filter/crop cases passed; invalid requests release output.`,
-);
-console.log(
-  `OpenCV: ${opencvRecords.length} crop/filter/preset cases passed, no newly clipped filter channels.`,
 );
 console.log('All cases also passed exact owned/read-only staging parity.');
 

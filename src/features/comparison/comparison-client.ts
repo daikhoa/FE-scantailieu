@@ -80,7 +80,6 @@ export async function runComparison(
           image: reply.image,
           filter: input.filter,
           implementation: COMPARISON_IMPLEMENTATIONS[engine],
-          ...(engine === 'opencv' ? { opencvPreset: input.opencvPreset ?? 'balanced' } : {}),
         });
       } else finish(new Error('failed'));
     };

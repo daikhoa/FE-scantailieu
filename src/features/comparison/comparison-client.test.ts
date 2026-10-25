@@ -60,35 +60,22 @@ describe('comparison measurement contract', () => {
     expect(median(samples)).toBe(4);
     expect(samples).toEqual([5, 1, 9, 3]);
   });
-  it('rejects an unknown OpenCV preset before creating a worker', async () => {
+  it('rejects the removed OpenCV engine before starting a worker', async () => {
     const factory = vi.fn(() => fakeWorker().worker);
     await expect(
-      runComparison(
-        'opencv',
-        { ...input, opencvPreset: 'unknown' as never },
-        new AbortController().signal,
-        vi.fn(),
-        factory,
-      ),
+      runComparison('opencv' as never, input, new AbortController().signal, vi.fn(), factory),
     ).rejects.toThrow('invalid-input');
     expect(factory).not.toHaveBeenCalled();
   });
-  it('records OpenCV implementation and the actual preset in results', async () => {
+  it('records the actual custom C++ implementation', async () => {
     const { worker, terminate } = fakeWorker();
-    const result = runComparison(
-      'opencv',
-      { ...input, opencvPreset: 'text' },
-      new AbortController().signal,
-      vi.fn(),
-      () => worker,
-    );
+    const result = runComparison('cpp', input, new AbortController().signal, vi.fn(), () => worker);
     worker.onmessage?.(new MessageEvent('message', { data: { type: 'ready' } }));
     worker.onmessage?.(new MessageEvent('message', { data: { type: 'sample', sample: {} } }));
     worker.onmessage?.(new MessageEvent('message', { data: { type: 'done', image: input.asset } }));
     await expect(result).resolves.toMatchObject({
-      engine: 'opencv',
-      implementation: 'opencv-paper-v1-wasm-v6',
-      opencvPreset: 'text',
+      engine: 'cpp',
+      implementation: 'custom-cpp-paper-v2-wasm-v7',
       filter: 'enhanced-color',
     });
     expect(terminate).toHaveBeenCalledOnce();

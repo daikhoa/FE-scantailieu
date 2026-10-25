@@ -1,6 +1,5 @@
 import type { DocumentCorners } from '../../domain/document';
 import type { RgbaImage } from '../../imaging/rendering/perspective-warp';
-import type { OpenCvPreset } from './comparison-contract';
 
 interface WasmRaster {
   HEAPU8: Uint8Array<ArrayBuffer>;
@@ -18,14 +17,6 @@ interface WasmRaster {
   _ds_wasm_width(): number;
   _ds_wasm_height(): number;
   _ds_wasm_release(): void;
-  _ds_wasm_process_opencv_owned(
-    input: number,
-    width: number,
-    height: number,
-    corners: number,
-    filter: number,
-    preset: number,
-  ): number;
 }
 
 export async function loadWasmRaster(assetBase: string) {
@@ -35,12 +26,7 @@ export async function loadWasmRaster(assetBase: string) {
   const factory = (await import(/* @vite-ignore */ path)) as { default: () => Promise<WasmRaster> };
   const module = await factory.default();
   return {
-    process(
-      input: RgbaImage,
-      corners: DocumentCorners,
-      enhanced: boolean,
-      opencvPreset?: OpenCvPreset,
-    ) {
+    process(input: RgbaImage, corners: DocumentCorners, enhanced: boolean) {
       let pointer = 0;
       let points = 0;
       try {
@@ -59,13 +45,7 @@ export async function loadWasmRaster(assetBase: string) {
           points,
           enhanced ? 2 : 0,
         ] as const;
-        const status =
-          opencvPreset === undefined
-            ? module._ds_wasm_process_owned(...args)
-            : module._ds_wasm_process_opencv_owned(
-                ...args,
-                { gentle: 0, balanced: 1, text: 2 }[opencvPreset],
-              );
+        const status = module._ds_wasm_process_owned(...args);
         if (status !== 0)
           throw new Error(
             status === 8

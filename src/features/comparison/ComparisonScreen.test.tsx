@@ -26,6 +26,13 @@ afterEach(() => {
 });
 
 describe('comparison screen', () => {
+  it('removes the experimental OpenCV processor', () => {
+    render(<ComparisonScreen />);
+    expect(screen.queryByRole('button', { name: 'Chỉ chạy OpenCV' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('combobox', { name: 'Mức tăng cường OpenCV' }),
+    ).not.toBeInTheDocument();
+  });
   it('identifies memory failure without claiming that the device cannot run C++', async () => {
     vi.mocked(importImage).mockResolvedValue({ original: asset });
     vi.mocked(runComparison).mockRejectedValue(new ComparisonError('out-of-memory', 'process'));
@@ -34,20 +41,20 @@ describe('comparison screen', () => {
       target: { files: [new File(['image'], 'scan.png', { type: 'image/png' })] },
     });
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Chỉ chạy OpenCV' })).toBeEnabled(),
+      expect(screen.getByRole('button', { name: 'Chỉ chạy C++ tự viết' })).toBeEnabled(),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Chỉ chạy OpenCV' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('C++ OpenCV: Không đủ bộ nhớ');
+    fireEvent.click(screen.getByRole('button', { name: 'Chỉ chạy C++ tự viết' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('C++ tự viết: Không đủ bộ nhớ');
     expect(screen.getByRole('alert')).toHaveTextContent('process/out-of-memory');
-    expect(screen.queryByRole('heading', { name: 'C++ OpenCV' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'C++ tự viết' })).not.toBeInTheDocument();
   });
   it('keeps comparison opt-in and explains unsupported thermal/CPU measurements', () => {
     render(<ComparisonScreen />);
     expect(screen.getByRole('button', { name: 'So sánh cả hai' })).toBeDisabled();
     expect(screen.getByText(/Trang này không đọc được nhiệt độ/)).toBeVisible();
     expect(runComparison).not.toHaveBeenCalled();
-    expect(screen.getByRole('combobox', { name: 'Cặp so sánh' })).toHaveValue('web-opencv');
-    expect(screen.getByRole('combobox', { name: 'Mức tăng cường OpenCV' })).toHaveValue('balanced');
+    expect(screen.queryByRole('combobox', { name: 'Cặp so sánh' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/OpenCV/)).not.toBeInTheDocument();
   });
   it('runs the two engines sequentially with the exact same source and crop', async () => {
     vi.stubGlobal(
@@ -79,8 +86,8 @@ describe('comparison screen', () => {
       expect(screen.getByRole('button', { name: 'So sánh cả hai' })).toBeEnabled(),
     );
     fireEvent.click(screen.getByRole('button', { name: 'So sánh cả hai' }));
-    await screen.findByRole('heading', { name: 'C++ OpenCV' });
-    expect(order).toEqual(['web', 'opencv']);
+    await screen.findByRole('heading', { name: 'C++ tự viết' });
+    expect(order).toEqual(['web', 'cpp']);
     const calls = vi.mocked(runComparison).mock.calls;
     expect(calls[0]?.[1]).toEqual(calls[1]?.[1]);
     expect(calls[0]?.[1].asset).toBe(asset);
@@ -95,16 +102,13 @@ describe('comparison screen', () => {
       target: { files: [new File(['image'], 'scan.png', { type: 'image/png' })] },
     });
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Chỉ chạy OpenCV' })).toBeEnabled(),
+      expect(screen.getByRole('button', { name: 'Chỉ chạy C++ tự viết' })).toBeEnabled(),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Chỉ chạy OpenCV' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Chỉ chạy C++ tự viết' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Không chạy được bộ xử lý');
-    expect(screen.queryByRole('heading', { name: 'C++ OpenCV' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'C++ tự viết' })).not.toBeInTheDocument();
   });
-  it.each([
-    ['cpp-opencv', ['cpp', 'opencv']],
-    ['web-cpp', ['web', 'cpp']],
-  ] as const)('retains pair %s and passes the chosen configuration', async (pair, engines) => {
+  it('runs original mode through only Web and custom C++', async () => {
     vi.mocked(importImage).mockResolvedValue({ original: asset });
     vi.mocked(runComparison).mockImplementation((engine, input) =>
       Promise.resolve({
@@ -115,15 +119,11 @@ describe('comparison screen', () => {
         setupMs: 1,
         wallMs: 2,
         samples: [sample],
-        ...(engine === 'opencv' ? { opencvPreset: input.opencvPreset ?? 'balanced' } : {}),
       }),
     );
     render(<ComparisonScreen />);
-    fireEvent.change(screen.getByRole('combobox', { name: 'Cặp so sánh' }), {
-      target: { value: pair },
-    });
-    fireEvent.change(screen.getByRole('combobox', { name: 'Mức tăng cường OpenCV' }), {
-      target: { value: 'text' },
+    fireEvent.change(screen.getByRole('combobox', { name: 'Bộ lọc' }), {
+      target: { value: 'original' },
     });
     fireEvent.change(screen.getByLabelText('Chọn ảnh gốc'), {
       target: { files: [new File(['image'], 'scan.png', { type: 'image/png' })] },
@@ -132,13 +132,8 @@ describe('comparison screen', () => {
       expect(screen.getByRole('button', { name: 'So sánh cả hai' })).toBeEnabled(),
     );
     fireEvent.click(screen.getByRole('button', { name: 'So sánh cả hai' }));
-    await screen.findByRole('heading', {
-      name: pair === 'cpp-opencv' ? 'C++ OpenCV' : 'C++ tự viết',
-    });
-    expect(vi.mocked(runComparison).mock.calls.map((c) => c[0])).toEqual(engines);
-    expect(vi.mocked(runComparison).mock.calls[1]?.[1].opencvPreset).toBe('text');
-    expect(screen.getByRole('heading', { name: 'C++ tự viết' })).toBeVisible();
-    if (pair === 'cpp-opencv') expect(screen.getByText('Mức OpenCV: Rõ chữ')).toBeVisible();
-    else expect(screen.queryByRole('heading', { name: 'C++ OpenCV' })).not.toBeInTheDocument();
+    await screen.findByRole('heading', { name: 'C++ tự viết' });
+    expect(vi.mocked(runComparison).mock.calls.map((c) => c[0])).toEqual(['web', 'cpp']);
+    expect(vi.mocked(runComparison).mock.calls.every((c) => c[1].filter === 'original')).toBe(true);
   });
 });

@@ -83,12 +83,7 @@ async function handle(command: ComparisonCommand) {
     stage = 'process';
     if (engine !== 'web') {
       if (!wasm) throw new Error('unavailable');
-      const result = wasm.process(
-        source,
-        input.corners,
-        input.filter === 'enhanced-color',
-        engine === 'opencv' ? (input.opencvPreset ?? 'balanced') : undefined,
-      );
+      const result = wasm.process(source, input.corners, input.filter === 'enhanced-color');
       final = result.image;
       reservedBytes = result.reservedBytes;
     } else {

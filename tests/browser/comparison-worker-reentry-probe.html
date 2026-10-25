@@ -10,7 +10,7 @@
   ><input id="reentry" type="checkbox" checked /> Reproduce missing worker entry module-map
   registration</label
 >
-<button id="run">Run Web, C++, OpenCV — 20 iterations each</button>
+<button id="run">Run Web and C++ — 20 iterations each</button>
 <pre id="result">Ready</pre>
 <script type="module">
   const entry = '__WORKER_ENTRY__';
@@ -40,7 +40,6 @@
               asset,
               filter: 'enhanced-color',
               repetitions: 20,
-              opencvPreset: 'balanced',
               corners: [
                 { x: 5, y: 6 },
                 { x: 76, y: 3 },
@@ -72,7 +71,7 @@
       const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
       const asset = { blob, dimensions: { width: 80, height: 112 } },
         results = [];
-      for (const engine of ['web', 'cpp', 'opencv']) {
+      for (const engine of ['web', 'cpp']) {
         results.push(await runEngine(engine, asset, document.querySelector('#reentry').checked));
         output.textContent = JSON.stringify(results, null, 2);
       }

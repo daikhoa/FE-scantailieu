@@ -3,7 +3,6 @@ import { downloadBlob } from '../export/download-blob';
 import { createImagePdf } from '../export/image-pdf';
 import {
   COMPARISON_LABELS,
-  OPENCV_PRESET_LABELS,
   median,
   type ComparisonEngine,
   type ComparisonResult,
@@ -44,9 +43,6 @@ function ResultImage({
       <p>
         {result.image.dimensions.width} × {result.image.dimensions.height} · PNG không mất dữ liệu
       </p>
-      {result.engine === 'opencv' && result.filter === 'enhanced-color' && (
-        <p>Mức OpenCV: {OPENCV_PRESET_LABELS[result.opencvPreset ?? 'balanced']}</p>
-      )}
       <div
         className="comparison-image"
         ref={scrollRef}
@@ -153,7 +149,6 @@ export function ComparisonResults({
   const surfaces = useRef<Record<ComparisonEngine, HTMLDivElement | null>>({
     web: null,
     cpp: null,
-    opencv: null,
   });
   const synchronize = (engine: ComparisonEngine) => {
     const source = surfaces.current[engine];
@@ -172,7 +167,7 @@ export function ComparisonResults({
   };
   return (
     <div className="comparison-results">
-      {(['web', 'cpp', 'opencv'] as const).map((engine) => {
+      {(['web', 'cpp'] as const).map((engine) => {
         const result = results[engine];
         return result ? (
           <ResultImage

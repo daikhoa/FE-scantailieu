@@ -1,3 +1,4 @@
+import { refinePaperBackground } from './paper-background-field';
 import type { RgbaBackendInput } from '../engines/scanic-backend-contract';
 
 const BINS = 64;
@@ -44,8 +45,8 @@ function strokeAt(
 export function restorePaperAppearance(input: RgbaBackendInput): void {
   const { width, height } = input.dimensions;
   if (Math.min(width, height) < 192) return;
-  const columns = Math.min(MAX_GRID_SIDE, Math.max(4, Math.ceil(width / 48)));
-  const rows = Math.min(MAX_GRID_SIDE, Math.max(4, Math.ceil(height / 48)));
+  let columns = Math.min(MAX_GRID_SIDE, Math.max(4, Math.ceil(width / 48)));
+  let rows = Math.min(MAX_GRID_SIDE, Math.max(4, Math.ceil(height / 48)));
   const count = columns * rows,
     stride = Math.max(1, Math.ceil(Math.max(width, height) / 512));
   const radius = Math.max(2, Math.min(8, Math.round(Math.max(width, height) / 400)));
@@ -66,8 +67,9 @@ export function restorePaperAppearance(input: RgbaBackendInput): void {
     levels[i] = quantile(histograms, i * BINS, samples[i] ?? 0, 0.85);
     spreads[i] = (levels[i] ?? 0) - quantile(histograms, i * BINS, samples[i] ?? 0, 0.6);
   }
-  const background = new Float64Array(count * 3),
-    ink = new Float64Array(count * 3);
+  let background = new Float64Array(count * 3);
+  const ink = new Float64Array(count * 3);
+  const strokeMeans = new Float64Array(count);
   const backgrounds = new Uint32Array(count),
     dark = new Uint32Array(count),
     strokes = new Uint32Array(count);
@@ -87,7 +89,10 @@ export function restorePaperAppearance(input: RgbaBackendInput): void {
         dark[cell] = (dark[cell] ?? 0) + 1;
         for (let c = 0; c < 3; c++)
           ink[cell * 3 + c] = (ink[cell * 3 + c] ?? 0) + (input.pixels[at + c] ?? 0);
-        if (strokeAt(input, x, y, radius, value)) strokes[cell] = (strokes[cell] ?? 0) + 1;
+        if (strokeAt(input, x, y, radius, value)) {
+          strokes[cell] = (strokes[cell] ?? 0) + 1;
+          strokeMeans[cell] = (strokeMeans[cell] ?? 0) + value;
+        }
       }
     }
   const eligible = new Uint8Array(count),
@@ -137,14 +142,14 @@ export function restorePaperAppearance(input: RgbaBackendInput): void {
   paperLevels.sort((a, b) => a - b);
   const bright = percentile(paperLevels, 0.9),
     low = percentile(paperLevels, 0.1);
-  if (bright < 170 || bright - low < 24) return;
+  if (bright < 170) return;
   let anchors = 0;
   for (let i = 0; i < count; i++)
     if (text[i] === 1 && neutral[i] === 1 && (levels[i] ?? 0) >= bright - 12) anchors++;
   if (anchors < 2) return;
   const supported = new Uint8Array(count),
-    connected = new Uint8Array(count),
     queue: number[] = [];
+  let connected = new Uint8Array(count);
   for (let y = 0; y < rows; y++)
     for (let x = 0; x < columns; x++) {
       const i = y * columns + x;
@@ -180,6 +185,11 @@ export function restorePaperAppearance(input: RgbaBackendInput): void {
       queue.push(j);
     }
   }
+  for (let i = 0; i < count; i++)
+    strokeMeans[i] = (strokes[i] ?? 0) > 0 ? (strokeMeans[i] ?? 0) / (strokes[i] ?? 1) : 255;
+  const fine = refinePaperBackground(input, { columns, rows, background, connected }, strokeMeans);
+  if (bright - low < 24 && !fine.hasNarrowShadow) return;
+  ({ columns, rows, background, connected } = fine);
   const target = Math.max(232, Math.min(245, bright));
   const sample = (i: number, c: number) =>
     connected[i] === 1 ? (background[i * 3 + c] ?? 255) : 0;

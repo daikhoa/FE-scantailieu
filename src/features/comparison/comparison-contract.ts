@@ -1,28 +1,15 @@
 import type { DocumentCorners, ImageAsset } from '../../domain/document';
 import type { ComparisonFailureCode, ComparisonStage } from './comparison-error';
 
-export type ComparisonEngine = 'web' | 'cpp' | 'opencv';
-export type OpenCvPreset = 'gentle' | 'balanced' | 'text';
-export const COMPARISON_WASM_BASE = '/docscan-wasm/v6/';
+export type ComparisonEngine = 'web' | 'cpp';
+export const COMPARISON_WASM_BASE = '/docscan-wasm/v7/';
 export const COMPARISON_IMPLEMENTATIONS = {
-  web: 'web-paper-v1',
-  cpp: 'custom-cpp-paper-v1-wasm-v6',
-  opencv: 'opencv-paper-v1-wasm-v6',
+  web: 'web-paper-v2',
+  cpp: 'custom-cpp-paper-v2-wasm-v7',
 } as const;
 export const COMPARISON_LABELS = {
   web: 'Web hiện tại',
   cpp: 'C++ tự viết',
-  opencv: 'C++ OpenCV',
-} as const;
-export const OPENCV_PRESET_LABELS = {
-  gentle: 'Nhẹ',
-  balanced: 'Cân bằng',
-  text: 'Rõ chữ',
-} as const;
-export const COMPARISON_PAIRS = {
-  'web-opencv': ['web', 'opencv'],
-  'cpp-opencv': ['cpp', 'opencv'],
-  'web-cpp': ['web', 'cpp'],
 } as const;
 export type ComparisonFilter = 'original' | 'enhanced-color';
 // Typical "48 MP" files can contain 8064 × 6048 pixels. Never resize to fit.
@@ -32,7 +19,6 @@ export interface ComparisonInput {
   readonly corners: DocumentCorners;
   readonly filter: ComparisonFilter;
   readonly repetitions: number;
-  readonly opencvPreset?: OpenCvPreset;
 }
 export interface ComparisonSample {
   readonly decodeMs: number;
@@ -63,7 +49,6 @@ export interface ComparisonResult {
   readonly image: ImageAsset;
   readonly filter: ComparisonFilter;
   readonly implementation: string;
-  readonly opencvPreset?: OpenCvPreset;
 }
 
 export function validateComparisonInput(input: ComparisonInput): void {
@@ -82,8 +67,6 @@ export function validateComparisonInput(input: ComparisonInput): void {
     input.repetitions < 1 ||
     input.repetitions > 20 ||
     !['original', 'enhanced-color'].includes(input.filter) ||
-    (input.opencvPreset !== undefined &&
-      !Object.hasOwn(OPENCV_PRESET_LABELS, input.opencvPreset)) ||
     // Structured-cloned messages still require runtime tuple validation.
     (input.corners as readonly unknown[]).length !== 4 ||
     input.corners.some(

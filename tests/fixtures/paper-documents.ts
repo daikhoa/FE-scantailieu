@@ -1,6 +1,12 @@
 export function paperDocument(
   kind:
     | 'white'
+    | 'crease'
+    | 'diagonal-crease'
+    | 'faint-crease'
+    | 'printed-column'
+    | 'vertical-crease'
+    | 'printed-band'
     | 'warm'
     | 'pastel'
     | 'colored'
@@ -20,7 +26,27 @@ export function paperDocument(
       const px = Math.floor((x * 384) / width),
         py = Math.floor((y * 512) / height);
       const stroke = px % 16 < 2 && py % 24 >= 4 && py % 24 < 18;
-      const shade = kind === 'flat' ? 1 : 0.55 + (0.45 * x) / (width - 1);
+      let shade = [
+        'flat',
+        'crease',
+        'vertical-crease',
+        'diagonal-crease',
+        'faint-crease',
+        'printed-band',
+        'printed-column',
+      ].includes(kind)
+        ? 1
+        : 0.55 + (0.45 * x) / (width - 1);
+      const creaseDistance =
+        kind === 'vertical-crease'
+          ? Math.abs(px - 190)
+          : Math.abs(py - (kind === 'diagonal-crease' ? 210 + px * 0.2 : 250));
+      if (
+        ['crease', 'vertical-crease', 'diagonal-crease', 'faint-crease'].includes(kind) &&
+        creaseDistance < 14
+      )
+        shade *= 0.6 + (0.4 * creaseDistance) / 14;
+
       let color =
         kind === 'colored'
           ? [240, 200, 150]
@@ -31,7 +57,9 @@ export function paperDocument(
         color = [135, 135, 135];
       if (kind === 'gray-sidebar' && x < 128) color = [135, 135, 135];
       if (kind === 'color-panel' && x > 100 && x < 280 && y > 128 && y < 384) color = [35, 50, 70];
-      if (stroke) color = [40, 40, 40];
+      if (kind === 'printed-band' && Math.abs(py - 250) < 14) color = [142, 142, 142];
+      if (kind === 'printed-column' && Math.abs(px - 190) < 14) color = [142, 142, 142];
+      if (stroke) color = kind === 'faint-crease' ? [150, 150, 150] : [40, 40, 40];
       if (kind === 'inverse') color = stroke ? [230, 230, 230] : [40, 40, 40];
       if (kind === 'photo') {
         const v = 60 + ((x * 37 + y * 13) % 150);

@@ -8,10 +8,7 @@ import { runComparison } from './comparison-client';
 import { comparisonErrorMessage } from './comparison-error';
 import {
   COMPARISON_LABELS,
-  COMPARISON_PAIRS,
   COMPARISON_WASM_BASE,
-  OPENCV_PRESET_LABELS,
-  type OpenCvPreset,
   MAX_COMPARISON_INPUT_PIXELS,
   type ComparisonEngine,
   type ComparisonFilter,
@@ -25,8 +22,6 @@ export function ComparisonScreen() {
   const [imported, setImported] = useState<ImportedImage | null>(null);
   const [crop, setCrop] = useState<CropRegion>({ kind: 'full-frame' });
   const [editing, setEditing] = useState(false);
-  const [pair, setPair] = useState<keyof typeof COMPARISON_PAIRS>('web-opencv');
-  const [opencvPreset, setOpenCvPreset] = useState<OpenCvPreset>('balanced');
   const [filter, setFilter] = useState<ComparisonFilter>('enhanced-color');
   const [repetitions, setRepetitions] = useState(5);
   const [results, setResults] = useState<Partial<Record<ComparisonEngine, MeasuredResult>>>({});
@@ -114,7 +109,7 @@ export function ComparisonScreen() {
         try {
           const result = await runComparison(
             engine,
-            { asset: imported.original, corners, filter, repetitions, opencvPreset },
+            { asset: imported.original, corners, filter, repetitions },
             controller.signal,
             (completed) => {
               setStatus(`${LABELS[engine]}: ${String(completed)}/${String(repetitions)} lần.`);
@@ -155,16 +150,15 @@ export function ComparisonScreen() {
       <header>
         <a href="/">← Về trang chủ</a>
         <p className="eyebrow">Thử nghiệm trên thiết bị</p>
-        <h1>So sánh thuật toán và OpenCV</h1>
+        <h1>So sánh Web và C++ tự viết</h1>
         <p>
           Cùng ảnh gốc, cùng vùng cắt, đầu ra tối đa 3000 px. Chỉ đo cắt phối cảnh và bộ lọc; giải
           mã, xuất PNG/PDF dùng chung. Không đo AI hay bộ mã hóa của DLL Windows.
         </p>
       </header>
       <p>
-        OpenCV đã được cải tiến để cân bằng bóng sáng trên nền giấy, tăng rõ chữ và hạn chế khuếch
-        đại nhiễu, giữ màu. Chọn “Giữ nguyên màu” để chỉ đối chiếu bước cắt. Web và C++ tự viết vẫn
-        có trong danh sách cặp so sánh.
+        Cùng một vùng cắt và bộ lọc cho Web và C++ tự viết. Chọn “Giữ nguyên màu” để chỉ so sánh
+        bước cắt.
       </p>
       <section className="comparison-controls" aria-label="Cấu hình so sánh">
         <label className="comparison-file">
@@ -187,40 +181,6 @@ export function ComparisonScreen() {
           </p>
         )}
         <div className="comparison-actions">
-          <label>
-            Cặp so sánh
-            <select
-              aria-label="Cặp so sánh"
-              value={pair}
-              disabled={busy}
-              onChange={(event) => {
-                setPair(event.target.value as keyof typeof COMPARISON_PAIRS);
-                setResults({});
-              }}
-            >
-              <option value="web-opencv">Web hiện tại ↔ OpenCV</option>
-              <option value="cpp-opencv">C++ tự viết ↔ OpenCV</option>
-              <option value="web-cpp">Web hiện tại ↔ C++ tự viết</option>
-            </select>
-          </label>
-          <label>
-            Mức tăng cường OpenCV
-            <select
-              aria-label="Mức tăng cường OpenCV"
-              value={opencvPreset}
-              disabled={busy || filter === 'original'}
-              onChange={(event) => {
-                setOpenCvPreset(event.target.value as OpenCvPreset);
-                setResults({});
-              }}
-            >
-              {Object.entries(OPENCV_PRESET_LABELS).map(([key, label]) => (
-                <option key={key} value={key}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
           <label>
             Bộ lọc
             <select
@@ -293,7 +253,7 @@ export function ComparisonScreen() {
             className="primary-button"
             disabled={!imported || busy || editing}
             onClick={() => {
-              const order: ComparisonEngine[] = [...COMPARISON_PAIRS[pair]];
+              const order: ComparisonEngine[] = ['web', 'cpp'];
               if (reverse.current) order.reverse();
               reverse.current = !reverse.current;
               setResults({});
@@ -307,9 +267,6 @@ export function ComparisonScreen() {
           </button>
           <button disabled={!imported || busy || editing} onClick={() => void run(['cpp'])}>
             Chỉ chạy C++ tự viết
-          </button>
-          <button disabled={!imported || busy || editing} onClick={() => void run(['opencv'])}>
-            Chỉ chạy OpenCV
           </button>
           {busy && <button onClick={() => lifetime.current?.abort()}>Dừng đo</button>}
         </div>
@@ -377,9 +334,8 @@ export function ComparisonScreen() {
           onClick={() => {
             const report = {
               schema: 2,
-              selectedPair: pair,
+              selectedPair: 'web-cpp',
               measuredEngines: Object.keys(results),
-              opencvPreset,
               wasmAssets: COMPARISON_WASM_BASE,
               createdAt: new Date().toISOString(),
               boundary: 'shared browser decode; warp + enhanced/original; shared lossless PNG/PDF',

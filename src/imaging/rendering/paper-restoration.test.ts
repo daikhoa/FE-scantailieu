@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { applyDocumentFilter } from './document-filter';
 import { restorePaperAppearance } from './paper-restoration';
 
 import { paperDocument } from '../../../tests/fixtures/paper-documents';
@@ -70,6 +71,46 @@ describe('color-aware paper restoration', () => {
     expect(input.pixels).toBe(pixels);
     expect(input.dimensions).toEqual({ width: 1536, height: 2048 });
     expect(red(input, 48, 120)).toBeGreaterThan(210);
+  });
+  it.each(['crease', 'vertical-crease', 'diagonal-crease', 'faint-crease'] as const)(
+    'removes a narrow %s without darkening its paper',
+    (kind) => {
+      const input = paperDocument(kind);
+      const x = kind === 'vertical-crease' ? 190 : 12,
+        y = kind === 'vertical-crease' ? 30 : kind === 'diagonal-crease' ? 212 : 250;
+      const before = red(input, x, y);
+      applyDocumentFilter(input, 'enhanced-color');
+      expect(red(input, x, y)).toBeGreaterThan(210);
+      expect(red(input, x, y)).toBeGreaterThan(before);
+    },
+  );
+  it('preserves a printed gray band with ordinary dark ink', () => {
+    const input = paperDocument('printed-band'),
+      before = input.pixels.slice();
+    restorePaperAppearance(input);
+    let maximum = 0;
+    for (let y = 242; y < 258; y++)
+      for (let x = 40; x < 330; x++)
+        for (let c = 0; c < 3; c++) {
+          const at = (y * 384 + x) * 4 + c;
+          maximum = Math.max(maximum, Math.abs((input.pixels[at] ?? 0) - (before[at] ?? 0)));
+        }
+    expect(maximum).toBe(0);
+  });
+  it('preserves a vertical printed gray band', () => {
+    const input = paperDocument('printed-column'),
+      before = input.pixels.slice();
+    restorePaperAppearance(input);
+    expect(input.pixels.every((v, i) => v === before[i])).toBe(true);
+  });
+  it('preserves a dark colored graphic crossing a crease', () => {
+    const input = paperDocument('crease');
+    for (let y = 240; y < 260; y++)
+      for (let x = 120; x < 180; x++) input.pixels.set([42, 22, 30, 255], (y * 384 + x) * 4);
+    restorePaperAppearance(input);
+    expect(
+      Array.from(input.pixels.slice((250 * 384 + 150) * 4, (250 * 384 + 150) * 4 + 4)),
+    ).toEqual([42, 22, 30, 255]);
   });
   it('retains partial alpha and deterministic output', () => {
     const a = paperDocument(),
