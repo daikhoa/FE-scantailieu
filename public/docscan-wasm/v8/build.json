@@ -1,0 +1,26 @@
+{
+  "wasm_sha256": "8e971a8b932d6d3e455524c866cad8efea1b9e751aae63ed204a9171d34a8f3a",
+  "opencv": "ea8e60798e0319ccbe902f7994153b574f639809",
+  "maximum_input_pixels": 50000000,
+  "schema": 1,
+  "maximum_wasm_bytes": 805306368,
+  "maximum_output_side": 3000,
+  "sources": {
+    "src/paper-restoration.hpp": "dfb7e97e628a3f5dfe91b7b5f0affcb2c46166fcd6c846c098fce3666d775223",
+    "src/pixels.hpp": "d14a70f20b92cabde4b4fed9701068dc06fc4ebbe2179d3d96251eb244229efb",
+    "src/paper-field.cpp": "e04e4263f8766a10cb1de52ec1af4fb91dda65b7c41024b94d7eb361c03c9578",
+    "src/lab.hpp": "c024c306d12442ff2c4872842a7f1ecc684b35b3f0de8a41b50d6341c6c1c399",
+    "wasm/CMakeLists.txt": "4dbf665de77ea79ec345a845b351c7e8d0548f83a11699166995c1816437f1f4",
+    "src/geometry.cpp": "5f9236fa4d71268dc8f422ed722494072d90d06cf9a8e2dd718ed928e9ae1f97",
+    "include/docscan/docscan.h": "0e303290db21e35b21b615029187dc52296eb7d032faa6aa0359ada56ef12d17",
+    "wasm/bridge.cpp": "aed79bccca9808ed42f9529db4edbc8dfae49d3471376b5a6a22ef3d06414c45",
+    "src/adaptive-enhancement.hpp": "4343c70292914eef67448516d7a642e51b9b7ba3564ab266968664737b85a2ea",
+    "src/adaptive-enhancement.cpp": "ca98c89d3f5710760a0e6539fff695144d83793df242ffd0424bb449b94c16c4",
+    "src/filters.cpp": "dee59ef22e8df5602731c5316223945f8f77fec1d316631b19830642b64b2d9a",
+    "src/paper-field.hpp": "ef8d7f6e2baf1637c9d6569441843c357ad874bccca5021b304f1bd698a78ab5",
+    "src/paper-restoration.cpp": "f83307b06cfffa7b03e8b47af50ea62f8ce058fda91c08ee0133df3cfe489bb8",
+    "src/quality.cpp": "3f6b9478cef85517e5e9fae3bfd3e5908dba0d370f5abf20cacf625ccccc5c41"
+  },
+  "boundary": "shared browser decode -> native warp/measure/enhance -> shared browser encode/PDF",
+  "emscripten": "6.0.13"
+}

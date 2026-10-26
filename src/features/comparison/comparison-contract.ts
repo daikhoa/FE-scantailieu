@@ -1,11 +1,11 @@
-import type { DocumentCorners, ImageAsset } from '../../domain/document';
+import type { DocumentCorners, ImageAsset, RenderedVariant } from '../../domain/document';
 import type { ComparisonFailureCode, ComparisonStage } from './comparison-error';
 
 export type ComparisonEngine = 'web' | 'cpp';
-export const COMPARISON_WASM_BASE = '/docscan-wasm/v7/';
+export const COMPARISON_WASM_BASE = '/docscan-wasm/v8/';
 export const COMPARISON_IMPLEMENTATIONS = {
-  web: 'web-paper-v2',
-  cpp: 'custom-cpp-paper-v2-wasm-v7',
+  web: 'web-warp+adaptive-js-v1',
+  cpp: 'custom-cpp-warp+adaptive-cpp-wasm-v8',
 } as const;
 export const COMPARISON_LABELS = {
   web: 'Web hiện tại',
@@ -35,13 +35,18 @@ export type ComparisonCommand =
 export type ComparisonReply =
   | { readonly type: 'ready' }
   | { readonly type: 'sample'; readonly sample: ComparisonSample }
-  | { readonly type: 'done'; readonly image: ImageAsset }
+  | {
+      readonly type: 'done';
+      readonly image: ImageAsset;
+      readonly enhancement?: RenderedVariant['enhancement'];
+    }
   | {
       readonly type: 'error';
       readonly code: ComparisonFailureCode;
       readonly stage?: ComparisonStage;
     };
 export interface ComparisonResult {
+  readonly enhancement?: RenderedVariant['enhancement'];
   readonly engine: ComparisonEngine;
   readonly setupMs: number;
   readonly wallMs: number;

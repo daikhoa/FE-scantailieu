@@ -8,12 +8,16 @@ import {
 } from './comparison-contract';
 import { decodeRasterBitmap } from '../../imaging/codecs/decode-raster-bitmap';
 import { createBrowserRgbaCodec } from '../../imaging/codecs/browser-rgba-codec';
-import { applyFinalAppearance } from '../../imaging/restoration/enhanced-appearance';
+import {
+  applyFinalAppearance,
+  prepareEnhancedAppearance,
+} from '../../imaging/restoration/enhanced-appearance';
 import { warpPerspectiveRgba, type RgbaImage } from '../../imaging/rendering/perspective-warp';
 import { warpPerspectiveRegions } from '../../imaging/rendering/region-perspective-warp';
 import { validateQuad } from '../../imaging/geometry/quad';
 import { MAX_ENCODED_INPUT_BYTES } from '../../imaging/original-image-limits';
 import type { ImageAsset } from '../../domain/document';
+import type { RgbaBackendInput } from '../../imaging/engines/scanic-backend-contract';
 import { classifyComparisonError, type ComparisonStage } from './comparison-error';
 
 const scope = self as unknown as {
@@ -73,20 +77,26 @@ async function handle(command: ComparisonCommand) {
     throw new Error('invalid-input');
   const codec = createBrowserRgbaCodec();
   let image: ImageAsset | null = null;
+  let enhancement: RgbaBackendInput['enhancement'];
   for (let repetition = 0; repetition < input.repetitions; repetition++) {
     const started = performance.now();
     stage = 'decode';
     const source = await decode(input.asset);
     const decoded = performance.now();
-    let final: RgbaImage;
+    let final: RgbaBackendInput;
     let reservedBytes: number | null = null;
     stage = 'process';
     if (engine !== 'web') {
       if (!wasm) throw new Error('unavailable');
-      const result = wasm.process(source, input.corners, input.filter === 'enhanced-color');
+      const result = wasm.process(source, input.corners, false);
       final = result.image;
-      if (input.filter === 'shadow-removal') final = await applyFinalAppearance(final, input.filter);
       reservedBytes = result.reservedBytes;
+      if (input.filter === 'enhanced-color') {
+        const prepared = await prepareEnhancedAppearance(final);
+        const rendered = wasm.enhance(final, prepared.plan.field);
+        final = { ...rendered.image, enhancement: prepared.enhancement };
+        reservedBytes = Math.max(reservedBytes, rendered.reservedBytes);
+      } else final = await applyFinalAppearance(final, input.filter);
     } else {
       final =
         source.pixels.length <= 16_777_216 * 4 &&
@@ -111,6 +121,7 @@ async function handle(command: ComparisonCommand) {
       final = await applyFinalAppearance(final, input.filter);
     }
     const processed = performance.now();
+    enhancement = final.enhancement;
     stage = 'encode';
     // The same lossless encoder on both paths isolates raster quality from JPEG differences.
     image = {
@@ -132,7 +143,7 @@ async function handle(command: ComparisonCommand) {
     });
   }
   if (!image) throw new Error('failed');
-  scope.postMessage({ type: 'done', image });
+  scope.postMessage({ type: 'done', image, ...(enhancement ? { enhancement } : {}) });
 }
 
 scope.onmessage = (event) => {

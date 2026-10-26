@@ -10,6 +10,7 @@ import type {
 export { ScannerEngineError } from './scanner-engine-error';
 
 export interface RgbaBackendInput {
+  readonly enhancement?: 'local' | 'shadow-model' | 'model-unavailable';
   readonly dimensions: ImageDimensions;
   readonly pixels: Uint8ClampedArray<ArrayBuffer>;
   readonly timings?: { readonly warp3000: number; readonly restorationFilter: number };

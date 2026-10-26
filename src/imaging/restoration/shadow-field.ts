@@ -26,8 +26,9 @@ export function createShadowSample(input: RgbaBackendInput): ShadowField {
   validateRaster(input);
   const source = input.dimensions;
   const scale = Math.min(1, 384 / Math.max(source.width, source.height));
-  const width = Math.max(32, Math.ceil((source.width * scale) / 32) * 32);
-  const height = Math.max(32, Math.ceil((source.height * scale) / 32) * 32);
+  // Rounding error at exactly 384 must not allocate a thirteenth 32-pixel block.
+  const width = Math.min(384, Math.max(32, Math.ceil((source.width * scale) / 32) * 32));
+  const height = Math.min(384, Math.max(32, Math.ceil((source.height * scale) / 32) * 32));
   const plane = width * height;
   const data = new Float32Array(plane * 3);
   const value = (x: number, y: number, channel: number) => {

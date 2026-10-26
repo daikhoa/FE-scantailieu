@@ -75,7 +75,7 @@ describe('comparison measurement contract', () => {
     worker.onmessage?.(new MessageEvent('message', { data: { type: 'done', image: input.asset } }));
     await expect(result).resolves.toMatchObject({
       engine: 'cpp',
-      implementation: 'custom-cpp-paper-v2-wasm-v7',
+      implementation: 'custom-cpp-warp+adaptive-cpp-wasm-v8',
       filter: 'enhanced-color',
     });
     expect(terminate).toHaveBeenCalledOnce();

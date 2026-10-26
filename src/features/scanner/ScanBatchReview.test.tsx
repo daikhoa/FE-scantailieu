@@ -116,7 +116,11 @@ describe('ScanBatchReview', () => {
     });
     expect(onApplyRecipe.mock.calls[1]?.[1]).toEqual({
       ...page.page.recipe,
-      filter: { mode: 'enhanced-color', presetVersion: 'enhanced-color-v5', parameters: {} },
+      filter: {
+        mode: 'enhanced-color',
+        presetVersion: 'enhanced-color-v6-adaptive',
+        parameters: {},
+      },
     });
 
     fireEvent.click(screen.getByRole('button', { name: 'Cắt trang 1' }));

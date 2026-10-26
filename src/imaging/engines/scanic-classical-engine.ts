@@ -33,7 +33,7 @@ export interface ScanicEngineOptions {
   readonly codec?: RgbaImageCodec;
 }
 
-const ENGINE_VERSION = 'scanic-1.6.0+ml-only-perspective-v2-filter-v12-paper-v2';
+const ENGINE_VERSION = 'scanic-1.6.0+ml-only-perspective-v2-filter-v13-adaptive';
 const FILTER_MODES: readonly FilterMode[] = [
   'original',
   'ocr-color',
@@ -522,7 +522,9 @@ class ScanicEngine implements ScannerEngine {
       }
       recordPipelineTiming({ ...output.timings, jpegEncode });
       return {
-        recipeKey,
+        recipeKey:
+          output.enhancement === 'model-unavailable' ? recipeKey + ':model-unavailable' : recipeKey,
+        ...(output.enhancement ? { enhancement: output.enhancement } : {}),
         engineVersion: ENGINE_VERSION,
         image: { blob, dimensions: { ...output.dimensions } },
         ...(thumbnail === undefined ? {} : { thumbnail }),

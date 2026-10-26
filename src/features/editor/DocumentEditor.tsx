@@ -278,6 +278,11 @@ export function DocumentEditor({
           </p>
         )}
 
+        {latestVariant?.enhancement === 'model-unavailable' && (
+          <p className="editor__status" role="status">
+            Chưa tải hoặc chạy được bộ khử bóng. Đã giữ bản tăng cường nhẹ; bạn có thể thử lại.
+          </p>
+        )}
         <div className="editor__filters" role="group" aria-label="Bộ lọc tài liệu">
           {DOCUMENT_FILTERS.map((option) => (
             <button

@@ -40,6 +40,11 @@ function ResultImage({
   return (
     <article className="comparison-result">
       <h2>{LABELS[result.engine]}</h2>
+      {result.enhancement === 'shadow-model' && <p>Tăng cường · đã bù bóng bằng model</p>}
+      {result.enhancement === 'local' && <p>Tăng cường · xử lý nhẹ, giữ nền màu</p>}
+      {result.enhancement === 'model-unavailable' && (
+        <p role="status">Bộ khử bóng chưa sẵn sàng; kết quả chỉ dùng tăng cường nhẹ.</p>
+      )}
       {result.filter === 'shadow-removal' && <p>Khử bóng AI · GCNet</p>}
       <p>
         {result.image.dimensions.width} × {result.image.dimensions.height} · PNG không mất dữ liệu
@@ -124,7 +129,7 @@ function ResultImage({
           </dd>
         </div>
         <div>
-          <dt>Bộ nhớ WASM của bước cắt C++</dt>
+          <dt>Bộ nhớ WASM C++ (cắt và tăng cường)</dt>
           <dd>
             {result.engine !== 'web'
               ? mib(Math.max(...result.samples.map((s) => s.wasmReservedBytes ?? 0)))

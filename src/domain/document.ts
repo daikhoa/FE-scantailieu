@@ -66,6 +66,7 @@ export type DewarpOutcome =
     };
 
 export interface RenderedVariant {
+  readonly enhancement?: 'local' | 'shadow-model' | 'model-unavailable';
   /** Scoped to the immutable original; covers recipe, original orientation and engine version. */
   readonly recipeKey: string;
   readonly engineVersion: string;

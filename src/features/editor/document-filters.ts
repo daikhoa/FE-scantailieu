@@ -10,7 +10,11 @@ export interface DocumentFilterOption {
 
 export const DOCUMENT_FILTERS: readonly DocumentFilterOption[] = [
   { mode: 'original', label: 'Gốc', description: 'Chỉ cắt và làm thẳng' },
-  { mode: 'enhanced-color', label: 'Tăng cường', description: 'Màu đậm, tương phản rõ hơn' },
+  {
+    mode: 'enhanced-color',
+    label: 'Tăng cường',
+    description: 'Bù bóng theo vùng, làm rõ chữ và giữ màu nền',
+  },
   {
     mode: 'shadow-removal',
     label: 'Khử bóng AI',
@@ -23,7 +27,7 @@ export const DOCUMENT_FILTERS: readonly DocumentFilterOption[] = [
 
 function presetVersion(mode: FilterMode): string {
   if (mode === 'shadow-removal') return 'gcnet-2eb69a0a-field-v1';
-  if (mode === 'enhanced-color') return 'enhanced-color-v5';
+  if (mode === 'enhanced-color') return 'enhanced-color-v6-adaptive';
   return mode === 'original'
     ? 'original-v1'
     : mode === 'black-and-white'

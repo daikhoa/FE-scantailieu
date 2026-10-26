@@ -355,6 +355,12 @@ export function ScanBatchReview({
 
             {selectedPage?.kind === 'ready' ? (
               <>
+                {selectedPage.page.variant.enhancement === 'model-unavailable' && (
+                  <p className="batch-review__warning" role="status">
+                    Chưa tải hoặc chạy được bộ khử bóng. Đã giữ bản tăng cường nhẹ; chọn lại Tăng
+                    cường để thử lại.
+                  </p>
+                )}
                 {pageWarnings(selectedPage).map((warning) => (
                   <p className="batch-review__warning" role="alert" key={warning}>
                     {RESTORATION_WARNING_LABELS[warning]}

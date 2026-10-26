@@ -19,6 +19,10 @@ function redChannel(input: RgbaBackendInput): number[] {
 }
 
 describe('rotateOwnedRgba', () => {
+  it('preserves model fallback information after rotating the output', () => {
+    const result = rotateOwnedRgba({ ...image(), enhancement: 'model-unavailable' }, 90);
+    expect(result.enhancement).toBe('model-unavailable');
+  });
   it('reuses the owned input for a zero-degree rotation', () => {
     const input = image();
     expect(rotateOwnedRgba(input, 0)).toBe(input);

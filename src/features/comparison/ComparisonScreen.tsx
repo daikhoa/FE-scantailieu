@@ -153,8 +153,9 @@ export function ComparisonScreen() {
         <h1>So sánh Web và C++ tự viết</h1>
         <p>
           Cùng ảnh gốc, cùng vùng cắt, đầu ra tối đa 3000 px. Chỉ đo cắt phối cảnh và bộ lọc; giải
-          mã, xuất PNG/PDF dùng chung. Khi chọn Khử bóng AI, cả hai dùng chung GCNet trên trình
-          duyệt; không đo model nhận diện góc hay bộ mã hóa của DLL Windows.
+          mã và xuất PNG/PDF dùng chung. Cắt và tăng cường điểm ảnh chạy riêng bằng JavaScript hoặc
+          C++. GCNet dùng chung ONNX Runtime trên trình duyệt khi cần bù bóng; không đo model hay bộ
+          mã hóa của DLL Windows.
         </p>
       </header>
       <p>
@@ -230,6 +231,12 @@ export function ComparisonScreen() {
             Dùng toàn ảnh
           </button>
         </div>
+        {filter === 'enhanced-color' && (
+          <p>
+            Tăng cường tải model khoảng 6 MB khi cần bù bóng, giữ nguyên kích thước ảnh và tự dùng
+            xử lý nhẹ cho nền sáng đều hoặc nền màu cần bảo vệ.
+          </p>
+        )}
         {filter === 'shadow-removal' && (
           <p>
             Khử bóng AI tải model khoảng 6 MB khi dùng lần đầu. Nên dùng cho giấy có bóng rộng và

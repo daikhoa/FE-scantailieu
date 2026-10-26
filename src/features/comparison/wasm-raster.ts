@@ -1,5 +1,6 @@
 import type { DocumentCorners } from '../../domain/document';
 import type { RgbaImage } from '../../imaging/rendering/perspective-warp';
+import type { ShadowField } from '../../imaging/restoration/shadow-field';
 
 interface WasmRaster {
   HEAPU8: Uint8Array<ArrayBuffer>;
@@ -17,6 +18,14 @@ interface WasmRaster {
   _ds_wasm_width(): number;
   _ds_wasm_height(): number;
   _ds_wasm_release(): void;
+  _ds_wasm_enhance_owned(
+    input: number,
+    width: number,
+    height: number,
+    field: number,
+    fieldWidth: number,
+    fieldHeight: number,
+  ): number;
 }
 
 export async function loadWasmRaster(assetBase: string) {
@@ -26,6 +35,41 @@ export async function loadWasmRaster(assetBase: string) {
   const factory = (await import(/* @vite-ignore */ path)) as { default: () => Promise<WasmRaster> };
   const module = await factory.default();
   return {
+    enhance(input: RgbaImage, field?: ShadowField) {
+      let pointer = 0,
+        illumination = 0;
+      try {
+        pointer = module._malloc(input.pixels.byteLength);
+        if (field) illumination = module._malloc(field.data.byteLength);
+        if (!pointer || (field && !illumination)) throw new Error('out-of-memory');
+        module.HEAPU8.set(input.pixels, pointer);
+        if (field)
+          module.HEAPU8.set(
+            new Uint8Array(field.data.buffer, field.data.byteOffset, field.data.byteLength),
+            illumination,
+          );
+        const status = module._ds_wasm_enhance_owned(
+          pointer,
+          input.dimensions.width,
+          input.dimensions.height,
+          illumination,
+          field?.width ?? 0,
+          field?.height ?? 0,
+        );
+        if (status !== 0) throw new Error(status === 8 ? 'out-of-memory' : 'failed');
+        const offset = module._ds_wasm_output();
+        const pixels = new Uint8ClampedArray(input.pixels.length);
+        pixels.set(module.HEAPU8.subarray(offset, offset + pixels.length));
+        return {
+          image: { dimensions: input.dimensions, pixels },
+          reservedBytes: module.HEAPU8.buffer.byteLength,
+        };
+      } finally {
+        module._ds_wasm_release();
+        if (illumination) module._free(illumination);
+        if (pointer) module._free(pointer);
+      }
+    },
     process(input: RgbaImage, corners: DocumentCorners, enhanced: boolean) {
       let pointer = 0;
       let points = 0;

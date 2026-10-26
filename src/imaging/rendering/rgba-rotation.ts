@@ -45,5 +45,5 @@ export function rotateOwnedRgba(input: RgbaBackendInput, rotation: QuarterTurn):
       pixels[destinationOffset + 3] = input.pixels[sourceOffset + 3] ?? 0;
     }
   }
-  return { dimensions, pixels };
+  return { ...input, dimensions, pixels };
 }

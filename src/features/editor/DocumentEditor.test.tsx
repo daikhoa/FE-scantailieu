@@ -188,13 +188,17 @@ describe('DocumentEditor', () => {
       },
       rotation: 0,
       dewarp: { mode: 'perspective-only' },
-      filter: { mode: 'enhanced-color', presetVersion: 'enhanced-color-v5', parameters: {} },
+      filter: {
+        mode: 'enhanced-color',
+        presetVersion: 'enhanced-color-v6-adaptive',
+        parameters: {},
+      },
     });
     expect(screen.getByRole('button', { name: 'Tăng cường' })).toHaveAttribute(
       'aria-pressed',
       'true',
     );
-    expect(screen.getByText('Màu đậm, tương phản rõ hơn')).toBeInTheDocument();
+    expect(screen.getByText('Bù bóng theo vùng, làm rõ chữ và giữ màu nền')).toBeInTheDocument();
     expect(screen.getByRole('img', { name: 'Bản xem trước tài liệu' })).toHaveAttribute(
       'src',
       'blob:preview-2',

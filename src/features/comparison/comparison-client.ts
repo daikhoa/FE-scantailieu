@@ -78,6 +78,7 @@ export async function runComparison(
           wallMs: performance.now() - start,
           samples,
           image: reply.image,
+          ...(reply.enhancement ? { enhancement: reply.enhancement } : {}),
           filter: input.filter,
           implementation:
             COMPARISON_IMPLEMENTATIONS[engine] +
