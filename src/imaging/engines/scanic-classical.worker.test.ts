@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ScanicWorkerRequest } from './scanic-worker-backend';
+import type { renderDocscanRgba } from './docscan-raster';
+
+const raster = vi.hoisted(() => ({ render: vi.fn<typeof renderDocscanRgba>() }));
+vi.mock('./docscan-raster', () => ({ renderDocscanRgba: raster.render }));
 
 const vendor = vi.hoisted(() => ({
   initialize: vi.fn(() => Promise.resolve()),
@@ -30,6 +34,7 @@ let response = vi.fn<(message: unknown, options?: StructuredSerializeOptions) =>
 
 beforeEach(async () => {
   vi.resetModules();
+  raster.render.mockReset();
   vendor.options = [];
   vendor.initialize.mockReset().mockResolvedValue(undefined);
   vendor.scan.mockReset().mockResolvedValue({ success: false, corners: null, confidence: null });
@@ -137,12 +142,21 @@ describe('Scanic document detector worker runtime', () => {
     expect(response).toHaveBeenLastCalledWith({ id: 2, kind: 'failure', code: 'failed' });
   });
 
-  it('warps RGBA pixels without DOM canvas and transfers the owned output buffer', async () => {
+  it('delegates filter/rotation to the shared C++ adapter and transfers its owned output', async () => {
     await send({ id: 1, operation: 'initialize' });
     const pixels = new Uint8ClampedArray([
       10, 10, 10, 255, 20, 20, 20, 255, 30, 30, 30, 255, 40, 40, 40, 255, 50, 50, 50, 255, 60, 60,
       60, 255,
     ]);
+    const nativeOutput = {
+      dimensions: { width: 3, height: 2 },
+      pixels: new Uint8ClampedArray(24).fill(255),
+    };
+    raster.render.mockResolvedValue({
+      image: nativeOutput,
+      reservedBytes: 16_777_216,
+      inputPixelBytes: pixels.byteLength,
+    });
     await send({
       id: 2,
       operation: 'warp',
@@ -177,9 +191,20 @@ describe('Scanic document detector worker runtime', () => {
     ) {
       throw new Error('Expected a worker RGBA response.');
     }
-    expect([0, 4, 8, 12, 16, 20].map((offset) => responsePixels[offset])).toEqual([
-      255, 255, 0, 255, 255, 0,
-    ]);
+    expect(raster.render).toHaveBeenCalledWith(
+      { dimensions: { width: 2, height: 3 }, pixels },
+      [
+        { x: 0, y: 0 },
+        { x: 2, y: 0 },
+        { x: 2, y: 3 },
+        { x: 0, y: 3 },
+      ],
+      'black-and-white',
+      90,
+      undefined,
+      undefined,
+    );
+    expect(responsePixels).toBe(nativeOutput.pixels);
     expect(call?.[1]).toEqual({ transfer: [responsePixels.buffer] });
   });
 

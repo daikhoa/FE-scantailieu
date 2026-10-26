@@ -24,6 +24,7 @@ import { MAX_WORKING_IMAGE_PIXELS, MAX_WORKING_IMAGE_SIDE } from '../working-ima
 import { createCompatibleScanicBackend } from './scanic-compatible-backend';
 import { type ClassicalBackend, ScannerEngineError } from './scanic-backend-contract';
 import { SCANIC_CLASSICAL_MIN_CONFIDENCE, SCANIC_ML_MIN_SCORE } from './scanic-detector-runtime';
+import { DOCSCAN_IMPLEMENTATION } from './docscan-assets';
 export type { ClassicalBackend, RgbaBackendInput } from './scanic-backend-contract';
 
 export interface ScanicEngineOptions {
@@ -33,7 +34,7 @@ export interface ScanicEngineOptions {
   readonly codec?: RgbaImageCodec;
 }
 
-const ENGINE_VERSION = 'scanic-1.6.0+ml-only-perspective-v2-filter-v13-adaptive';
+const ENGINE_VERSION = `scanic-1.6.0+${DOCSCAN_IMPLEMENTATION}`;
 const FILTER_MODES: readonly FilterMode[] = [
   'original',
   'ocr-color',

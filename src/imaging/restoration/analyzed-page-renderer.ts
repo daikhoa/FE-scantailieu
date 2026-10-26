@@ -80,7 +80,7 @@ export async function renderAnalyzedPage(
       kind: 'applied',
       stages: analysis.stages,
       classifierModel: analysis.classifierModel,
-      provider: 'browser-pixel-pipeline@2',
+      provider: 'docscan-cpp-wasm@9',
       warnings: analysis.warnings,
     };
   return { variant, restoration, ...(analysis === undefined ? {} : { analysis }) };

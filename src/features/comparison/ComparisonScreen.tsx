@@ -150,7 +150,7 @@ export function ComparisonScreen() {
       <header>
         <a href="/">← Về trang chủ</a>
         <p className="eyebrow">Thử nghiệm trên thiết bị</p>
-        <h1>So sánh Web và C++ tự viết</h1>
+        <h1>So sánh Web cũ và thư viện C++</h1>
         <p>
           Cùng ảnh gốc, cùng vùng cắt, đầu ra tối đa 3000 px. Chỉ đo cắt phối cảnh và bộ lọc; giải
           mã và xuất PNG/PDF dùng chung. Cắt và tăng cường điểm ảnh chạy riêng bằng JavaScript hoặc
@@ -159,8 +159,8 @@ export function ComparisonScreen() {
         </p>
       </header>
       <p>
-        Cùng một vùng cắt và bộ lọc cho Web và C++ tự viết. Chọn “Giữ nguyên màu” để chỉ so sánh
-        bước cắt.
+        Nhánh C++ là thư viện trang chủ đang sử dụng; Web cũ được giữ làm mốc đối chiếu. Chọn “Giữ
+        nguyên màu” để chỉ so sánh bước cắt.
       </p>
       <section className="comparison-controls" aria-label="Cấu hình so sánh">
         <label className="comparison-file">
@@ -278,10 +278,10 @@ export function ComparisonScreen() {
             So sánh cả hai
           </button>
           <button disabled={!imported || busy || editing} onClick={() => void run(['web'])}>
-            Chỉ chạy Web
+            Chỉ chạy Web cũ
           </button>
           <button disabled={!imported || busy || editing} onClick={() => void run(['cpp'])}>
-            Chỉ chạy C++ tự viết
+            Chạy thư viện đang dùng
           </button>
           {busy && <button onClick={() => lifetime.current?.abort()}>Dừng đo</button>}
         </div>

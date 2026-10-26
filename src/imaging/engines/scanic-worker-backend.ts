@@ -145,7 +145,7 @@ export function createScanicWorkerBackend(): ClassicalBackend {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         close('timeout');
-      }, 30_000);
+      }, command.operation === 'warp' || command.operation === 'warp-asset' ? 90_000 : 30_000);
       current = { id, operation: command.operation, resolve, reject, timer };
       try {
         const message: ScanicWorkerRequest = { ...command, id };

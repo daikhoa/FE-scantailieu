@@ -87,7 +87,7 @@ export function createScanicMainThreadBackend(): ClassicalBackend {
       const timer = setTimeout(() => {
         current = null;
         reject(new ScannerEngineError('timeout'));
-      }, 30_000);
+      }, message.operation === 'warp' || message.operation === 'warp-asset' ? 90_000 : 30_000);
       current = { id, resolve, reject, timer };
       try {
         channel.port1.postMessage(

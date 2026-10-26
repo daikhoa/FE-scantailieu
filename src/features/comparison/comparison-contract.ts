@@ -1,15 +1,16 @@
 import type { DocumentCorners, ImageAsset, RenderedVariant } from '../../domain/document';
 import type { ComparisonFailureCode, ComparisonStage } from './comparison-error';
+import { DOCSCAN_WASM_BASE, DOCSCAN_IMPLEMENTATION } from '../../imaging/engines/docscan-assets';
 
 export type ComparisonEngine = 'web' | 'cpp';
-export const COMPARISON_WASM_BASE = '/docscan-wasm/v8/';
+export const COMPARISON_WASM_BASE = DOCSCAN_WASM_BASE;
 export const COMPARISON_IMPLEMENTATIONS = {
   web: 'web-warp+adaptive-js-v1',
-  cpp: 'custom-cpp-warp+adaptive-cpp-wasm-v8',
+  cpp: DOCSCAN_IMPLEMENTATION,
 } as const;
 export const COMPARISON_LABELS = {
-  web: 'Web hiện tại',
-  cpp: 'C++ tự viết',
+  web: 'Web cũ (đối chiếu)',
+  cpp: 'Thư viện C++ (đang dùng)',
 } as const;
 export type ComparisonFilter = 'original' | 'enhanced-color' | 'shadow-removal';
 // Typical "48 MP" files can contain 8064 × 6048 pixels. Never resize to fit.

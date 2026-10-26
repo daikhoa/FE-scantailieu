@@ -186,6 +186,7 @@ async function analysisFor(
 function restorationPlan(analysis: ClassificationAnalysis): LocalRestorationAnalysis {
   return {
     ...createAdaptiveRestorationPlan(analysis.scores, analysis.quality),
+    defectScores: analysis.scores,
     timings: analysis.timings,
   };
 }

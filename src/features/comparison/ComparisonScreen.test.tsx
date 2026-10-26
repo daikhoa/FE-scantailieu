@@ -41,12 +41,16 @@ describe('comparison screen', () => {
       target: { files: [new File(['image'], 'scan.png', { type: 'image/png' })] },
     });
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Chỉ chạy C++ tự viết' })).toBeEnabled(),
+      expect(screen.getByRole('button', { name: 'Chạy thư viện đang dùng' })).toBeEnabled(),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Chỉ chạy C++ tự viết' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('C++ tự viết: Không đủ bộ nhớ');
+    fireEvent.click(screen.getByRole('button', { name: 'Chạy thư viện đang dùng' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Thư viện C++ (đang dùng): Không đủ bộ nhớ',
+    );
     expect(screen.getByRole('alert')).toHaveTextContent('process/out-of-memory');
-    expect(screen.queryByRole('heading', { name: 'C++ tự viết' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Thư viện C++ (đang dùng)' }),
+    ).not.toBeInTheDocument();
   });
   it('keeps comparison opt-in and explains unsupported thermal/CPU measurements', () => {
     render(<ComparisonScreen />);
@@ -86,7 +90,7 @@ describe('comparison screen', () => {
       expect(screen.getByRole('button', { name: 'So sánh cả hai' })).toBeEnabled(),
     );
     fireEvent.click(screen.getByRole('button', { name: 'So sánh cả hai' }));
-    await screen.findByRole('heading', { name: 'C++ tự viết' });
+    await screen.findByRole('heading', { name: 'Thư viện C++ (đang dùng)' });
     expect(order).toEqual(['web', 'cpp']);
     const calls = vi.mocked(runComparison).mock.calls;
     expect(calls[0]?.[1]).toEqual(calls[1]?.[1]);
@@ -102,11 +106,13 @@ describe('comparison screen', () => {
       target: { files: [new File(['image'], 'scan.png', { type: 'image/png' })] },
     });
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Chỉ chạy C++ tự viết' })).toBeEnabled(),
+      expect(screen.getByRole('button', { name: 'Chạy thư viện đang dùng' })).toBeEnabled(),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Chỉ chạy C++ tự viết' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Chạy thư viện đang dùng' }));
     expect(await screen.findByRole('alert')).toHaveTextContent('Không chạy được bộ xử lý');
-    expect(screen.queryByRole('heading', { name: 'C++ tự viết' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Thư viện C++ (đang dùng)' }),
+    ).not.toBeInTheDocument();
   });
   it('runs original mode through only Web and custom C++', async () => {
     vi.mocked(importImage).mockResolvedValue({ original: asset });
@@ -132,7 +138,7 @@ describe('comparison screen', () => {
       expect(screen.getByRole('button', { name: 'So sánh cả hai' })).toBeEnabled(),
     );
     fireEvent.click(screen.getByRole('button', { name: 'So sánh cả hai' }));
-    await screen.findByRole('heading', { name: 'C++ tự viết' });
+    await screen.findByRole('heading', { name: 'Thư viện C++ (đang dùng)' });
     expect(vi.mocked(runComparison).mock.calls.map((c) => c[0])).toEqual(['web', 'cpp']);
     expect(vi.mocked(runComparison).mock.calls.every((c) => c[1].filter === 'original')).toBe(true);
   });

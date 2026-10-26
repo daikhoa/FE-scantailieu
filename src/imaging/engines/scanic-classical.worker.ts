@@ -1,10 +1,8 @@
-import { applyFinalAppearance } from '../restoration/enhanced-appearance';
-import { rotateOwnedRgba } from '../rendering/rgba-rotation';
 import type { RgbaBackendInput } from './scanic-backend-contract';
 import type { ScanicWorkerRequest, ScanicWorkerResponse } from './scanic-worker-backend';
-import { warpPerspectiveRgba } from '../rendering/perspective-warp';
 import { ScanicDetectorRuntime } from './scanic-detector-runtime';
-import { warpRasterAsset } from '../rendering/raster-asset-warp';
+import { renderDocscanAsset } from './docscan-asset';
+import { renderDocscanRgba } from './docscan-raster';
 
 let detector: ScanicDetectorRuntime | null = null;
 
@@ -19,17 +17,25 @@ async function execute(request: ScanicWorkerRequest): Promise<unknown> {
     return null;
   }
   if (request.operation === 'warp' || request.operation === 'warp-asset') {
-    const started = performance.now();
-    const corrected =
+    const result =
       request.operation === 'warp-asset'
-        ? await warpRasterAsset(request.asset, request.corners, request.maximumOutputLongSide)
-        : warpPerspectiveRgba(request.input, request.corners, request.maximumOutputLongSide);
-    const warped = performance.now();
-    const filtered = await applyFinalAppearance(corrected, request.filter, request.analysis);
-    return {
-      ...rotateOwnedRgba(filtered, request.rotation),
-      timings: { warp3000: warped - started, restorationFilter: performance.now() - warped },
-    };
+        ? await renderDocscanAsset(
+            request.asset,
+            request.corners,
+            request.filter,
+            request.rotation,
+            request.maximumOutputLongSide,
+            request.analysis,
+          )
+        : await renderDocscanRgba(
+            request.input,
+            request.corners,
+            request.filter,
+            request.rotation,
+            request.maximumOutputLongSide,
+            request.analysis,
+          );
+    return result.image;
   }
   if (detector === null) throw new Error('Scanner not initialized.');
   const input: RgbaBackendInput = request.input;

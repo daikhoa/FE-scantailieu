@@ -1,4 +1,5 @@
 import { SCANIC_ML_ASSET_BASE, SCANIC_ORT_VERSION } from './src/imaging/engines/scanic-ml-assets';
+import { DOCSCAN_WASM_BASE } from './src/imaging/engines/docscan-assets';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 import { readFileSync } from 'node:fs';
@@ -40,7 +41,17 @@ export default defineConfig({
           'docscan.mjs': 'text/javascript; charset=utf-8',
           'docscan.wasm': 'application/wasm',
         } as const;
-        for (const version of ['v1', 'v2', 'v3', 'v4', 'v5'])
+        for (const version of [
+          'v1',
+          'v2',
+          'v3',
+          'v4',
+          'v5',
+          'v6',
+          'v7',
+          'v8',
+          DOCSCAN_WASM_BASE.split('/')[2],
+        ])
           server.middlewares.use(`/docscan-wasm/${version}`, (request, response, next) => {
             const name = new URL(request.url ?? '/', 'http://localhost').pathname.slice(1);
             if (!Object.hasOwn(rasterAssets, name)) {
@@ -84,6 +95,7 @@ export default defineConfig({
           const path = id.replaceAll('\\', '/');
           if (path.endsWith('/shadow-runtime-error.ts')) return 'shadow-runtime-contract';
           if (path.endsWith('/scanic-ml-assets.ts')) return 'scanic-ml-config';
+          if (path.endsWith('/docscan-assets.ts')) return 'docscan-config';
         },
       },
     },

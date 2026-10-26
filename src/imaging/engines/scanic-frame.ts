@@ -1,8 +1,6 @@
 import { ScanicDetectorRuntime } from './scanic-detector-runtime';
-import { applyFinalAppearance } from '../restoration/enhanced-appearance';
-import { warpPerspectiveRgba } from '../rendering/perspective-warp';
-import { rotateOwnedRgba } from '../rendering/rgba-rotation';
-import { warpRasterAsset } from '../rendering/raster-asset-warp';
+import { renderDocscanAsset } from './docscan-asset';
+import { renderDocscanRgba } from './docscan-raster';
 import type { ScanicWorkerRequest, ScanicWorkerResponse } from './scanic-worker-backend';
 
 // A separate same-origin realm gives the no-Worker fallback its own vendor ONNX cache.
@@ -40,14 +38,25 @@ const connect = (event: MessageEvent) => {
           detector: 'ml',
         };
       } else {
-        const warped =
+        const result =
           request.operation === 'warp-asset'
-            ? await warpRasterAsset(request.asset, request.corners, request.maximumOutputLongSide)
-            : warpPerspectiveRgba(request.input, request.corners, request.maximumOutputLongSide);
-        output = rotateOwnedRgba(
-          await applyFinalAppearance(warped, request.filter, request.analysis),
-          request.rotation,
-        );
+            ? await renderDocscanAsset(
+                request.asset,
+                request.corners,
+                request.filter,
+                request.rotation,
+                request.maximumOutputLongSide,
+                request.analysis,
+              )
+            : await renderDocscanRgba(
+                request.input,
+                request.corners,
+                request.filter,
+                request.rotation,
+                request.maximumOutputLongSide,
+                request.analysis,
+              );
+        output = result.image;
       }
       const response: ScanicWorkerResponse = { id: request.id, kind: 'success', output };
       const transfer =

@@ -4,6 +4,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { resolve, dirname, basename } from 'node:path';
 import assert from 'node:assert/strict';
 import ts from 'typescript';
+import { existsSync } from 'node:fs';
 
 const directory = resolve(process.argv[2] ?? 'dist/assets');
 const entries = (await readdir(directory)).filter((file) =>
@@ -67,4 +68,60 @@ for (const entry of entryPaths) {
 }
 console.log(
   `Build: ${entries.length} processing entries / ${visited.size} emitted modules checked; no entry re-import.`,
+);
+
+// Production may use browser codecs/model runtimes, but cannot quietly resume JS raster math.
+const forbidden = new Set(
+  [
+    'src/imaging/rendering/perspective-warp.ts',
+    'src/imaging/rendering/region-perspective-warp.ts',
+    'src/imaging/rendering/document-filter.ts',
+    'src/imaging/rendering/enhanced-color.ts',
+    'src/imaging/restoration/adaptive-enhancement.ts',
+    'src/imaging/restoration/enhanced-appearance.ts',
+  ].map((file) => resolve(file)),
+);
+const productionVisited = new Set();
+async function inspectProduction(file) {
+  assert.equal(forbidden.has(file), false, `Production imports legacy JS raster kernel: ${file}`);
+  if (productionVisited.has(file)) return;
+  productionVisited.add(file);
+  const source = ts.createSourceFile(
+    file,
+    await readFile(file, 'utf8'),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const dependencies = [];
+  function visit(node) {
+    if (ts.isImportDeclaration(node) && !node.importClause?.isTypeOnly) {
+      const clause = node.importClause;
+      const onlyTypes =
+        clause?.namedBindings &&
+        ts.isNamedImports(clause.namedBindings) &&
+        !clause.name &&
+        clause.namedBindings.elements.every((element) => element.isTypeOnly);
+      if (!onlyTypes && ts.isStringLiteral(node.moduleSpecifier))
+        dependencies.push(node.moduleSpecifier.text);
+    } else if (
+      ts.isCallExpression(node) &&
+      node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+      node.arguments[0] &&
+      ts.isStringLiteral(node.arguments[0])
+    )
+      dependencies.push(node.arguments[0].text);
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  for (const dependency of dependencies) {
+    if (!dependency.startsWith('.')) continue;
+    const candidate = resolve(dirname(file), dependency);
+    const target = ['.ts', '.tsx'].map((extension) => candidate + extension).find(existsSync);
+    if (target) await inspectProduction(target);
+  }
+}
+for (const entry of ['scanic-classical.worker.ts', 'scanic-frame.ts'])
+  await inspectProduction(resolve('src/imaging/engines', entry));
+console.log(
+  'Production scanner: native raster path verified; legacy JS kernels remain comparison-only.',
 );

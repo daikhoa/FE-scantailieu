@@ -1,6 +1,7 @@
 import type { ImageAsset, ImageDimensions } from '../../domain/document';
 import type { AppliedRestorationStage, RestorationWarning } from './restoration-types';
 import type { DocumentQualityProfile } from '../analysis/document-quality';
+import type { DocumentDefectScores } from './restoration-policy';
 
 export interface RestorationStrengths {
   readonly shadow: number;
@@ -11,6 +12,8 @@ export interface RestorationStrengths {
 }
 
 export interface LocalRestorationAnalysis {
+  /** Raw inference evidence; the C++ library owns the production appearance policy. */
+  readonly defectScores?: DocumentDefectScores;
   readonly kind: 'analysis';
   readonly stages: readonly AppliedRestorationStage[];
   readonly classifierModel: string;

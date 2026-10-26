@@ -8,10 +8,9 @@ import {
 } from './comparison-contract';
 import { decodeRasterBitmap } from '../../imaging/codecs/decode-raster-bitmap';
 import { createBrowserRgbaCodec } from '../../imaging/codecs/browser-rgba-codec';
-import {
-  applyFinalAppearance,
-  prepareEnhancedAppearance,
-} from '../../imaging/restoration/enhanced-appearance';
+import { applyFinalAppearance } from '../../imaging/restoration/enhanced-appearance';
+import { renderDocscanAsset } from '../../imaging/engines/docscan-asset';
+import { loadDocscanModule } from '../../imaging/engines/docscan-module';
 import { warpPerspectiveRgba, type RgbaImage } from '../../imaging/rendering/perspective-warp';
 import { warpPerspectiveRegions } from '../../imaging/rendering/region-perspective-warp';
 import { validateQuad } from '../../imaging/geometry/quad';
@@ -25,7 +24,6 @@ const scope = self as unknown as {
   postMessage(reply: ComparisonReply): void;
 };
 let engine: ComparisonEngine | null = null;
-let wasm: Awaited<ReturnType<typeof import('./wasm-raster').loadWasmRaster>> | null = null;
 let running = false;
 let stage: ComparisonStage = 'initialize';
 const signal = new AbortController().signal;
@@ -60,8 +58,7 @@ async function handle(command: ComparisonCommand) {
     if (engine !== null) throw new Error('invalid-state');
     if (!Object.hasOwn(COMPARISON_LABELS, command.engine)) throw new Error('invalid-input');
     engine = command.engine;
-    if (engine !== 'web')
-      wasm = await (await import('./wasm-raster')).loadWasmRaster(COMPARISON_WASM_BASE);
+    if (engine !== 'web') await loadDocscanModule(COMPARISON_WASM_BASE);
     scope.postMessage({ type: 'ready' });
     return;
   }
@@ -82,29 +79,20 @@ async function handle(command: ComparisonCommand) {
   for (let repetition = 0; repetition < input.repetitions; repetition++) {
     const started = performance.now();
     stage = 'decode';
-    const source = await decode(input.asset);
-    const decoded = performance.now();
+    const source = engine === 'web' ? await decode(input.asset) : null;
+    let decoded = performance.now();
     let final: RgbaBackendInput;
     let reservedBytes: number | null = null;
+    let inputPixelBytes = source?.pixels.byteLength ?? 0;
     stage = 'process';
     if (engine !== 'web') {
-      if (!wasm) throw new Error('unavailable');
-      const result = wasm.process(source, input.corners, false);
+      const result = await renderDocscanAsset(input.asset, input.corners, input.filter, 0);
       final = result.image;
       reservedBytes = result.reservedBytes;
-      if (input.filter === 'enhanced-color') {
-        const prepared = await prepareEnhancedAppearance(final);
-        const rendered = wasm.enhance(final, prepared.plan.field);
-        final = {
-          ...rendered.image,
-          enhancement: prepared.enhancement,
-          ...(prepared.enhancementFailure
-            ? { enhancementFailure: prepared.enhancementFailure }
-            : {}),
-        };
-        reservedBytes = Math.max(reservedBytes, rendered.reservedBytes);
-      } else final = await applyFinalAppearance(final, input.filter);
+      inputPixelBytes = result.inputPixelBytes;
+      decoded = started + result.decodeMs;
     } else {
+      if (!source) throw new Error('failed');
       final =
         source.pixels.length <= 16_777_216 * 4 &&
         Math.max(source.dimensions.width, source.dimensions.height) <= 8192
@@ -144,7 +132,7 @@ async function handle(command: ComparisonCommand) {
         processMs: processed - decoded,
         encodeMs: encoded - processed,
         totalMs: encoded - started,
-        inputPixelBytes: source.pixels.byteLength,
+        inputPixelBytes,
         outputPixelBytes: final.pixels.byteLength,
         wasmReservedBytes: reservedBytes,
       },

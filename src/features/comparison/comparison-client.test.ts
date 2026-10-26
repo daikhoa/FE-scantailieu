@@ -1,3 +1,4 @@
+import { COMPARISON_IMPLEMENTATIONS } from './comparison-contract';
 import { describe, expect, it, vi } from 'vitest';
 import { runComparison } from './comparison-client';
 import { median, validateComparisonInput, type ComparisonInput } from './comparison-contract';
@@ -75,7 +76,7 @@ describe('comparison measurement contract', () => {
     worker.onmessage?.(new MessageEvent('message', { data: { type: 'done', image: input.asset } }));
     await expect(result).resolves.toMatchObject({
       engine: 'cpp',
-      implementation: 'custom-cpp-warp+adaptive-cpp-wasm-v8',
+      implementation: COMPARISON_IMPLEMENTATIONS.cpp,
       filter: 'enhanced-color',
     });
     expect(terminate).toHaveBeenCalledOnce();
