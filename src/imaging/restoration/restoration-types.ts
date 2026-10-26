@@ -1,6 +1,2 @@
-import type { RestorationStage } from './restoration-policy';
-
-export type AppliedRestorationStage = Exclude<RestorationStage, 'finger-segmentation' | 'dewarp'>;
-
-export type RestorationWarning =
-  'retake-finger' | 'retake-curved' | 'unsupported-moire' | 'retake-blur';
+// Compatibility import; authoritative implementation belongs to the library SDK.
+export * from '@docscan/browser/internal/imaging/restoration/restoration-types';

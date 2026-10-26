@@ -20,10 +20,7 @@ import type { VideoFrameSource } from '../features/scanner/video-frame-source';
 import type { ScannerEngine } from '../imaging/contracts/scanner-engine';
 import { createScanicEngine } from '../imaging/engines/scanic-classical-engine';
 import { canReuseRestorationAnalysis } from '../imaging/restoration/local-page-restoration';
-import {
-  createLocalRestorationClient,
-  type LocalRestorationClient,
-} from '../imaging/restoration/local-restoration-client';
+import type { LocalRestorationClient } from '../imaging/restoration/local-restoration-client';
 
 export type { LibraryState } from './HomeScreen';
 
@@ -103,13 +100,8 @@ export function App({
         restorationClientRef.current = null;
       };
     }
-    if (typeof Worker !== 'function') return;
-    const client = createLocalRestorationClient();
-    restorationClientRef.current = client;
-    return () => {
-      if (restorationClientRef.current === client) restorationClientRef.current = null;
-      client.dispose?.();
-    };
+    // Normal processing/model ownership belongs to the SDK; retain only an injected test adapter.
+    restorationClientRef.current = null;
   }, [restorationClient]);
 
   useEffect(() => {

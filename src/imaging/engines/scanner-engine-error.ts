@@ -1,8 +1,2 @@
-import type { ProcessingFailure } from '../../domain/document';
-
-export class ScannerEngineError extends Error {
-  constructor(readonly code: ProcessingFailure['code']) {
-    super(`Scanner engine operation ${code}.`);
-    this.name = 'ScannerEngineError';
-  }
-}
+// Compatibility import; authoritative implementation belongs to the library SDK.
+export * from '@docscan/browser/internal/imaging/engines/scanner-engine-error';

@@ -1,9 +1,12 @@
+import { SCANIC_ML_ASSET_BASE } from './scanic-ml-assets';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ScanicWorkerRequest } from './scanic-worker-backend';
 import type { renderDocscanRgba } from './docscan-raster';
 
 const raster = vi.hoisted(() => ({ render: vi.fn<typeof renderDocscanRgba>() }));
-vi.mock('./docscan-raster', () => ({ renderDocscanRgba: raster.render }));
+vi.mock('@docscan/browser/internal/imaging/engines/docscan-raster', () => ({
+  renderDocscanRgba: raster.render,
+}));
 
 const vendor = vi.hoisted(() => ({
   initialize: vi.fn(() => Promise.resolve()),
@@ -95,7 +98,7 @@ describe('Scanic document detector worker runtime', () => {
         debug: false,
         maxProcessingDimension: 8192,
         ml: {
-          assetBaseUrl: '/scanic-ml/ort-1.27.0/',
+          assetBaseUrl: SCANIC_ML_ASSET_BASE,
           numThreads: 1,
           minScore: 0.5,
           modelFetchTimeoutMs: 30_000,
@@ -115,7 +118,7 @@ describe('Scanic document detector worker runtime', () => {
       debug: false,
       maxProcessingDimension: 8192,
       ml: {
-        assetBaseUrl: '/scanic-ml/ort-1.27.0/',
+        assetBaseUrl: SCANIC_ML_ASSET_BASE,
         numThreads: 1,
         minScore: 0.5,
         modelFetchTimeoutMs: 30_000,

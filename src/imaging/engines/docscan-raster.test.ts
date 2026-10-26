@@ -4,8 +4,12 @@ import type { DocumentCorners } from '../../domain/document';
 import { renderDocscanRegions, renderDocscanRgba } from './docscan-raster';
 
 const dependencies = vi.hoisted(() => ({ load: vi.fn(), predict: vi.fn() }));
-vi.mock('./docscan-module', () => ({ loadDocscanModule: dependencies.load }));
-vi.mock('../restoration/gcnet-runtime', () => ({ predictIllumination: dependencies.predict }));
+vi.mock('@docscan/browser/internal/imaging/engines/docscan-module', () => ({
+  loadDocscanModule: dependencies.load,
+}));
+vi.mock('@docscan/browser/internal/imaging/restoration/gcnet-runtime', () => ({
+  predictIllumination: dependencies.predict,
+}));
 
 const dimensions = { width: 2, height: 2 };
 const corners: DocumentCorners = [

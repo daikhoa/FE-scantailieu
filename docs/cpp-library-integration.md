@@ -1,78 +1,90 @@
-# Web dùng thư viện C++
+# Thư viện Docscan và web sử dụng
 
-Luồng chụp, nhập nhiều ảnh, xem lại và editor hiện dùng bộ xử lý C++ chính thức.
-WebAssembly là bản biên dịch từ `../thuvien`, cùng nguồn với `docscan.dll`.
-Không có API máy chủ, không gửi ảnh lên server và không gọi DLL Windows trong trình duyệt.
+Nguồn chính nằm trong `../thuvien`. Web cài gói `@docscan/browser` từ `vendor/`;
+gói chứa SDK, C++ WebAssembly, các model và runtime cần thiết. SDK tự nối detector,
+khử bóng và tăng cường. Các đường import cũ là re-export để giữ tương thích;
+thuật toán JavaScript cũ chỉ còn làm mốc trong trang so sánh.
 
-## Nơi chỉnh thuật toán
+## Gọi từ web khác
 
-Trong thư mục `thuvien`:
+```ts
+// vite.config.ts: thêm docscanAssets() vào plugins hiện có
+import { docscanAssets } from '@docscan/browser/vite';
 
-| Phần | Nguồn dùng chung |
-| --- | --- |
-| Tỷ lệ, phối cảnh, chọn vùng nguồn, lấy mẫu | `src/geometry.cpp` |
-| Đánh giá ảnh | `src/quality.cpp` |
-| Quy tắc từ điểm classifier sang tham số | `src/appearance-plan.cpp` |
-| Tăng cường mặc định, bảo vệ màu, bù bóng và nét chữ | `src/adaptive-enhancement.cpp` |
-| Các bộ lọc xám, đen trắng, tự động | `src/filters.cpp` |
-| Giao diện chạy trong trình duyệt | `wasm/bridge.cpp`, `wasm/CMakeLists.txt` |
-
-JS không còn quyết định tham số hoặc sửa pixel trong renderer production.
-Classifier chỉ gửi điểm model thô; C++ tự đo ảnh và lập kế hoạch. JS cũ được giữ
-làm mốc đối chiếu trong trang so sánh và được đánh dấu rõ là Web cũ.
-Build kiểm tra production không import các kernel JS đó.
-
-Browser vẫn quản lý camera, giải mã JPEG/PNG/HEIC, inference của detector/GCNet,
-giao diện, hàng đợi, lưu ảnh gốc, mã hóa ảnh và ghép PDF. Đây là lớp tích hợp với
-nền tảng. Thay thuật toán cắt/tăng cường/bù bóng chỉ sửa nguồn thư viện; thay giao
-diện, định dạng nhập, model/runtime hoặc hợp đồng tích hợp có thể cần cập nhật
-adapter. Detector vẫn là model Scanic hiện có. Không thay model hoặc giảm độ phân giải.
-
-## Build sau khi sửa thư viện
-
-Từ thư mục web:
-
-```powershell
-npm run library:build
-npm run library:test
-npm test -- --maxWorkers=2
-npm run build
+// Mã ứng dụng
+import { createDocscan } from '@docscan/browser';
+const scanner = createDocscan();
+const page = await scanner.process(file);
+const pdf = await scanner.processPdf([file1, file2]);
+// Khi ứng dụng đóng:
+await scanner.dispose();
 ```
 
-`library:build` dùng CMake/Emscripten build đã cấu hình trong
-`.tmp-wasm/docscan` trỏ tới `../thuvien/wasm`. Máy mới cần Emscripten và OpenCV
-core/imgproc đã build cho Emscripten; cấu hình CMake theo tài liệu `thuvien/docs/wasm.md`.
-Có thể chỉ định `--native-root`, `--build-dir`, `--cmake` sau `npm run library:build --`.
-Script xác minh build tree thuộc đúng nguồn thư viện trước khi build.
+`process()` sở hữu nhập ảnh, phát hiện tài liệu, cắt/chỉnh phối cảnh, lựa chọn
+chạy GCNet, bù bóng và tăng cường mặc định. `page.image` là Blob kèm kích thước;
+`page.variant.enhancement` cho biết model đã chạy hay phải dùng fallback nhẹ.
+`render(original, recipe)` áp dụng chỉnh sửa, không cần caller chạy model.
+`createPdf(pages)` ghép các trang đã xử lý. Có `AbortSignal`, hàng đợi, giải phóng
+runtime khi nhàn rỗi và `dispose()`.
 
-Script tự tạo thư mục public theo hash nội dung, ghi hash nguồn/binary vào
-`build.json`, cập nhật `docscan-assets.ts` và thay danh tính cache engine. Không
-copy thuật toán sang TypeScript, không sửa tay file generated, không ghi đè ABI
-cũ. Cần build/phát hành web sau đó để người dùng nhận thư viện mới. Hosted build
-dùng artifact đã kiểm tra, không cần compiler C++ hoặc thư mục thư viện trên host.
-DLL native build bằng quy trình `thuvien/scripts/build-windows.ps1` riêng.
+Giao diện quản lý camera, thao tác người dùng, ảnh gốc, danh sách tài liệu và
+lưu/chia sẻ kết quả. SDK sở hữu worker, codec, detector, classifier, GCNet,
+renderer và PDF. Không gửi ảnh lên máy chủ. Model được đóng gói thành file tài
+nguyên, tải lười và do SDK quản lý; không nhúng trọng số trực tiếp vào mã DLL.
 
-## Bộ nhớ và lỗi
+Gói browser hiện dành cho TypeScript/ESM với Vite. Plugin SDK tự cung cấp asset
+và cấu hình worker an toàn; không cần sao chép model từ web cũ. Build system khác
+cần adapter asset/worker tương ứng một lần, không viết lại xử lý ảnh.
 
-C++ chia ảnh thành các vùng nguồn tối đa 1.048.576 pixel, cạnh tối đa 4096.
-Browser chỉ giữ một bitmap và đọc vùng được yêu cầu ở độ phân giải gốc. Không
-chuyển toàn ảnh 48MP thành thêm một buffer RGBA đầy đủ trong JS/WASM. Bản cuối
-vẫn tối đa cạnh dài 3000 như trước; bản phân tích dùng giới hạn riêng do caller
-yêu cầu. Xoay thực hiện sau xử lý và giữ tỷ lệ trang PDF.
+## Gọi trực tiếp trong hệ thống native
 
-Mỗi realm xử lý một trang; buffer tạm được giải phóng trong `finally`, page native
-được release cả khi lỗi. GCNet vẫn chạy trong worker riêng có khởi tạo lại sau lỗi.
-Nếu model lỗi, Tăng cường báo fallback nhẹ cùng mã lỗi an toàn; Khử bóng AI rõ ràng
-báo thất bại. Không thay C++ lỗi bằng JS rồi báo thành công. Worker/iframe còn giữ
-giới hạn thời gian và hủy theo lifecycle ứng dụng.
+Gói `../thuvien/dist/docscan-win-x64.zip` chứa DLL, header C ABI, runtime, model,
+tài liệu và ví dụ. DLL tự gọi ONNX Runtime để chạy model trong cùng tiến trình;
+không cần web hoặc một dịch vụ xử lý từ xa.
 
-## Xác minh khi tích hợp
+Facade Python có sẵn trong `share/docscan/examples/docscan_sdk.py`:
 
-- Bài kiểm tra mới đã thất bại với ABI v8 trước khi triển khai.
-- Binary thật: toàn khung giữ pixel gốc, cắt phối cảnh, xoay, giới hạn preview,
-  các bộ lọc, giới hạn vùng 48MP, lỗi/giải phóng và chạy lại.
-- 595 test ứng dụng và 9 CTest native qua; typecheck/lint/build qua.
-- Trình duyệt desktop: nhập đồng thời ảnh giấy có bóng và bìa màu, xử lý mặc định,
-  xám/đen trắng, xoay, áp dụng vùng cắt, xuất PDF hai trang với tỷ lệ khác nhau.
-- Không có phép đo mới trên iPhone/Android thật, nhiệt độ hoặc pin. Không khẳng
-  định nhanh hơn theo hệ số hoặc chất lượng mới vượt bản C++ đã duyệt.
+```python
+from docscan_sdk import Scanner
+with Scanner(package_directory) as scanner:
+    page = scanner.process(image_bytes)
+    pdf_bytes = scanner.process_pdf([image1_bytes, image2_bytes])
+```
+
+C/C++ gọi C ABI trong `include/docscan/docscan.h`; ngôn ngữ khác dùng FFI/binding
+cho ABI này. Gói native hiện được build và xác minh trên Windows x64. OS/kiến trúc
+khác cần build tương ứng và binding phù hợp, không cần viết lại thuật toán.
+Browser dùng cùng lõi C++ qua WASM, nhưng codec/runtime model và PDF theo nền tảng;
+không cam kết kết quả byte giống hệt DLL ở mọi định dạng.
+
+## Nơi sửa và build
+
+| Phần | Nguồn chính trong thuvien |
+| --- | --- |
+| Phối cảnh, lấy mẫu, vùng nguồn | `src/geometry.cpp` |
+| Đánh giá, tham số và tăng cường | `src/quality.cpp`, `src/appearance-plan.cpp`, `src/adaptive-enhancement.cpp`, `src/filters.cpp` |
+| Model và pipeline native | `src/models.cpp`, `src/shadow-model.cpp`, `src/pipeline.cpp` |
+| SDK browser, lifecycle và model orchestration | `browser/src/` |
+| Cầu nối C++/WASM | `wasm/bridge.cpp` |
+
+Từ thư mục web, chạy `npm run library:build` để build C++ đã cấu hình, đóng gói SDK
+theo hash nguồn/asset và cập nhật dependency. Sau đó chạy `npm run library:test`,
+`npm test -- --maxWorkers=2`, `npm run build`. Máy mới cần CMake/Emscripten và
+OpenCV core/imgproc cho Emscripten, theo `thuvien/docs/wasm.md`. Build native bằng
+`thuvien/scripts/build-windows.ps1 -Package`.
+
+Chỉ sửa nguồn trong thư viện rồi build/phát hành lại các ứng dụng dùng nó. Không
+sửa tay file generated, tarball hoặc bản trong `node_modules`. Hosted build dùng
+gói đã kiểm tra nên không cần compiler C++ hay đường dẫn `../thuvien` trên host.
+
+## Giới hạn và xác minh
+
+Giữ nguyên model, tham số và giới hạn ảnh đã được duyệt. Đọc ảnh lớn theo vùng để
+tránh tạo nhiều bản RGBA toàn ảnh; xử lý tuần tự và giải phóng tài nguyên khi hủy.
+Model lỗi được báo thật; không dùng kết quả giả hoặc âm thầm chuyển lại kernel JS.
+
+Đã kiểm tra SDK trong một dự án riêng ngoài cây nguồn web: tự nhận diện, GCNet,
+C++ và PDF hai trang, chỉ cài package và plugin. Có kiểm tra public API, hủy/đóng,
+chỉnh sửa, giới hạn batch, checksum package, worker import graph và bộ kiểm tra
+ứng dụng hiện có. Python facade kiểm tra với DLL và model đóng gói thật. Không có
+đo nhiệt độ, pin hoặc xác minh mới trên iPhone/Android vật lý trong lần thay đổi này.

@@ -9,10 +9,10 @@
     "npm": ">=10.9.0 <11"
   },
   "scripts": {
-    "library:build": "node scripts/build-docscan-wasm.mjs",
-    "library:test": "node scripts/test-cpp-production.mjs",
+    "library:build": "node scripts/build-library.mjs",
+    "library:test": "node scripts/test-cpp-production.mjs && node scripts/test-library-package.mjs && tsc -p tests/sdk/tsconfig.json",
     "dev": "vite --host 0.0.0.0",
-    "build": "tsc -p tsconfig.json && vite build && node scripts/test-comparison-build.mjs",
+    "build": "tsc -p tsconfig.json && tsc -p tests/sdk/tsconfig.json && vite build && node scripts/test-comparison-build.mjs",
     "fixtures:generate": "node scripts/generate-synthetic-fixtures.ts tests/fixtures",
     "fixtures:smartdoc-sample": "node scripts/prepare-smartdoc-sample.ts tests/datasets/smartdoc15-sample/sampleDataset tests/fixtures/smartdoc15",
     "benchmark:scanic-smartdoc": "node scripts/run-browser-benchmark.mjs http://127.0.0.1:5173/tests/browser/scanic-smartdoc-benchmark.html",
@@ -25,6 +25,7 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
+    "@docscan/browser": "file:vendor/docscan-browser-0.2.0-309c16e88864.tgz",
     "heic-to": "1.6.6",
     "onnxruntime-web": "1.27.0",
     "pdf-lib": "1.17.1",

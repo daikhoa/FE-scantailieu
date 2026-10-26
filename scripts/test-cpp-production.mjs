@@ -5,8 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 
 // Exercise the shipped C++ binary, including tiled source reads and failure cleanup.
-const assets = await readFile('src/imaging/engines/docscan-assets.ts', 'utf8');
-const currentBase = assets.match(/DOCSCAN_WASM_BASE = '([^']+)'/)?.[1];
+const currentBase = JSON.parse(await readFile('vendor/docscan-native.json', 'utf8')).base;
 assert.ok(currentBase, 'generated library asset path');
 const base = resolve(process.argv[2] ?? `public${currentBase}`);
 if (!process.argv[2]) {

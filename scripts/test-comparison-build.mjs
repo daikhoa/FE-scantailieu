@@ -5,15 +5,17 @@ import { resolve, dirname, basename } from 'node:path';
 import assert from 'node:assert/strict';
 import ts from 'typescript';
 import { existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 
 const directory = resolve(process.argv[2] ?? 'dist/assets');
 const entries = (await readdir(directory)).filter((file) =>
   /^(?:comparison\.worker|scanic-classical\.worker|scanic-frame|gcnet\.worker)-.*\.js$/.test(file),
 );
-assert.ok(
-  entries.some((file) => file.startsWith('comparison.worker-')),
-  'Missing comparison worker',
-);
+if (!process.argv.includes('--sdk-only'))
+  assert.ok(
+    entries.some((file) => file.startsWith('comparison.worker-')),
+    'Missing comparison worker',
+  );
 assert.ok(
   entries.some((file) => file.startsWith('scanic-classical.worker-')),
   'Missing scanner worker',
@@ -83,7 +85,15 @@ const forbidden = new Set(
 );
 const productionVisited = new Set();
 async function inspectProduction(file) {
-  assert.equal(forbidden.has(file), false, `Production imports legacy JS raster kernel: ${file}`);
+  const normalized = file.replaceAll('\\', '/');
+  assert.equal(
+    forbidden.has(file) ||
+      [...forbidden].some((path) =>
+        normalized.endsWith(path.replaceAll('\\', '/').split('/src/')[1]),
+      ),
+    false,
+    `Production imports legacy JS raster kernel: ${file}`,
+  );
   if (productionVisited.has(file)) return;
   productionVisited.add(file);
   const source = ts.createSourceFile(
@@ -120,8 +130,9 @@ async function inspectProduction(file) {
     if (target) await inspectProduction(target);
   }
 }
-for (const entry of ['scanic-classical.worker.ts', 'scanic-frame.ts'])
-  await inspectProduction(resolve('src/imaging/engines', entry));
+const require = createRequire(import.meta.url);
+for (const entry of ['scanic-classical.worker', 'scanic-frame'])
+  await inspectProduction(require.resolve(`@docscan/browser/internal/imaging/engines/${entry}`));
 console.log(
   'Production scanner: native raster path verified; legacy JS kernels remain comparison-only.',
 );

@@ -7,7 +7,7 @@ import type { ComparisonResult } from './comparison-contract';
 import { ComparisonError } from './comparison-error';
 
 vi.mock('./comparison-client', () => ({ runComparison: vi.fn() }));
-vi.mock('../camera/image-import', () => ({ importImage: vi.fn() }));
+vi.mock('@docscan/browser/internal/features/camera/image-import', () => ({ importImage: vi.fn() }));
 const asset = {
   blob: new Blob(['image'], { type: 'image/png' }),
   dimensions: { width: 20, height: 30 },

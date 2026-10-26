@@ -1,3 +1,4 @@
+import { SCANIC_ML_ASSET_BASE } from './scanic-ml-assets';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DetectionOptions, ScannerResult } from 'scanic';
 
@@ -117,7 +118,7 @@ describe('Scanic detector runtime recovery', () => {
     });
     expect(createScanner.mock.calls[0]?.[0]).toMatchObject({
       detector: 'ml',
-      ml: { numThreads: 1, assetBaseUrl: '/scanic-ml/ort-1.27.0/' },
+      ml: { numThreads: 1, assetBaseUrl: SCANIC_ML_ASSET_BASE },
     });
   });
 

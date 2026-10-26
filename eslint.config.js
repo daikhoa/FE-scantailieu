@@ -8,7 +8,7 @@ const withSourceFiles = (configs) => configs.map((config) => ({ ...config, files
 
 export default tseslint.config(
   {
-    ignores: ['coverage/**', 'dist/**', 'node_modules/**'],
+    ignores: ['coverage/**', 'dist/**', 'node_modules/**', '.tmp-*/**'],
   },
   {
     ...eslint.configs.recommended,

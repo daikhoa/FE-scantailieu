@@ -1,0 +1,4 @@
+{
+  "extends": "../../tsconfig.json",
+  "include": ["../../node_modules/@docscan/browser/src/**/*.ts", "../../src/vite-env.d.ts"]
+}

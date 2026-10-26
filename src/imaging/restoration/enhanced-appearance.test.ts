@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 const { predict } = vi.hoisted(() => ({ predict: vi.fn() }));
-vi.mock('./gcnet-runtime', () => ({ predictIllumination: predict }));
+vi.mock('@docscan/browser/internal/imaging/restoration/gcnet-runtime', () => ({
+  predictIllumination: predict,
+}));
 import { applyFinalAppearance } from './enhanced-appearance';
 import { applyDocumentFilter } from '../rendering/document-filter';
 import { createShadowSample } from './shadow-field';

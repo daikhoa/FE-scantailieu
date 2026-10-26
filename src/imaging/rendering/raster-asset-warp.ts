@@ -21,7 +21,8 @@ export async function warpRasterAsset(
       typeof OffscreenCanvas === 'function'
         ? new OffscreenCanvas(1, 1)
         : document.createElement('canvas');
-    const context = canvas.getContext('2d', { willReadFrequently: true });
+    const context = canvas.getContext('2d', { willReadFrequently: true }) as
+      CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
     if (context === null) throw new ScannerEngineError('unavailable');
     const surface = canvas;
     const source = bitmap;

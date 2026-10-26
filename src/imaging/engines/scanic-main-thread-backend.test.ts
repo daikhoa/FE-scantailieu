@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { createScanicMainThreadBackend } from './scanic-main-thread-backend';
 
-vi.mock('./scanic-frame.ts?worker&url', () => ({ default: '/assets/scanic-frame.js' }));
+vi.mock('@docscan/browser/internal/imaging/engines/scanic-frame?worker&url', () => ({
+  default: '/assets/scanic-frame.js',
+}));
 class FakePort {
   onmessage: ((event: { data: unknown }) => void) | null = null;
   postMessage = vi.fn();
