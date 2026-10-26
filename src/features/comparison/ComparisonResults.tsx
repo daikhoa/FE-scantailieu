@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { downloadBlob } from '../export/download-blob';
 import { createImagePdf } from '../export/image-pdf';
+import { shadowFallbackMessage } from '../editor/shadow-status';
 import {
   COMPARISON_LABELS,
   median,
@@ -43,7 +44,7 @@ function ResultImage({
       {result.enhancement === 'shadow-model' && <p>Tăng cường · đã bù bóng bằng model</p>}
       {result.enhancement === 'local' && <p>Tăng cường · xử lý nhẹ, giữ nền màu</p>}
       {result.enhancement === 'model-unavailable' && (
-        <p role="status">Bộ khử bóng chưa sẵn sàng; kết quả chỉ dùng tăng cường nhẹ.</p>
+        <p role="status">{shadowFallbackMessage(result.enhancementFailure)}</p>
       )}
       {result.filter === 'shadow-removal' && <p>Khử bóng AI · GCNet</p>}
       <p>

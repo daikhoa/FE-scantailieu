@@ -57,6 +57,7 @@ describe('optional pretrained shadow filter', () => {
     const result = await applyFinalAppearance(input, 'enhanced-color');
     expect(predict).toHaveBeenCalledOnce();
     expect(result.enhancement).toBe('model-unavailable');
+    expect(result.enhancementFailure).toBe('runtime');
     expect(result.pixels[(50 * 128 + 100) * 4]).toBeGreaterThanOrEqual(110);
   });
   it('corrects illumination on the original buffer and preserves its dimensions', async () => {

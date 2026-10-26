@@ -85,7 +85,7 @@ describe('adaptive enhanced-color', () => {
     input.pixels[3] = 0;
     const saved = input.pixels.slice();
     applyEnhancement(input, analyzeEnhancement(createShadowSample(input)));
-    expect(input.pixels).toEqual(saved);
+    expect(input.pixels.every((value, index) => value === saved[index])).toBe(true);
   });
   it('rejects a corrupt field before touching pixels', () => {
     const input = page('shadow'),
@@ -93,7 +93,7 @@ describe('adaptive enhanced-color', () => {
       field = fieldFor(input);
     field.data[field.data.length - 1] = NaN;
     expect(() => analyzeEnhancement(createShadowSample(input), field)).toThrow();
-    expect(input.pixels).toEqual(saved);
+    expect(input.pixels.every((value, index) => value === saved[index])).toBe(true);
   });
   it('protects faint regular lines while keeping dark text enhancement available', () => {
     const input = page('flat');

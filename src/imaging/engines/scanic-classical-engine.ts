@@ -525,6 +525,7 @@ class ScanicEngine implements ScannerEngine {
         recipeKey:
           output.enhancement === 'model-unavailable' ? recipeKey + ':model-unavailable' : recipeKey,
         ...(output.enhancement ? { enhancement: output.enhancement } : {}),
+        ...(output.enhancementFailure ? { enhancementFailure: output.enhancementFailure } : {}),
         engineVersion: ENGINE_VERSION,
         image: { blob, dimensions: { ...output.dimensions } },
         ...(thumbnail === undefined ? {} : { thumbnail }),

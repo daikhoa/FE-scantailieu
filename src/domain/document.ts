@@ -65,7 +65,11 @@ export type DewarpOutcome =
       readonly reason: 'unavailable' | 'timeout' | 'out-of-memory' | 'failed';
     };
 
+export type EnhancementFailureCode =
+  'download' | 'model-invalid' | 'memory' | 'runtime' | 'inference' | 'timeout' | 'busy';
+
 export interface RenderedVariant {
+  readonly enhancementFailure?: EnhancementFailureCode;
   readonly enhancement?: 'local' | 'shadow-model' | 'model-unavailable';
   /** Scoped to the immutable original; covers recipe, original orientation and engine version. */
   readonly recipeKey: string;

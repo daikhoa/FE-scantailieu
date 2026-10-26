@@ -1,4 +1,5 @@
 import { renderAnalyzedPage } from '../../imaging/restoration/analyzed-page-renderer';
+import { shadowFallbackMessage } from './shadow-status';
 import type {
   LocalRestorationAnalysis,
   LocalRestorationClient,
@@ -280,7 +281,7 @@ export function DocumentEditor({
 
         {latestVariant?.enhancement === 'model-unavailable' && (
           <p className="editor__status" role="status">
-            Chưa tải hoặc chạy được bộ khử bóng. Đã giữ bản tăng cường nhẹ; bạn có thể thử lại.
+            {shadowFallbackMessage(latestVariant.enhancementFailure)}
           </p>
         )}
         <div className="editor__filters" role="group" aria-label="Bộ lọc tài liệu">

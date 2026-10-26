@@ -62,3 +62,13 @@ Smoke test trình duyệt production trên ảnh 720 × 960 toàn khung: Web gi�
 - Native CMake Release + CTest: ABI, API C, runtime không tương thích, pixel cũ, bộ lọc native cũ, adaptive mới, model thật/thiếu model/hủy, paper và integration/PDF.
 
 Nguồn model và giấy phép: xem `public/models/shadow/MODEL-CARD.md` và các thông báo giấy phép hiện có. Model không được huấn luyện lại hay thay trọng số.
+
+## Sửa khởi tạo khử bóng sau bản 14
+
+Bản build 14 có đường nhập ngược từ chunk GCNet vào entry của scanner worker/iframe. Kiểm tra build cũ chỉ xét entry so sánh nên bỏ sót. Trạng thái Promise tải model bị lỗi cũng được giữ lại trong cùng realm, khiến thao tác thử lại tiếp tục dùng lỗi cũ.
+
+Đã tách GCNet sang worker chỉ sở hữu ONNX Runtime, riêng với bộ nhận diện và module raster C++. Hợp đồng lỗi và cấu hình dùng chung được đặt trong chunk độc lập để không kéo entry vào lazy chunk. Loader dùng đường dẫn mjs/wasm đã ghim cùng phiên bản. Worker lỗi được đóng, lần thử tiếp theo tạo realm mới; hết thời gian chờ hoặc dữ liệu model hỏng đều trả trạng thái fallback rõ ràng. Worker nhàn rỗi được giải phóng sau 30 giây; chỉ trao đổi tensor mẫu nhỏ, không chuyển thêm ảnh gốc đầy đủ.
+
+Guard build nay duyệt cả scanner worker, iframe dự phòng, comparison và GCNet worker. Có hồi quy tái hiện vòng import từ artifact bản cũ và kiểm tra worker reuse, retry sau lỗi, timeout, dữ liệu hỏng, hủy và giữ nguyên mẫu của caller. Mã lỗi hiển thị được giới hạn ở các nhóm download/model-invalid/memory/runtime/inference/timeout/busy, không đưa lỗi thô hoặc nội dung ảnh ra giao diện.
+
+Người dùng cũng xác nhận C++ có thể lỗi dù chạy trước Web trên điện thoại; chưa có stack trace thiết bị để kết luận chính xác nhánh khởi tạo nào của lượt C++ đó hỏng. Việc tách runtime khắc phục cách ghép nhiều runtime trong cùng realm và cho phép thử lại sạch. Không thay model, kernel điểm ảnh, WASM v8 hay DLL native trong bản vá này; không coi kiểm tra trên desktop là xác nhận mọi iPhone/Android.

@@ -78,6 +78,7 @@ async function handle(command: ComparisonCommand) {
   const codec = createBrowserRgbaCodec();
   let image: ImageAsset | null = null;
   let enhancement: RgbaBackendInput['enhancement'];
+  let enhancementFailure: RgbaBackendInput['enhancementFailure'];
   for (let repetition = 0; repetition < input.repetitions; repetition++) {
     const started = performance.now();
     stage = 'decode';
@@ -94,7 +95,13 @@ async function handle(command: ComparisonCommand) {
       if (input.filter === 'enhanced-color') {
         const prepared = await prepareEnhancedAppearance(final);
         const rendered = wasm.enhance(final, prepared.plan.field);
-        final = { ...rendered.image, enhancement: prepared.enhancement };
+        final = {
+          ...rendered.image,
+          enhancement: prepared.enhancement,
+          ...(prepared.enhancementFailure
+            ? { enhancementFailure: prepared.enhancementFailure }
+            : {}),
+        };
         reservedBytes = Math.max(reservedBytes, rendered.reservedBytes);
       } else final = await applyFinalAppearance(final, input.filter);
     } else {
@@ -122,6 +129,7 @@ async function handle(command: ComparisonCommand) {
     }
     const processed = performance.now();
     enhancement = final.enhancement;
+    enhancementFailure = final.enhancementFailure;
     stage = 'encode';
     // The same lossless encoder on both paths isolates raster quality from JPEG differences.
     image = {
@@ -143,7 +151,12 @@ async function handle(command: ComparisonCommand) {
     });
   }
   if (!image) throw new Error('failed');
-  scope.postMessage({ type: 'done', image, ...(enhancement ? { enhancement } : {}) });
+  scope.postMessage({
+    type: 'done',
+    image,
+    ...(enhancement ? { enhancement } : {}),
+    ...(enhancementFailure ? { enhancementFailure } : {}),
+  });
 }
 
 scope.onmessage = (event) => {

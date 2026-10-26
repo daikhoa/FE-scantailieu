@@ -8,6 +8,7 @@ import { downloadBlob } from '../export/download-blob';
 import { createImagePdf } from '../export/image-pdf';
 import type { ScanBatchPage } from './scan-batch';
 import { PendingPagePreview } from './PendingPagePreview';
+import { shadowFallbackMessage } from '../editor/shadow-status';
 
 interface ScanBatchReviewProps {
   readonly pages: readonly ScanBatchPage[];
@@ -357,8 +358,7 @@ export function ScanBatchReview({
               <>
                 {selectedPage.page.variant.enhancement === 'model-unavailable' && (
                   <p className="batch-review__warning" role="status">
-                    Chưa tải hoặc chạy được bộ khử bóng. Đã giữ bản tăng cường nhẹ; chọn lại Tăng
-                    cường để thử lại.
+                    {shadowFallbackMessage(selectedPage.page.variant.enhancementFailure)}
                   </p>
                 )}
                 {pageWarnings(selectedPage).map((warning) => (

@@ -6,6 +6,7 @@ import { enhanceColorContrast } from '../rendering/enhanced-color';
 import type { LocalRestorationAnalysis } from './local-restoration-client';
 import { applyShadowField, createShadowSample } from './shadow-field';
 import { analyzeEnhancement, applyEnhancement } from './adaptive-enhancement';
+import { shadowFailureCode, type ShadowFailureCode } from './shadow-runtime-error';
 
 /** Shared orchestration only: the browser C++ adapter applies this field with its own kernel. */
 export async function prepareEnhancedAppearance(input: RgbaBackendInput) {
@@ -13,17 +14,19 @@ export async function prepareEnhancedAppearance(input: RgbaBackendInput) {
   const periodic = analyzeDocumentQuality(input).detail.periodicRatio;
   let plan = analyzeEnhancement(sample, undefined, periodic);
   let enhancement: NonNullable<RgbaBackendInput['enhancement']> = 'local';
+  let enhancementFailure: ShadowFailureCode | undefined;
   if (plan.needsModel) {
     try {
       const { predictIllumination } = await import('./gcnet-runtime');
       plan = analyzeEnhancement(sample, await predictIllumination(sample), periodic);
       enhancement = 'shadow-model';
-    } catch {
+    } catch (error) {
       // No pixels have changed. Carry conservative fallback through cache identity and preview.
       enhancement = 'model-unavailable';
+      enhancementFailure = shadowFailureCode(error, 'runtime');
     }
   }
-  return { plan, enhancement };
+  return { plan, enhancement, ...(enhancementFailure ? { enhancementFailure } : {}) };
 }
 
 /** Default adaptive appearance; explicit legacy filters retain their synchronous policy. */
@@ -33,9 +36,9 @@ export async function applyFinalAppearance(
   analysis?: LocalRestorationAnalysis,
 ): Promise<RgbaBackendInput> {
   if (mode === 'enhanced-color') {
-    const { plan, enhancement } = await prepareEnhancedAppearance(input);
+    const { plan, enhancement, enhancementFailure } = await prepareEnhancedAppearance(input);
     applyEnhancement(input, plan);
-    return { ...input, enhancement };
+    return { ...input, enhancement, ...(enhancementFailure ? { enhancementFailure } : {}) };
   }
   if (mode !== 'shadow-removal') return applyDocumentFilter(input, mode, analysis);
   const sample = createShadowSample(input);

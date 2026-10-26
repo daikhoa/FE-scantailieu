@@ -5,11 +5,13 @@ import type {
   ImageDimensions,
   ImageAsset,
   QuarterTurn,
+  EnhancementFailureCode,
 } from '../../domain/document';
 
 export { ScannerEngineError } from './scanner-engine-error';
 
 export interface RgbaBackendInput {
+  readonly enhancementFailure?: EnhancementFailureCode;
   readonly enhancement?: 'local' | 'shadow-model' | 'model-unavailable';
   readonly dimensions: ImageDimensions;
   readonly pixels: Uint8ClampedArray<ArrayBuffer>;

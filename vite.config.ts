@@ -74,5 +74,18 @@ export default defineConfig({
     },
   ],
   // Scanic contains split ESM assets; the worker is created with type: 'module'.
-  worker: { format: 'es' },
+  worker: {
+    format: 'es',
+    rollupOptions: {
+      output: {
+        // Shared config/error contracts must never be folded into a worker entry:
+        // importing them from a lazy chunk would re-evaluate that entry in WebKit.
+        manualChunks(id) {
+          const path = id.replaceAll('\\', '/');
+          if (path.endsWith('/shadow-runtime-error.ts')) return 'shadow-runtime-contract';
+          if (path.endsWith('/scanic-ml-assets.ts')) return 'scanic-ml-config';
+        },
+      },
+    },
+  },
 });

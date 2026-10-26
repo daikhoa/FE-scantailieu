@@ -39,6 +39,7 @@ export type ComparisonReply =
       readonly type: 'done';
       readonly image: ImageAsset;
       readonly enhancement?: RenderedVariant['enhancement'];
+      readonly enhancementFailure?: RenderedVariant['enhancementFailure'];
     }
   | {
       readonly type: 'error';
@@ -46,6 +47,7 @@ export type ComparisonReply =
       readonly stage?: ComparisonStage;
     };
 export interface ComparisonResult {
+  readonly enhancementFailure?: RenderedVariant['enhancementFailure'];
   readonly enhancement?: RenderedVariant['enhancement'];
   readonly engine: ComparisonEngine;
   readonly setupMs: number;

@@ -79,6 +79,7 @@ export async function runComparison(
           samples,
           image: reply.image,
           ...(reply.enhancement ? { enhancement: reply.enhancement } : {}),
+          ...(reply.enhancementFailure ? { enhancementFailure: reply.enhancementFailure } : {}),
           filter: input.filter,
           implementation:
             COMPARISON_IMPLEMENTATIONS[engine] +

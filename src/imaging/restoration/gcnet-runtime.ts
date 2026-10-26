@@ -1,71 +1,109 @@
-import * as ort from 'onnxruntime-web/wasm';
-import { SCANIC_ML_ASSET_BASE } from '../engines/scanic-ml-assets';
 import type { ShadowField } from './shadow-field';
-
-const MODEL_URL = '/models/shadow/gcnet-2eb69a0a.onnx';
-const MODEL_BYTES = 6_078_861;
-const MODEL_SHA256 = '2eb69a0aa882069f9f6d874511f019428d814d5f3edfa4881dbd6ca7d5c068f9';
-// Reuse the exact pinned CPU binary already shipped for corner detection.
-ort.env.wasm.wasmPaths = { wasm: `${SCANIC_ML_ASSET_BASE}ort-wasm-simd-threaded.wasm` };
-ort.env.wasm.numThreads = 1;
-ort.env.wasm.initTimeout = 15_000;
-let session: Promise<ort.InferenceSession> | undefined;
-let busy = false;
-
-async function load(): Promise<ort.InferenceSession> {
-  const response = await fetch(MODEL_URL, { signal: AbortSignal.timeout(15_000) });
-  if (!response.ok) throw new Error('shadow-model-unavailable');
-  const bytes = await response.arrayBuffer();
-  if (bytes.byteLength !== MODEL_BYTES) throw new Error('shadow-model-invalid');
-  const hash = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), (v) =>
-    v.toString(16).padStart(2, '0'),
-  ).join('');
-  if (hash !== MODEL_SHA256) throw new Error('shadow-model-invalid');
-  const model = await ort.InferenceSession.create(bytes, {
-    executionProviders: ['wasm'],
-    executionMode: 'sequential',
-    graphOptimizationLevel: 'all',
-    enableCpuMemArena: false,
-    enableMemPattern: false,
-  });
-  if (
-    model.inputNames.length !== 1 ||
-    model.inputNames[0] !== 'input' ||
-    model.outputNames.length !== 1 ||
-    model.outputNames[0] !== 'output'
-  ) {
-    await model.release();
-    throw new Error('shadow-model-invalid');
+import {
+  ShadowRuntimeError,
+  SHADOW_FAILURE_CODES,
+  type ShadowFailureCode,
+} from './shadow-runtime-error';
+let worker: Worker | undefined;
+let sequence = 0;
+let idleTimer: ReturnType<typeof setTimeout> | undefined;
+let pending:
+  | {
+      id: number;
+      width: number;
+      height: number;
+      resolve: (field: ShadowField) => void;
+      reject: (error: Error) => void;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  | undefined;
+function fail(code: ShadowFailureCode) {
+  const active = pending;
+  pending = undefined;
+  clearTimeout(active?.timer);
+  clearTimeout(idleTimer);
+  if (worker) {
+    worker.onmessage = worker.onerror = worker.onmessageerror = null;
+    worker.terminate();
+    worker = undefined;
   }
-  return model;
+  active?.reject(new ShadowRuntimeError(code));
 }
-
-/** Owned worker/iframe lifetime bounds the session. Never run concurrent inferences. */
-export async function predictIllumination(sample: ShadowField): Promise<ShadowField> {
-  if (busy) throw new Error('shadow-model-busy');
-  busy = true;
-  let tensor: ort.Tensor | undefined;
-  let output: ort.Tensor | undefined;
-  try {
-    session ??= load();
-    const model = await session;
-    tensor = new ort.Tensor('float32', sample.data, [1, 3, sample.height, sample.width]);
-    const result = await model.run({ input: tensor });
-    output = result.output;
-    if (
-      output?.type !== 'float32' ||
-      output.dims.length !== 4 ||
-      output.dims[0] !== 1 ||
-      output.dims[1] !== 3 ||
-      output.dims[2] !== sample.height ||
-      output.dims[3] !== sample.width ||
-      !(output.data instanceof Float32Array)
-    )
-      throw new Error('shadow-model-invalid');
-    return { width: sample.width, height: sample.height, data: new Float32Array(output.data) };
-  } finally {
-    output?.dispose();
-    tensor?.dispose();
-    busy = false;
-  }
+export function disposeShadowRuntime(): void {
+  fail('runtime');
+}
+/** ORT owns its realm, separate from detector ORT and the C++ Emscripten module. */
+export function predictIllumination(sample: ShadowField): Promise<ShadowField> {
+  if (pending) return Promise.reject(new ShadowRuntimeError('busy'));
+  if (
+    !Number.isInteger(sample.width) ||
+    !Number.isInteger(sample.height) ||
+    sample.width < 1 ||
+    sample.height < 1 ||
+    sample.width > 384 ||
+    sample.height > 384 ||
+    sample.data.length !== sample.width * sample.height * 3
+  )
+    return Promise.reject(new ShadowRuntimeError('model-invalid'));
+  clearTimeout(idleTimer);
+  return new Promise((resolve, reject) => {
+    pending = {
+      id: ++sequence,
+      width: sample.width,
+      height: sample.height,
+      resolve,
+      reject,
+      timer: setTimeout(() => {
+        fail('timeout');
+      }, 60000),
+    };
+    try {
+      if (!worker) {
+        worker = new Worker(new URL('./gcnet.worker.ts', import.meta.url), {
+          type: 'module',
+          name: 'document-shadow',
+        });
+        worker.onerror = worker.onmessageerror = () => {
+          fail('runtime');
+        };
+        worker.onmessage = (event: MessageEvent) => {
+          const reply = event.data as {
+            type?: string;
+            id?: number;
+            field?: ShadowField;
+            code?: ShadowFailureCode;
+          } | null;
+          const active = pending;
+          if (!active || reply?.id !== active.id) return;
+          if (reply.type === 'error') {
+            fail(reply.code && SHADOW_FAILURE_CODES.includes(reply.code) ? reply.code : 'runtime');
+            return;
+          }
+          const field = reply.field;
+          if (
+            reply.type !== 'result' ||
+            field?.width !== active.width ||
+            field.height !== active.height ||
+            !(field.data instanceof Float32Array) ||
+            field.data.length !== active.width * active.height * 3 ||
+            field.data.some((v) => !Number.isFinite(v) || v <= 0 || v > 1.5)
+          ) {
+            fail('model-invalid');
+            return;
+          }
+          pending = undefined;
+          clearTimeout(active.timer);
+          idleTimer = setTimeout(disposeShadowRuntime, 30000);
+          active.resolve(field);
+        };
+      }
+      // Keep the caller sample for material-color analysis after inference.
+      const data = sample.data.slice();
+      worker.postMessage({ type: 'predict', id: pending.id, sample: { ...sample, data } }, [
+        data.buffer,
+      ]);
+    } catch {
+      fail('runtime');
+    }
+  });
 }

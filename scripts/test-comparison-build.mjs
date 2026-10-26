@@ -7,9 +7,20 @@ import ts from 'typescript';
 
 const directory = resolve(process.argv[2] ?? 'dist/assets');
 const entries = (await readdir(directory)).filter((file) =>
-  /^comparison\.worker-.*\.js$/.test(file),
+  /^(?:comparison\.worker|scanic-classical\.worker|scanic-frame|gcnet\.worker)-.*\.js$/.test(file),
 );
-assert.equal(entries.length, 1, 'Expected one emitted comparison worker');
+assert.ok(
+  entries.some((file) => file.startsWith('comparison.worker-')),
+  'Missing comparison worker',
+);
+assert.ok(
+  entries.some((file) => file.startsWith('scanic-classical.worker-')),
+  'Missing scanner worker',
+);
+assert.ok(
+  entries.some((file) => file.startsWith('scanic-frame-')),
+  'Missing scanner iframe',
+);
 const graph = new Map();
 async function imports(file) {
   if (graph.has(file)) return graph.get(file);
@@ -36,13 +47,13 @@ async function imports(file) {
   graph.set(file, paths);
   return paths;
 }
-const entry = resolve(directory, entries[0]);
-const visited = new Set([entry]);
+const entryPaths = new Set(entries.map((file) => resolve(directory, file)));
+const visited = new Set();
 async function inspect(file, trail) {
   for (const dependency of await imports(file)) {
-    assert.notEqual(
-      dependency,
-      entry,
+    assert.equal(
+      entryPaths.has(dependency),
+      false,
       `Worker entry re-import: ${[...trail, dependency].map((file) => basename(file)).join(' -> ')}`,
     );
     if (visited.has(dependency)) continue;
@@ -50,7 +61,10 @@ async function inspect(file, trail) {
     await inspect(dependency, [...trail, dependency]);
   }
 }
-await inspect(entry, [entry]);
+for (const entry of entryPaths) {
+  visited.add(entry);
+  await inspect(entry, [entry]);
+}
 console.log(
-  `Comparison build: ${visited.size} emitted modules checked; no worker entry re-import.`,
+  `Build: ${entries.length} processing entries / ${visited.size} emitted modules checked; no entry re-import.`,
 );
