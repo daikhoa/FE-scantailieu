@@ -11,7 +11,7 @@ export const COMPARISON_LABELS = {
   web: 'Web hiện tại',
   cpp: 'C++ tự viết',
 } as const;
-export type ComparisonFilter = 'original' | 'enhanced-color';
+export type ComparisonFilter = 'original' | 'enhanced-color' | 'shadow-removal';
 // Typical "48 MP" files can contain 8064 × 6048 pixels. Never resize to fit.
 export const MAX_COMPARISON_INPUT_PIXELS = 50_000_000;
 export interface ComparisonInput {
@@ -66,7 +66,7 @@ export function validateComparisonInput(input: ComparisonInput): void {
     !Number.isInteger(input.repetitions) ||
     input.repetitions < 1 ||
     input.repetitions > 20 ||
-    !['original', 'enhanced-color'].includes(input.filter) ||
+    !['original', 'enhanced-color', 'shadow-removal'].includes(input.filter) ||
     // Structured-cloned messages still require runtime tuple validation.
     (input.corners as readonly unknown[]).length !== 4 ||
     input.corners.some(

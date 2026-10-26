@@ -1,5 +1,5 @@
 import { ScanicDetectorRuntime } from './scanic-detector-runtime';
-import { applyDocumentFilter } from '../rendering/document-filter';
+import { applyFinalAppearance } from '../restoration/enhanced-appearance';
 import { warpPerspectiveRgba } from '../rendering/perspective-warp';
 import { rotateOwnedRgba } from '../rendering/rgba-rotation';
 import { warpRasterAsset } from '../rendering/raster-asset-warp';
@@ -45,7 +45,7 @@ const connect = (event: MessageEvent) => {
             ? await warpRasterAsset(request.asset, request.corners, request.maximumOutputLongSide)
             : warpPerspectiveRgba(request.input, request.corners, request.maximumOutputLongSide);
         output = rotateOwnedRgba(
-          applyDocumentFilter(warped, request.filter, request.analysis),
+          await applyFinalAppearance(warped, request.filter, request.analysis),
           request.rotation,
         );
       }

@@ -39,7 +39,7 @@ export type CropRegion =
   | { readonly kind: 'document'; readonly corners: DocumentCorners };
 
 export type FilterMode =
-  'original' | 'ocr-color' | 'enhanced-color' | 'grayscale' | 'black-and-white';
+  'original' | 'ocr-color' | 'enhanced-color' | 'shadow-removal' | 'grayscale' | 'black-and-white';
 
 export interface EditRecipe {
   readonly version: number;

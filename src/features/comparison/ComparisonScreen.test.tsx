@@ -136,4 +136,13 @@ describe('comparison screen', () => {
     expect(vi.mocked(runComparison).mock.calls.map((c) => c[0])).toEqual(['web', 'cpp']);
     expect(vi.mocked(runComparison).mock.calls.every((c) => c[1].filter === 'original')).toBe(true);
   });
+  it('offers the pretrained illumination filter explicitly without changing the default', () => {
+    render(<ComparisonScreen />);
+    const filter = screen.getByRole('combobox', { name: 'Bộ lọc' });
+    expect(filter).toHaveValue('enhanced-color');
+    fireEvent.change(filter, { target: { value: 'shadow-removal' } });
+    expect(filter).toHaveValue('shadow-removal');
+    expect(screen.getByText(/Hai bản dùng chung bước AI sau khi cắt/)).toBeVisible();
+    expect(runComparison).not.toHaveBeenCalled();
+  });
 });

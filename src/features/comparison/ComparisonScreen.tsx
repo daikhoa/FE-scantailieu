@@ -153,7 +153,8 @@ export function ComparisonScreen() {
         <h1>So sánh Web và C++ tự viết</h1>
         <p>
           Cùng ảnh gốc, cùng vùng cắt, đầu ra tối đa 3000 px. Chỉ đo cắt phối cảnh và bộ lọc; giải
-          mã, xuất PNG/PDF dùng chung. Không đo AI hay bộ mã hóa của DLL Windows.
+          mã, xuất PNG/PDF dùng chung. Khi chọn Khử bóng AI, cả hai dùng chung GCNet trên trình
+          duyệt; không đo model nhận diện góc hay bộ mã hóa của DLL Windows.
         </p>
       </header>
       <p>
@@ -192,6 +193,7 @@ export function ComparisonScreen() {
               }}
             >
               <option value="enhanced-color">Tăng cường</option>
+              <option value="shadow-removal">Khử bóng AI (model 6 MB)</option>
               <option value="original">Giữ nguyên màu</option>
             </select>
           </label>
@@ -228,6 +230,12 @@ export function ComparisonScreen() {
             Dùng toàn ảnh
           </button>
         </div>
+        {filter === 'shadow-removal' && (
+          <p>
+            Khử bóng AI tải model khoảng 6 MB khi dùng lần đầu. Nên dùng cho giấy có bóng rộng và
+            kiểm tra lại màu nền. Hai bản dùng chung bước AI sau khi cắt.
+          </p>
+        )}
         {editing && imported && (
           <ManualCropEditor
             original={imported.original}
@@ -338,7 +346,8 @@ export function ComparisonScreen() {
               measuredEngines: Object.keys(results),
               wasmAssets: COMPARISON_WASM_BASE,
               createdAt: new Date().toISOString(),
-              boundary: 'shared browser decode; warp + enhanced/original; shared lossless PNG/PDF',
+              boundary:
+                'shared browser decode; warp + selected filter; optional shared JS/ORT GCNet; shared lossless PNG/PDF',
               outputMaximumSide: 3000,
               sourceDimensions: imported?.original.dimensions,
               crop,

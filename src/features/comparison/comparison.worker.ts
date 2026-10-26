@@ -8,7 +8,7 @@ import {
 } from './comparison-contract';
 import { decodeRasterBitmap } from '../../imaging/codecs/decode-raster-bitmap';
 import { createBrowserRgbaCodec } from '../../imaging/codecs/browser-rgba-codec';
-import { applyDocumentFilter } from '../../imaging/rendering/document-filter';
+import { applyFinalAppearance } from '../../imaging/restoration/enhanced-appearance';
 import { warpPerspectiveRgba, type RgbaImage } from '../../imaging/rendering/perspective-warp';
 import { warpPerspectiveRegions } from '../../imaging/rendering/region-perspective-warp';
 import { validateQuad } from '../../imaging/geometry/quad';
@@ -85,6 +85,7 @@ async function handle(command: ComparisonCommand) {
       if (!wasm) throw new Error('unavailable');
       const result = wasm.process(source, input.corners, input.filter === 'enhanced-color');
       final = result.image;
+      if (input.filter === 'shadow-removal') final = await applyFinalAppearance(final, input.filter);
       reservedBytes = result.reservedBytes;
     } else {
       final =
@@ -107,7 +108,7 @@ async function handle(command: ComparisonCommand) {
               },
               3000,
             );
-      final = applyDocumentFilter(final, input.filter);
+      final = await applyFinalAppearance(final, input.filter);
     }
     const processed = performance.now();
     stage = 'encode';

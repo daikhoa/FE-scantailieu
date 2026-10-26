@@ -40,6 +40,7 @@ function ResultImage({
   return (
     <article className="comparison-result">
       <h2>{LABELS[result.engine]}</h2>
+      {result.filter === 'shadow-removal' && <p>Khử bóng AI · GCNet</p>}
       <p>
         {result.image.dimensions.width} × {result.image.dimensions.height} · PNG không mất dữ liệu
       </p>
@@ -123,7 +124,7 @@ function ResultImage({
           </dd>
         </div>
         <div>
-          <dt>Bộ nhớ tuyến tính WASM được cấp</dt>
+          <dt>Bộ nhớ WASM của bước cắt C++</dt>
           <dd>
             {result.engine !== 'web'
               ? mib(Math.max(...result.samples.map((s) => s.wasmReservedBytes ?? 0)))
@@ -132,8 +133,8 @@ function ResultImage({
         </div>
       </dl>
       <p className="comparison-note">
-        Các buffer và vùng nhớ WASM không phải tổng RAM cao nhất của trình duyệt. Không cộng hai số
-        này để suy ra tổng RAM.
+        Các buffer và vùng nhớ WASM không phải tổng RAM cao nhất của trình duyệt; chưa đo RAM của
+        model AI. Không cộng hai số này để suy ra tổng RAM.
       </p>
     </article>
   );

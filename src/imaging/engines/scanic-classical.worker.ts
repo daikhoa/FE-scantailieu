@@ -1,4 +1,4 @@
-import { applyDocumentFilter } from '../rendering/document-filter';
+import { applyFinalAppearance } from '../restoration/enhanced-appearance';
 import { rotateOwnedRgba } from '../rendering/rgba-rotation';
 import type { RgbaBackendInput } from './scanic-backend-contract';
 import type { ScanicWorkerRequest, ScanicWorkerResponse } from './scanic-worker-backend';
@@ -25,7 +25,7 @@ async function execute(request: ScanicWorkerRequest): Promise<unknown> {
         ? await warpRasterAsset(request.asset, request.corners, request.maximumOutputLongSide)
         : warpPerspectiveRgba(request.input, request.corners, request.maximumOutputLongSide);
     const warped = performance.now();
-    const filtered = applyDocumentFilter(corrected, request.filter, request.analysis);
+    const filtered = await applyFinalAppearance(corrected, request.filter, request.analysis);
     return {
       ...rotateOwnedRgba(filtered, request.rotation),
       timings: { warp3000: warped - started, restorationFilter: performance.now() - warped },

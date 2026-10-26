@@ -21,7 +21,9 @@ export async function renderAnalyzedPage(
   let analysis = options.analysis;
   let restoration: PageRestorationState = { kind: 'local' };
   const needsClassifier =
-    recipe.filter.mode !== 'enhanced-color' && recipe.filter.mode !== 'original';
+    recipe.filter.mode !== 'enhanced-color' &&
+    recipe.filter.mode !== 'original' &&
+    recipe.filter.mode !== 'shadow-removal';
   const pixels = options.sourcePixels === undefined ? {} : { sourcePixels: options.sourcePixels };
   if (needsClassifier && analysis === undefined && options.analyzer?.analyze !== undefined) {
     try {

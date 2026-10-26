@@ -38,6 +38,7 @@ const FILTER_MODES: readonly FilterMode[] = [
   'original',
   'ocr-color',
   'enhanced-color',
+  'shadow-removal',
   'grayscale',
   'black-and-white',
 ];

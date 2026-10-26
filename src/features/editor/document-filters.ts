@@ -11,12 +11,18 @@ export interface DocumentFilterOption {
 export const DOCUMENT_FILTERS: readonly DocumentFilterOption[] = [
   { mode: 'original', label: 'Gốc', description: 'Chỉ cắt và làm thẳng' },
   { mode: 'enhanced-color', label: 'Tăng cường', description: 'Màu đậm, tương phản rõ hơn' },
+  {
+    mode: 'shadow-removal',
+    label: 'Khử bóng AI',
+    description: 'Model 6 MB, dành cho bóng rộng; kiểm tra lại màu nền',
+  },
   { mode: 'ocr-color', label: 'Tự động', description: 'Làm nét chữ, giữ màu' },
   { mode: 'grayscale', label: 'Xám', description: 'Nền trung tính, chữ rõ' },
   { mode: 'black-and-white', label: 'Đen trắng', description: 'Tách chữ khỏi nền' },
 ];
 
 function presetVersion(mode: FilterMode): string {
+  if (mode === 'shadow-removal') return 'gcnet-2eb69a0a-field-v1';
   if (mode === 'enhanced-color') return 'enhanced-color-v5';
   return mode === 'original'
     ? 'original-v1'

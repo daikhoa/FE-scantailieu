@@ -79,7 +79,9 @@ export async function runComparison(
           samples,
           image: reply.image,
           filter: input.filter,
-          implementation: COMPARISON_IMPLEMENTATIONS[engine],
+          implementation:
+            COMPARISON_IMPLEMENTATIONS[engine] +
+            (input.filter === 'shadow-removal' ? '+gcnet-2eb69a0a-js-ort-field-v1' : ''),
         });
       } else finish(new Error('failed'));
     };
