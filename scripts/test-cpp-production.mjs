@@ -17,6 +17,52 @@ if (!process.argv[2]) {
 const { default: factory } = await import(pathToFileURL(`${base}/docscan.mjs`));
 const module = await factory({ wasmBinary: await readFile(`${base}/docscan.wasm`) });
 assert.equal(typeof module._ds_wasm_begin, 'function', 'production tiled ABI is required');
+assert.equal(
+  typeof module._ds_wasm_refine_corners,
+  'function',
+  'shared corner refinement is required',
+);
+{
+  const w = 192,
+    h = 256;
+  const rgba = new Uint8Array(w * h * 4);
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      const inside = x >= 50 && x <= 140 && y >= 60 && y <= 220;
+      rgba.set(inside ? [180, 210, 160, 255] : [25, 30, 35, 255], (y * w + x) * 4);
+    }
+  const input = module._malloc(rgba.length),
+    refined = module._malloc(80),
+    confirmation = module._malloc(64);
+  try {
+    module.HEAPU8.set(rgba, input);
+    module.HEAPF64.set([50, 60, 140, 60, 185, 130, 50, 220], refined / 8);
+    assert.equal(module._ds_wasm_refine_corners(input, w, h, refined, 0.2), 0);
+    const result = module.HEAPF64.slice(refined / 8, refined / 8 + 10);
+    const expected = [50, 60, 140, 60, 140, 220, 50, 220];
+    expected.forEach((value, index) =>
+      assert.ok(Math.abs(result[index] - value) < 6, 'outlier corner recovered'),
+    );
+    assert.equal(result[9], 2, 'weak initial evidence needs model verification');
+    module.HEAPF64.set(expected, confirmation / 8);
+    assert.equal(module._ds_wasm_confirm_corners(refined, confirmation, 0.9), 1);
+    assert.equal(module._ds_wasm_confirm_corners(refined, confirmation, 0.4), 0);
+    const heapBytes = module.HEAPU8.byteLength;
+    for (let repeat = 0; repeat < 20; repeat++) {
+      module.HEAPF64.set([50, 60, 140, 60, 185, 130, 50, 220], refined / 8);
+      assert.equal(module._ds_wasm_refine_corners(input, w, h, refined, 0.2), 0);
+    }
+    assert.equal(
+      module.HEAPU8.byteLength,
+      heapBytes,
+      'repeated corner refinement does not grow the WASM heap',
+    );
+  } finally {
+    module._free(input);
+    module._free(refined);
+    module._free(confirmation);
+  }
+}
 const width = 127,
   height = 193;
 const source = new Uint8ClampedArray(width * height * 4);

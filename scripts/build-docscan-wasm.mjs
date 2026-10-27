@@ -34,6 +34,8 @@ const files = [
   'include/docscan/docscan.h',
   ...[
     'pixels.hpp',
+    'corner-refinement.hpp',
+    'corner-refinement.cpp',
     'geometry.cpp',
     'quality.cpp',
     'appearance-plan.cpp',

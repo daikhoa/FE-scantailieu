@@ -51,7 +51,7 @@ Phiên nhận diện video và phiên xử lý trang có thể cùng tồn tại
 `BackgroundPageProcessor.enqueue()` phụ trách nhập ảnh mới; `BackgroundPageProcessor.render()` phụ trách chỉnh lại trang. Hai hàm dùng chung hàng đợi và phiên render.
 
 1. Trang chuyển qua các trạng thái chờ → đang xử lý → sẵn sàng hoặc lỗi.
-2. SDK chuẩn bị khung nhận diện ảnh tĩnh, mặc định cạnh dài tối đa **960 px**. DocCornerNet vẫn nhận tensor 224 × 224; bốn góc được đổi về hệ tọa độ ảnh nguồn.
+2. SDK chuẩn bị khung nhận diện ảnh tĩnh, mặc định cạnh dài tối đa **960 px**. DocCornerNet vẫn nhận tensor 224 × 224. C++ tinh chỉnh cạnh trên ảnh tối đa 768 px; ảnh khó được thử thêm một vùng trung tâm và xác nhận có giới hạn, tối đa bốn lượt model cho ảnh tĩnh. Bốn góc được đổi về hệ tọa độ ảnh nguồn. Camera trực tiếp vẫn một lượt model, không chạy bước phục hồi này liên tục. Xem [kết quả đo và thuật toán](corner-refinement-20261027.md).
 3. Vùng cắt người dùng đã chọn được giữ trong công thức chỉnh sửa (`EditRecipe`), cùng bộ lọc và góc xoay. Không chạy nhận diện lại để tự thay vùng cắt thủ công ở mỗi lần đổi bộ lọc.
 4. Ảnh nhỏ nhận diện không phải ảnh đầu ra. Ảnh nguồn vẫn dùng cho bước lấy mẫu/cắt ở độ phân giải xuất.
 

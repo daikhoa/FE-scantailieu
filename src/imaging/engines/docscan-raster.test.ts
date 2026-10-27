@@ -27,6 +27,12 @@ function nativeModule(needsModel = false) {
   const live = new Set<number>();
   let next = 4096;
   const module: DocscanModule = {
+    _ds_wasm_refine_corners: () => {
+      throw new Error('Raster rendering must keep the selected crop.');
+    },
+    _ds_wasm_confirm_corners: () => {
+      throw new Error('Raster rendering must not redetect the document.');
+    },
     HEAPU8: new Uint8Array(heap),
     HEAPF64: new Float64Array(heap),
     _malloc(bytes) {
