@@ -242,9 +242,16 @@ describe('App shell', () => {
       };
       return Promise.resolve(page);
     });
+    const disposeProcessor = vi.fn(() => Promise.resolve());
     const pageProcessor: BackgroundPageProcessor = {
       enqueue,
-      dispose: vi.fn(() => Promise.resolve()),
+      render: async (original, recipe, signal) => ({
+        original,
+        crop: recipe.crop,
+        recipe,
+        variant: await editorRender({ original, orientation: 0, recipe }, signal),
+      }),
+      dispose: disposeProcessor,
     };
     // Hold live detection until the first captures: null is otherwise a race
     // against requestAnimationFrame, unrelated to background page processing.
@@ -279,16 +286,9 @@ describe('App shell', () => {
         dewarp: { kind: 'not-requested' },
       }),
     );
-    const editorInitialize = vi.fn<ScannerEngine['initialize']>(() => Promise.resolve());
-    const editorDispose = vi.fn<ScannerEngine['dispose']>(() => Promise.resolve());
-    const editorEngine: ScannerEngine = {
-      lifecycle: { kind: 'uninitialized' },
-      initialize: editorInitialize,
-      detect: vi.fn(() => Promise.reject(new Error('batch edits must not run detection again'))),
-      render: editorRender,
-      dispose: editorDispose,
-    };
-    const editorEngineFactory = vi.fn(() => editorEngine);
+    const editorEngineFactory = vi.fn<() => ScannerEngine>(() => {
+      throw new Error('The injected processor already owns editing.');
+    });
     const view = render(
       <App
         cameraService={cameraService}
@@ -347,7 +347,6 @@ describe('App shell', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Xám' }));
     await waitFor(() => {
-      expect(editorInitialize).toHaveBeenCalledOnce();
       expect(editorRender).toHaveBeenCalledOnce();
     });
     expect(editorRender.mock.calls[0]?.[0].recipe.filter.mode).toBe('grayscale');
@@ -356,9 +355,7 @@ describe('App shell', () => {
     await waitFor(() => {
       expect(editorRender).toHaveBeenCalledTimes(2);
     });
-    expect(editorEngineFactory).toHaveBeenCalledOnce();
-    expect(editorInitialize).toHaveBeenCalledOnce();
-    expect(editorDispose).not.toHaveBeenCalled();
+    expect(editorEngineFactory).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Cắt trang 1' }));
     expect(screen.getByRole('heading', { name: 'Điều chỉnh 4 góc' })).toBeInTheDocument();
@@ -370,7 +367,7 @@ describe('App shell', () => {
 
     view.unmount();
     await waitFor(() => {
-      expect(editorDispose).toHaveBeenCalledOnce();
+      expect(disposeProcessor).toHaveBeenCalledOnce();
     });
   });
 });

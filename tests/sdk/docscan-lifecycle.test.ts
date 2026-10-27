@@ -24,6 +24,21 @@ function fixture() {
 }
 
 describe('SDK lifecycle and editing contract', () => {
+  it('retires a failed edit runtime and allows a new edit without reimporting the page', async () => {
+    const first = fixture(),
+      next = fixture();
+    const engines = vi.fn().mockReturnValueOnce(first.engine).mockReturnValue(next.engine);
+    first.engine.render.mockRejectedValueOnce(new Error('runtime failed'));
+    const scanner = createDocscan({ engineFactory: engines });
+    const recipe = createDocumentRecipe({ kind: 'full-frame' }, 'original');
+    await expect(scanner.render(first.original, recipe)).rejects.toThrow('runtime failed');
+    expect(first.engine.dispose).toHaveBeenCalledOnce();
+    await expect(scanner.render(first.original, recipe)).resolves.toHaveProperty('variant');
+    expect(engines).toHaveBeenCalledTimes(2);
+    await scanner.dispose();
+    await first.scanner.dispose();
+    await next.scanner.dispose();
+  });
   it('honors explicit crop and rotation, then renders edits through the same owned engine', async () => {
     const { scanner, engine, original } = fixture();
     const crop = { kind: 'full-frame' as const };

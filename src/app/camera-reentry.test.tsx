@@ -65,7 +65,7 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('review to camera resource handoff', () => {
-  it('releases the import and edit engines before opening camera without dropping the page', async () => {
+  it('releases the shared import/edit engine before opening camera without dropping the page', async () => {
     const source = new File(['source'], 'page.png', { type: 'image/png' });
     const original = { blob: source, dimensions: { width: 100, height: 100 } };
     const engines: ReturnType<typeof engine>[] = [];
@@ -111,7 +111,7 @@ describe('review to camera resource handoff', () => {
       await waitFor(() => {
         expect(screen.getByRole('button', { name: 'Xám' })).toHaveAttribute('aria-pressed', 'true');
       });
-      expect(engines).toHaveLength(2);
+      expect(engines).toHaveLength(1);
       fireEvent.click(screen.getByRole('button', { name: 'Chụp thêm trang' }));
       await waitFor(() => {
         expect(engines.every((current) => vi.mocked(current.dispose).mock.calls.length === 1)).toBe(

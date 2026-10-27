@@ -1,5 +1,4 @@
 import { HomeScreen, type LibraryState } from './HomeScreen';
-import { renderAnalyzedPage } from '../imaging/restoration/analyzed-page-renderer';
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react';
 
 import type { EditRecipe } from '../domain/document';
@@ -18,8 +17,6 @@ import { ScanBatchReview } from '../features/scanner/ScanBatchReview';
 import { scanBatchReducer, scanBatchStatus } from '../features/scanner/scan-batch';
 import type { VideoFrameSource } from '../features/scanner/video-frame-source';
 import type { ScannerEngine } from '../imaging/contracts/scanner-engine';
-import { createScanicEngine } from '../imaging/engines/scanic-classical-engine';
-import { canReuseRestorationAnalysis } from '../imaging/restoration/local-page-restoration';
 import type { LocalRestorationClient } from '../imaging/restoration/local-restoration-client';
 
 export type { LibraryState } from './HomeScreen';
@@ -83,9 +80,6 @@ export function App({
   const pageProcessor = useRef<BackgroundPageProcessor | null>(null);
   const pageOperations = useRef(new Map<string, AbortController>());
   const pageSequence = useRef(0);
-  const editorEngine = useRef<ScannerEngine | null>(null);
-  const editorEngineInitialization = useRef<Promise<ScannerEngine> | null>(null);
-  const editorEngineLifetime = useRef<AbortController | null>(null);
   const [cameraPreparation, setCameraPreparation] = useState(() => Promise.resolve());
   const cameraRetirement = useRef<Promise<void>>(Promise.resolve());
   const recordCameraRetirement = useCallback((completion: Promise<void>) => {
@@ -132,18 +126,6 @@ export function App({
     restorationClient,
   ]);
 
-  useEffect(
-    () => () => {
-      editorEngineLifetime.current?.abort();
-      editorEngineLifetime.current = null;
-      editorEngineInitialization.current = null;
-      const current = editorEngine.current;
-      editorEngine.current = null;
-      void current?.dispose().catch(() => undefined);
-    },
-    [editorEngineFactory],
-  );
-
   useEffect(() => {
     if (shouldMoveFocus.current) {
       shouldMoveFocus.current = false;
@@ -157,45 +139,14 @@ export function App({
   };
 
   const openCamera = () => {
-    // Review engines and the previous CameraScreen can outlive their UI. Retire
-    // them before opening another ML realm, without discarding queued pages.
-    editorEngineLifetime.current?.abort();
-    editorEngineLifetime.current = null;
-    editorEngineInitialization.current = null;
-    const editing = editorEngine.current;
-    editorEngine.current = null;
+    // The SDK queue owns both import and editing; retire it before opening live detection.
     const preparation = Promise.all([
       pageProcessor.current?.releaseWhenIdle?.(),
-      editing?.dispose(),
       cameraRetirement.current,
     ]).then(() => undefined);
     void preparation.catch(() => undefined);
     setCameraPreparation(preparation);
     navigateTo('camera');
-  };
-
-  const readyEditorEngine = (): Promise<ScannerEngine> => {
-    const pending = editorEngineInitialization.current;
-    if (pending !== null) return pending;
-
-    const engine = (editorEngineFactory ?? createScanicEngine)();
-    const lifetime = new AbortController();
-    editorEngine.current = engine;
-    editorEngineLifetime.current = lifetime;
-    const initialization = engine.initialize(lifetime.signal).then(
-      () => engine,
-      async (error: unknown) => {
-        if (editorEngine.current === engine) {
-          editorEngine.current = null;
-          editorEngineInitialization.current = null;
-          editorEngineLifetime.current = null;
-        }
-        await engine.dispose().catch(() => undefined);
-        throw error;
-      },
-    );
-    editorEngineInitialization.current = initialization;
-    return initialization;
   };
 
   const processPage = (
@@ -265,22 +216,9 @@ export function App({
     pageOperations.current.get(id)?.abort();
     pageOperations.current.set(id, controller);
     try {
-      const localEngine = await readyEditorEngine();
-      const client = restorationClientRef.current;
-      const output = await renderAnalyzedPage(
-        localEngine,
-        selected.page.original,
-        recipe,
-        controller.signal,
-        {
-          ...(client === null ? {} : { analyzer: client }),
-          ...(canReuseRestorationAnalysis(selected.page.recipe, recipe) &&
-          selected.page.analysis !== undefined
-            ? { analysis: selected.page.analysis }
-            : {}),
-          analysisKey: id,
-        },
-      );
+      const processor = pageProcessor.current;
+      if (!processor?.render) throw new Error('Document processor unavailable.');
+      const output = await processor.render(selected.page.original, recipe, controller.signal);
       if (controller.signal.aborted || pageOperations.current.get(id) !== controller) {
         const error = new Error('Page edit cancelled.');
         error.name = 'AbortError';
@@ -290,13 +228,10 @@ export function App({
         type: 'updated',
         id,
         page: {
-          original: selected.page.original,
+          ...output,
           ...(selected.page.originalPreview === undefined
             ? {}
             : { originalPreview: selected.page.originalPreview }),
-          crop: recipe.crop,
-          recipe,
-          ...output,
         },
       });
     } finally {

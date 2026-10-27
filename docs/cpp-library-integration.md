@@ -88,3 +88,21 @@ C++ và PDF hai trang, chỉ cài package và plugin. Có kiểm tra public API,
 chỉnh sửa, giới hạn batch, checksum package, worker import graph và bộ kiểm tra
 ứng dụng hiện có. Python facade kiểm tra với DLL và model đóng gói thật. Không có
 đo nhiệt độ, pin hoặc xác minh mới trên iPhone/Android vật lý trong lần thay đổi này.
+
+## Sửa vòng đời chỉnh sửa (2026-10-27)
+
+Nhập ảnh, đổi bộ lọc, xoay và cắt lại dùng cùng `BackgroundPageProcessor.render()`
+và hàng đợi SDK. Không tạo thêm editor engine chứa một bộ detector/WASM/model
+riêng. Runtime lỗi được thu hồi; lần chỉnh sửa tiếp theo được khởi tạo lại,
+trang trước vẫn giữ nguyên khi một lượt xử lý thất bại.
+
+SDK đóng bitmap nguồn và thu nhỏ canvas tạm ngay sau lần đọc vùng cuối, trước
+khi GCNet cấp phát tensor. Với ảnh 2880 × 3840, riêng bitmap RGBA tương đương
+44.236.800 byte được phép thu hồi sớm. Đây là giới hạn vòng đời tài nguyên,
+không phải số đo giảm RSS thực tế của Safari. Giữ nguyên mẫu model tối đa 384,
+trọng số, tham số tăng cường và giới hạn đầu ra 3000; không hạ chất lượng để né lỗi.
+
+Hồi quy bao gồm thiết bị giả lập chỉ đủ một runtime, thay bộ lọc/xoay/cắt lại,
+thu hồi bitmap trước inference và xử lý lại sau lỗi editor. Chưa có phép đo hay
+xác minh trên iPhone thật; thiếu bộ nhớ thực sự vẫn được báo thay vì giả thành công.
+AgentMemory không khả dụng trong phiên này; bàn giao được lưu tại tài liệu này.

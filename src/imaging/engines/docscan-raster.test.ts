@@ -2,8 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DocscanModule } from './docscan-module';
 import type { DocumentCorners } from '../../domain/document';
 import { renderDocscanRegions, renderDocscanRgba } from './docscan-raster';
+import { renderDocscanAsset } from './docscan-asset';
 
-const dependencies = vi.hoisted(() => ({ load: vi.fn(), predict: vi.fn() }));
+const dependencies = vi.hoisted(() => ({ load: vi.fn(), predict: vi.fn(), decode: vi.fn() }));
+vi.mock('@docscan/browser/internal/imaging/codecs/decode-raster-bitmap', () => ({
+  decodeRasterBitmap: dependencies.decode,
+}));
 vi.mock('@docscan/browser/internal/imaging/engines/docscan-module', () => ({
   loadDocscanModule: dependencies.load,
 }));
@@ -57,6 +61,38 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 describe('production C++ browser boundary', () => {
+  it('releases decoded source and patch memory before shadow inference without resizing output', async () => {
+    const { module, live } = nativeModule(true);
+    dependencies.load.mockResolvedValue(module);
+    const bitmap = { width: 2, height: 2, close: vi.fn() };
+    dependencies.decode.mockResolvedValue(bitmap);
+    const canvas = document.createElement('canvas');
+    vi.spyOn(canvas, 'getContext').mockReturnValue({
+      drawImage: vi.fn(),
+      getImageData: () => ({ data: new Uint8ClampedArray(16) }),
+    } as unknown as CanvasRenderingContext2D);
+    const create = vi.spyOn(document, 'createElement').mockReturnValue(canvas);
+    dependencies.predict.mockImplementation((sample: unknown) => {
+      expect(bitmap.close).toHaveBeenCalledOnce();
+      expect(canvas.width).toBe(1);
+      expect(canvas.height).toBe(1);
+      expect(live.size).toBe(1); // only the small corner buffer remains
+      return Promise.resolve(sample);
+    });
+    try {
+      const result = await renderDocscanAsset(
+        { blob: new Blob(['source'], { type: 'image/jpeg' }), dimensions },
+        corners,
+        'shadow-removal',
+        0,
+      );
+      expect(result.image.dimensions).toEqual(dimensions);
+      expect(bitmap.close).toHaveBeenCalledOnce();
+      expect(live.size).toBe(0);
+    } finally {
+      create.mockRestore();
+    }
+  });
   it('uses native regions, filter and rotation without mutating source pixels', async () => {
     const { module, live } = nativeModule();
     dependencies.load.mockResolvedValue(module);
