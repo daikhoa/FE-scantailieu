@@ -1,5 +1,16 @@
 # Todo: clonecamscanner v1
 
+## Tài khoản và kho tài liệu — 27/10/2026
+
+- [x] B1 — FastAPI + SQLite; đăng ký/phiên cookie/bearer; test xác thực và CSRF.
+- [x] B2 — Tài liệu nhiều trang có ảnh nguồn/công thức/PDF; test quyền sở hữu, giới hạn và cập nhật nguyên tử.
+- [x] F1 — FE đăng nhập bắt buộc, đăng ký và kho tài liệu cá nhân.
+- [x] F2 — Mở tài liệu đã lưu, chỉnh sửa/thêm/xoá trang, lưu lại và xử lý xung đột.
+- [x] P1 — Màn hình xem trước PDF, tải bằng thao tác riêng, mở/chia sẻ dự phòng và test lỗi.
+- [x] V1 — Full tests, typecheck, lint, build, API/browser smoke và hướng dẫn local/mobile.
+
+Kết quả: 627 kiểm thử FE và 16 kiểm thử backend qua; lint/TypeScript/build/ruff qua. Browser thật tạo PDF bằng SDK, sửa cùng ID, lưu/tải/mở lại qua; tệp tải xuống được kiểm tra là PDF ảnh 1 trang hợp lệ. QA bearer/đăng ký/xung đột/thu hồi phiên qua trên trình duyệt. Kiểm tra bố cục 375px không tràn ngang. Chưa thử camera/tải/chia sẻ trên thiết bị Android/iPhone thật; xác minh email, quên mật khẩu và hosting để giai đoạn sau theo yêu cầu.
+
 ## Cập nhật pipeline 2026-10-23
 
 - [x] ML-only, retry một realm mới, backoff và geometry/stability regressions.

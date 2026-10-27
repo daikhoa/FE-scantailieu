@@ -101,7 +101,7 @@ async function run() {
     input.dispatchEvent(new Event('change', { bubbles: true }));
     await until(
       () =>
-        document.querySelector<HTMLButtonElement>('button[aria-label="Tải PDF 2 trang"]')
+        document.querySelector<HTMLButtonElement>('button[aria-label="Xem PDF 2 trang"]')
           ?.disabled === false,
       'Imported pages did not finish.',
     );

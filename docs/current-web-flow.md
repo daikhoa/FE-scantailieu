@@ -97,7 +97,11 @@ Phiên nhận diện camera trực tiếp vẫn riêng vì phải đọc video l
 
 SDK nhận các ảnh kết quả đã sẵn sàng, dùng `pdf-lib` nhúng từng ảnh theo thứ tự trang, giữ tỷ lệ và tính kích thước trang theo quy ước 300 PPI. Đây là **PDF chứa ảnh**, chưa có lớp chữ OCR. UI tạo liên kết tải Blob về máy.
 
-Luồng hiện tại không có backend tài khoản/kho tài liệu bền vững. Không nên coi danh sách trang trong phiên làm việc là dữ liệu đã lưu trên máy chủ. Model/runtime được tải như tài nguyên website; nội dung ảnh được xử lý trên thiết bị.
+Web hiện yêu cầu đăng nhập bằng email/mật khẩu qua backend FastAPI tại `../backendcamscanner`. Đăng ký dùng được ngay, chưa xác minh email hoặc khôi phục mật khẩu. Sau chỉnh ảnh, UI tạo PDF rồi mở màn hình xem trước; người dùng bấm tải bằng một thao tác riêng hoặc lưu vào tài khoản.
+
+Khi lưu, backend giữ ảnh nguồn, ảnh kết quả và công thức chỉnh sửa theo thứ tự trang, cùng PDF. Mở tài liệu đã lưu có thể xem PDF hoặc nạp lại các trang vào trình chỉnh sửa, thêm ảnh/chụp thêm, xoá trang và lưu lại cùng ID với revision mới. Lỗi lưu giữ bản hiện hành; xung đột revision trả lỗi thay vì ghi đè. Các API ảnh/PDF đều kiểm tra đăng nhập và chủ sở hữu. Danh sách trang chưa bấm Lưu vẫn là bản nháp trong phiên, không phải dữ liệu đã đồng bộ.
+
+Model/runtime tiếp tục được tải như tài nguyên website; xử lý ảnh diễn ra trên thiết bị. Ảnh và PDF được gửi lên backend khi người dùng lưu. Chi tiết chạy local, proxy API, camera HTTPS và các đường tải mobile: [tài khoản và backend](accounts-and-local-backend.md).
 
 ## 9. Trang so sánh và thư viện native
 
@@ -116,6 +120,7 @@ Model là các tệp tài nguyên được thư viện tải, không nhất thi�
 | `../thuvien/models`, `browser/assets` | Model và tài nguyên phân phối của thư viện. |
 | `vendor/docscan-browser-*.tgz` | Gói SDK đã đóng phiên bản mà web cài bằng npm. |
 | `src/app`, `src/features` | UI, thao tác người dùng và trạng thái phiên web. |
+| `../backendcamscanner/app` | API tài khoản/phiên, kho tài liệu riêng tư, kiểm tra tệp và lưu phiên bản. |
 | `src/imaging` | Cầu nối SDK và mã tham chiếu/kiểm thử của trang so sánh; cần xem nơi gọi trước khi xoá. |
 | `public/vendor/heif` | Decoder HEIF dự phòng đang được SDK gọi qua URL của web. |
 

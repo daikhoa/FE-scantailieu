@@ -1,10 +1,17 @@
 import type { Ref } from 'react';
 import { RASTER_MIME_TYPES } from '../imaging/codecs/raster-metadata';
 import './HomeScreen.css';
+import type { DocumentSummary } from '../features/library/document-api';
 
 export type LibraryState =
   | { readonly kind: 'empty' }
   | { readonly kind: 'loading' }
+  | {
+      readonly kind: 'ready';
+      readonly items: readonly DocumentSummary[];
+      readonly total: number;
+      readonly loadingMore?: boolean;
+    }
   | { readonly kind: 'error'; readonly message: string };
 
 type HomeIconName = 'scan' | 'image' | 'home' | 'documents' | 'shield';
@@ -35,9 +42,13 @@ function HomeIcon({ name }: { readonly name: HomeIconName }) {
 function LibraryContent({
   state,
   onRetry,
+  onOpen,
+  onLoadMore,
 }: {
   readonly state: LibraryState;
   readonly onRetry: (() => void) | undefined;
+  readonly onOpen: ((id: string) => void) | undefined;
+  readonly onLoadMore: (() => void) | undefined;
 }) {
   if (state.kind === 'loading') {
     return (
@@ -71,6 +82,41 @@ function LibraryContent({
     );
   }
 
+  if (state.kind === 'ready') {
+    return (
+      <>
+        <ul className="document-list" aria-label="Tài liệu đã lưu">
+          {state.items.map((document) => (
+            <li key={document.id}>
+              <button type="button" onClick={() => onOpen?.(document.id)}>
+                <span className="document-list__icon" aria-hidden="true">
+                  PDF
+                </span>
+                <span>
+                  <strong>{document.name}</strong>
+                  <small>
+                    {new Date(document.updatedAt).toLocaleDateString('vi-VN')} ·{' '}
+                    {document.pageCount} trang
+                  </small>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+        {state.items.length < state.total && (
+          <button
+            className="text-button"
+            type="button"
+            disabled={state.loadingMore}
+            onClick={onLoadMore}
+          >
+            {state.loadingMore ? 'Đang tải…' : 'Xem thêm tài liệu'}
+          </button>
+        )}
+      </>
+    );
+  }
+
   return (
     <div className="recent-empty">
       <div className="recent-empty__icon">
@@ -92,7 +138,9 @@ function LibraryContent({
           </div>
         ))}
       </div>
-      <p className="recent-empty__note">Chức năng lưu tài liệu sẽ được bổ sung sau.</p>
+      <p className="recent-empty__note">
+        Tài liệu đã lưu sẽ xuất hiện tại đây khi bạn đăng nhập lại.
+      </p>
     </div>
   );
 }
@@ -104,6 +152,8 @@ interface HomeScreenProps {
   readonly onCamera: () => void;
   readonly onImport: (sources: readonly File[]) => void;
   readonly importError: string | undefined;
+  readonly onOpenDocument?: (id: string) => void;
+  readonly onLoadMoreLibrary?: () => void;
 }
 
 export function HomeScreen({
@@ -113,6 +163,8 @@ export function HomeScreen({
   onCamera,
   onImport,
   importError,
+  onOpenDocument,
+  onLoadMoreLibrary,
 }: HomeScreenProps) {
   return (
     <>
@@ -173,7 +225,8 @@ export function HomeScreen({
           <aside className="home-privacy" aria-label="Quyền riêng tư">
             <HomeIcon name="shield" />
             <p>
-              Ảnh không được tải lên máy chủ. Xử lý ngay trên thiết bị.{' '}
+              Ảnh được xử lý trên thiết bị. Khi bạn bấm Lưu, ảnh và PDF được lưu vào tài khoản trên
+              máy chủ.{' '}
               <a href="/licenses/" target="_blank" rel="noreferrer">
                 Giấy phép phần mềm
               </a>
@@ -185,13 +238,18 @@ export function HomeScreen({
             <h2 id="library-title" tabIndex={-1}>
               Gần đây
             </h2>
-            <span>0 tài liệu</span>
+            <span>{libraryState.kind === 'ready' ? libraryState.total : 0} tài liệu</span>
           </div>
           <div className="home-recent__columns" aria-hidden="true">
             <span>TÀI LIỆU</span>
             <span>NGÀY TẠO · SỐ TRANG</span>
           </div>
-          <LibraryContent state={libraryState} onRetry={onRetryLibrary} />
+          <LibraryContent
+            state={libraryState}
+            onRetry={onRetryLibrary}
+            onOpen={onOpenDocument}
+            onLoadMore={onLoadMoreLibrary}
+          />
         </section>
       </main>
       <nav className="home-nav" aria-label="Điều hướng chính">

@@ -162,7 +162,7 @@ describe('ScanBatchReview', () => {
       expect.stringContaining('Trang 2Đang hoàn thiện'),
       expect.stringContaining('Trang 3Cần xử lý lại'),
     ]);
-    expect(screen.getByRole('button', { name: 'Tải PDF 3 trang' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Xem PDF 3 trang' })).toBeDisabled();
     expect(screen.getAllByAltText(/Bản xem trước trang/u)).toHaveLength(1);
     expect(createObjectUrl).toHaveBeenCalledOnce();
 
@@ -177,7 +177,7 @@ describe('ScanBatchReview', () => {
     expect(onRemovePage).toHaveBeenCalledWith('page-3');
   });
 
-  it('exports every ready page once in capture order', async () => {
+  it('prepares every ready page in capture order, then waits for a separate download gesture', async () => {
     const pages = [readyPage('page-1', 'first'), readyPage('page-2', 'second')] as const;
     const pdf = new Blob(['pdf'], { type: 'application/pdf' });
     const pdfExporter = vi.fn<typeof createImagePdf>(() => Promise.resolve(pdf));
@@ -196,7 +196,7 @@ describe('ScanBatchReview', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Tải PDF 2 trang' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Xem PDF 2 trang' }));
 
     await waitFor(() => {
       expect(pdfExporter).toHaveBeenCalledOnce();
@@ -205,6 +205,9 @@ describe('ScanBatchReview', () => {
       pages[0].page.variant.image,
       pages[1].page.variant.image,
     ]);
+    expect(download).not.toHaveBeenCalled();
+    expect(await screen.findByRole('heading', { name: 'Xem trước PDF' })).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('link', { name: 'Tải PDF' }));
     expect(download).toHaveBeenCalledWith(pdf, 'clonecamscanner.pdf');
   });
 
@@ -228,7 +231,7 @@ describe('ScanBatchReview', () => {
     );
 
     expect(screen.getByText('Đang hoàn thiện trên thiết bị')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Tải PDF 1 trang' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Xem PDF 1 trang' })).toBeDisabled();
   });
 
   it('shows actionable quality warnings returned by the classifier', () => {

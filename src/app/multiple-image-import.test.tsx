@@ -97,8 +97,9 @@ describe('library images share the camera batch flow', () => {
       try {
         select([first]);
         await waitFor(() =>
-          expect(screen.getByRole('button', { name: 'Tải PDF 1 trang' })).toBeEnabled(),
+          expect(screen.getByRole('button', { name: 'Xem PDF 1 trang' })).toBeEnabled(),
         );
+        vi.spyOn(window, 'confirm').mockReturnValueOnce(true);
         fireEvent.click(screen.getByRole('button', { name: 'Trang chủ' }));
         select([second]);
         await act(async () => {
@@ -107,12 +108,13 @@ describe('library images share the camera batch flow', () => {
         expect(importer).toHaveBeenCalledTimes(1);
         expect(engines).toHaveLength(1);
         if (cancelWaitingBatch) {
+          vi.spyOn(window, 'confirm').mockReturnValueOnce(true);
           fireEvent.click(screen.getByRole('button', { name: 'Trang chủ' }));
           select([third]);
         }
         finishRetirement();
         await waitFor(() =>
-          expect(screen.getByRole('button', { name: 'Tải PDF 1 trang' })).toBeEnabled(),
+          expect(screen.getByRole('button', { name: 'Xem PDF 1 trang' })).toBeEnabled(),
         );
         expect(importer).toHaveBeenCalledTimes(2);
         expect(importer).toHaveBeenLastCalledWith(
@@ -146,7 +148,7 @@ describe('library images share the camera batch flow', () => {
       ).toBeInTheDocument();
       await waitFor(() => {
         expect(
-          screen.getByRole('button', { name: `Tải PDF ${String(count)} trang` }),
+          screen.getByRole('button', { name: `Xem PDF ${String(count)} trang` }),
         ).toBeEnabled();
       });
       expect(enqueue.mock.calls.map((call) => call[0])).toEqual(files);
@@ -172,10 +174,10 @@ describe('library images share the camera batch flow', () => {
     setup(enqueue);
     select([file]);
     expect(await screen.findByText('Cần xử lý lại')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Tải PDF 1 trang' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Xem PDF 1 trang' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Xử lý lại trang 1' }));
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Tải PDF 1 trang' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Xem PDF 1 trang' })).toBeEnabled();
     });
     expect(enqueue).toHaveBeenCalledTimes(2);
     expect(enqueue.mock.calls.map((call) => call[0])).toEqual([file, file]);
@@ -228,7 +230,7 @@ describe('library images share the camera batch flow', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Hoàn tất chụp 2 trang' }));
     expect(await screen.findByRole('heading', { name: 'Kiểm tra 2 trang' })).toBeInTheDocument();
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Tải PDF 2 trang' })).toBeEnabled(),
+      expect(screen.getByRole('button', { name: 'Xem PDF 2 trang' })).toBeEnabled(),
     );
     expect(enqueue.mock.calls.map((call) => call[0])).toEqual([file, captured]);
   });
@@ -247,7 +249,7 @@ describe('library images share the camera batch flow', () => {
     select(files);
     expect(await screen.findByRole('heading', { name: 'Kiểm tra 3 trang' })).toBeInTheDocument();
     expect(enqueue.mock.calls.map((call) => call[0])).toEqual(files);
-    expect(screen.getByRole('button', { name: 'Tải PDF 3 trang' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Xem PDF 3 trang' })).toBeDisabled();
     for (const index of [2, 0, 1]) {
       const file = files[index];
       const done = complete[index];
@@ -255,7 +257,7 @@ describe('library images share the camera batch flow', () => {
       done(processed(file));
     }
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Tải PDF 3 trang' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Xem PDF 3 trang' })).toBeEnabled();
     });
     expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual([
       expect.stringContaining('Trang 1'),
@@ -277,10 +279,10 @@ describe('library images share the camera batch flow', () => {
     setup(enqueue);
     select(files);
     expect(await screen.findByText('Cần xử lý lại')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Tải PDF 2 trang' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Xem PDF 2 trang' })).toBeDisabled();
     fireEvent.click(screen.getByRole('button', { name: 'Chọn trang 2' }));
     fireEvent.click(screen.getByRole('button', { name: 'Xóa trang 2' }));
-    expect(screen.getByRole('button', { name: 'Tải PDF 1 trang' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Xem PDF 1 trang' })).toBeEnabled();
   });
 
   it('ignores a cancelled selection and refuses oversized selections before enqueueing', () => {
@@ -316,6 +318,7 @@ describe('library images share the camera batch flow', () => {
     const files = [new File(['1'], 'one.png'), new File(['2'], 'two.png')];
     select(files);
     const signals = enqueue.mock.calls.map((call) => call[1]);
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true);
     fireEvent.click(screen.getByRole('button', { name: 'Trang chủ' }));
     expect(screen.getByRole('heading', { name: 'Tài liệu của tôi' })).toBeInTheDocument();
     expect(signals.every((signal) => signal.aborted)).toBe(true);
@@ -369,10 +372,11 @@ describe('library images share the camera batch flow', () => {
     await waitFor(() => {
       expect(rejectDetection).toBeDefined();
     });
+    vi.spyOn(window, 'confirm').mockReturnValueOnce(true);
     fireEvent.click(screen.getByRole('button', { name: 'Trang chủ' }));
     select(files);
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Tải PDF 2 trang' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Xem PDF 2 trang' })).toBeEnabled();
     });
     expect(engines).toHaveLength(2);
   });

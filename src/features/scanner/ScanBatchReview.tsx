@@ -4,8 +4,10 @@ import type { EditRecipe, QuarterTurn } from '../../domain/document';
 import type { RestorationWarning } from '../../imaging/restoration/restoration-types';
 import { DOCUMENT_FILTERS, recipeWithFilter } from '../editor/document-filters';
 import { ManualCropEditor } from '../editor/ManualCropEditor';
-import { downloadBlob } from '../export/download-blob';
 import { createImagePdf } from '../export/image-pdf';
+import { PdfPreview } from '../export/PdfPreview';
+import { preparePdf } from '../export/prepare-pdf';
+import { RASTER_MIME_TYPES } from '../../imaging/codecs/raster-metadata';
 import type { ScanBatchPage } from './scan-batch';
 import { PendingPagePreview } from './PendingPagePreview';
 import { shadowFallbackMessage } from '../editor/shadow-status';
@@ -14,6 +16,8 @@ interface ScanBatchReviewProps {
   readonly pages: readonly ScanBatchPage[];
   readonly headingRef: RefObject<HTMLHeadingElement | null> | null;
   readonly onCaptureMore: () => void;
+  readonly onImportMore?: (sources: readonly File[]) => void;
+  readonly importError?: string;
   readonly onBack?: () => void;
   readonly onApplyRecipe: (id: string, recipe: EditRecipe) => Promise<void>;
   readonly onRetakePage: (id: string) => void;
@@ -21,6 +25,10 @@ interface ScanBatchReviewProps {
   readonly onRemovePage: (id: string) => void;
   readonly pdfExporter?: typeof createImagePdf;
   readonly download?: (blob: Blob, filename: string) => void;
+  readonly documentName?: string;
+  readonly onDocumentNameChange?: (name: string) => void;
+  readonly savedPdfUrl?: string;
+  readonly onSaveDocument?: (pdf: Blob, name: string, signal: AbortSignal) => Promise<void>;
 }
 
 function isAbort(error: unknown): boolean {
@@ -85,13 +93,19 @@ export function ScanBatchReview({
   pages,
   headingRef,
   onCaptureMore,
+  onImportMore,
+  importError,
   onBack,
   onApplyRecipe,
   onRetakePage,
   onRetryPage,
   onRemovePage,
   pdfExporter = createImagePdf,
-  download = downloadBlob,
+  download,
+  documentName,
+  onDocumentNameChange,
+  savedPdfUrl,
+  onSaveDocument,
 }: ScanBatchReviewProps) {
   const [selectedPageId, setSelectedPageId] = useState<string | null>(() => pages[0]?.id ?? null);
   const [croppingPageId, setCroppingPageId] = useState<string | null>(null);
@@ -99,6 +113,7 @@ export function ScanBatchReview({
   const [operationFailed, setOperationFailed] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportFailed, setExportFailed] = useState(false);
+  const [preparedPdf, setPreparedPdf] = useState<Blob | null>(null);
   const exportOperation = useRef<AbortController | null>(null);
   const carouselRef = useRef<HTMLOListElement>(null);
   const readyPages = useMemo(() => pages.filter((page) => page.kind === 'ready'), [pages]);
@@ -184,12 +199,13 @@ export function ScanBatchReview({
     setExportFailed(false);
     setExporting(true);
     try {
-      const pdf = await pdfExporter(
+      const pdf = await preparePdf(
         readyPages.map((page) => page.page.variant.image),
-        controller.signal,
+        controller,
+        pdfExporter,
       );
       if (exportOperation.current !== controller) return;
-      download(pdf, 'clonecamscanner.pdf');
+      setPreparedPdf(pdf);
     } catch (error) {
       if (exportOperation.current === controller && !isAbort(error)) setExportFailed(true);
     } finally {
@@ -199,6 +215,28 @@ export function ScanBatchReview({
       }
     }
   };
+
+  if (preparedPdf !== null) {
+    return (
+      <PdfPreview
+        pages={readyPages.map((page) => ({ id: page.id, image: page.page.variant.image }))}
+        pdf={preparedPdf}
+        {...(documentName === undefined ? {} : { name: documentName })}
+        {...(onDocumentNameChange ? { onNameChange: onDocumentNameChange } : {})}
+        {...(savedPdfUrl ? { fileUrl: savedPdfUrl } : {})}
+        {...(download === undefined ? {} : { download })}
+        {...(onSaveDocument === undefined
+          ? {}
+          : {
+              onSave: (name: string, signal: AbortSignal) =>
+                onSaveDocument(preparedPdf, name, signal),
+            })}
+        onBack={() => {
+          setPreparedPdf(null);
+        }}
+      />
+    );
+  }
 
   if (croppingPage !== null) {
     return (
@@ -254,6 +292,30 @@ export function ScanBatchReview({
           </div>
           <span className="batch-review__local">Trên thiết bị</span>
         </header>
+        {onImportMore && (
+          <div className="batch-review__import">
+            <label className="text-button">
+              + Thêm ảnh từ thư viện
+              <input
+                className="visually-hidden"
+                type="file"
+                multiple
+                accept={RASTER_MIME_TYPES.join(',')}
+                aria-label="Thêm ảnh vào tài liệu"
+                onChange={(event) => {
+                  const sources = Array.from(event.currentTarget.files ?? []);
+                  event.currentTarget.value = '';
+                  if (sources.length) onImportMore(sources);
+                }}
+              />
+            </label>
+          </div>
+        )}
+        {importError && (
+          <p className="editor__error" role="alert">
+            {importError}
+          </p>
+        )}
 
         {pages.length === 0 ? (
           <div className="batch-review__empty">
@@ -452,7 +514,7 @@ export function ScanBatchReview({
               <button
                 className="batch-action-bar__done"
                 type="button"
-                aria-label={`Tải PDF ${String(pages.length)} trang`}
+                aria-label={`Xem PDF ${String(pages.length)} trang`}
                 aria-busy={exporting}
                 disabled={!canExport || exporting || busyPageId !== null}
                 onClick={() => void exportPdf()}

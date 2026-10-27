@@ -1,0 +1,12 @@
+* text=auto eol=lf
+*.ppm binary
+*.pgm binary
+*.rgba binary
+*.onnx binary
+*.ort binary
+*.wasm binary
+*.tgz binary
+*.gz binary
+*.zip binary
+# Versioned native assets have byte-level checksums.
+public/docscan-wasm/** -text

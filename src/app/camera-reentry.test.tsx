@@ -105,7 +105,7 @@ describe('review to camera resource handoff', () => {
     try {
       fireEvent.change(screen.getByLabelText('Dùng ảnh có sẵn'), { target: { files: [source] } });
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'Tải PDF 1 trang' })).toBeEnabled();
+        expect(screen.getByRole('button', { name: 'Xem PDF 1 trang' })).toBeEnabled();
       });
       fireEvent.click(screen.getByRole('button', { name: 'Xám' }));
       await waitFor(() => {
@@ -125,7 +125,7 @@ describe('review to camera resource handoff', () => {
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Thoát camera' }));
       await screen.findByRole('heading', { name: 'Kiểm tra 1 trang' });
-      expect(screen.getByRole('button', { name: 'Tải PDF 1 trang' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Xem PDF 1 trang' })).toBeEnabled();
     } finally {
       retirement.resolve();
     }

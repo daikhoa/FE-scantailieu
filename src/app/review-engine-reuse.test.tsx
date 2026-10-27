@@ -53,7 +53,7 @@ it('imports, changes filter, rotates and recrops with one processing runtime', a
   );
   fireEvent.change(screen.getByLabelText('Dùng ảnh có sẵn'), { target: { files: [file] } });
   await waitFor(() =>
-    expect(screen.getByRole('button', { name: 'Tải PDF 1 trang' })).toBeEnabled(),
+    expect(screen.getByRole('button', { name: 'Xem PDF 1 trang' })).toBeEnabled(),
   );
   fireEvent.click(screen.getByRole('button', { name: 'Khử bóng AI' }));
   await waitFor(() =>

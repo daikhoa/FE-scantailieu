@@ -18,6 +18,9 @@ import { scanBatchReducer, scanBatchStatus } from '../features/scanner/scan-batc
 import type { VideoFrameSource } from '../features/scanner/video-frame-source';
 import type { ScannerEngine } from '../imaging/contracts/scanner-engine';
 import type { LocalRestorationClient } from '../imaging/restoration/local-restoration-client';
+import type { DocumentSummary, EditableDocument } from '../features/library/document-api';
+import type { ScanBatchPage } from '../features/scanner/scan-batch';
+import { MAX_DOCUMENT_PAGES } from '../domain/document-limits';
 
 export type { LibraryState } from './HomeScreen';
 
@@ -33,6 +36,17 @@ interface AppProps {
   readonly cameraFrameSourceFactory?: () => VideoFrameSource;
   readonly pageProcessorFactory?: () => BackgroundPageProcessor;
   readonly restorationClient?: LocalRestorationClient | null;
+  readonly initialDocument?: EditableDocument;
+  readonly onOpenDocument?: (id: string) => void;
+  readonly onLoadMoreLibrary?: () => void;
+  readonly onDirtyChange?: (dirty: boolean) => void;
+  readonly onSaveDocument?: (
+    pages: readonly ScanBatchPage[],
+    pdf: Blob,
+    name: string,
+    existing: DocumentSummary | null,
+    signal: AbortSignal,
+  ) => Promise<DocumentSummary>;
 }
 
 type AppView = 'library' | 'camera' | 'batch-review';
@@ -41,7 +55,7 @@ type HomeImportState =
   | { readonly kind: 'idle' }
   | {
       readonly kind: 'error';
-      readonly code: 'too-many-images' | 'selection-too-large';
+      readonly code: 'too-many-images' | 'selection-too-large' | 'too-many-pages';
     };
 
 const EMPTY_LIBRARY: LibraryState = { kind: 'empty' };
@@ -51,8 +65,20 @@ const HOME_IMPORT_ERROR_GUIDANCE: Readonly<
   Record<Extract<HomeImportState, { kind: 'error' }>['code'], string>
 > = {
   'too-many-images': `Tối đa ${String(MAX_IMPORT_IMAGES)} ảnh mỗi lần. Hãy chọn ít ảnh hơn.`,
+  'too-many-pages': `Mỗi tài liệu tối đa ${String(MAX_DOCUMENT_PAGES)} trang. Hãy xoá bớt trang hoặc tạo tài liệu khác.`,
   'selection-too-large': `Tổng dung lượng ảnh vượt quá ${String(MAX_IMPORT_SELECTION_BYTES / (1024 * 1024))} MiB. Hãy chọn ít ảnh hơn.`,
 };
+
+function importSelectionFailure(
+  sources: readonly File[],
+  currentPages = 0,
+): Extract<HomeImportState, { kind: 'error' }>['code'] | null {
+  if (currentPages + sources.length > MAX_DOCUMENT_PAGES) return 'too-many-pages';
+  if (sources.length > MAX_IMPORT_IMAGES) return 'too-many-images';
+  if (sources.reduce((total, source) => total + source.size, 0) > MAX_IMPORT_SELECTION_BYTES)
+    return 'selection-too-large';
+  return null;
+}
 
 export function App({
   libraryState = EMPTY_LIBRARY,
@@ -66,12 +92,24 @@ export function App({
   cameraFrameSourceFactory,
   pageProcessorFactory,
   restorationClient,
+  initialDocument,
+  onOpenDocument,
+  onLoadMoreLibrary,
+  onDirtyChange,
+  onSaveDocument,
 }: AppProps) {
-  const [view, setView] = useState<AppView>('library');
+  const [view, setView] = useState<AppView>(initialDocument ? 'batch-review' : 'library');
   const [cameraReturnView, setCameraReturnView] = useState<CameraReturnView>('library');
   const [homeImportState, setHomeImportState] = useState<HomeImportState>({ kind: 'idle' });
   const [replacementPageId, setReplacementPageId] = useState<string | null>(null);
-  const [batch, dispatchBatch] = useReducer(scanBatchReducer, { pages: [] });
+  const [batch, dispatchBatch] = useReducer(scanBatchReducer, {
+    pages: initialDocument?.pages ?? [],
+  });
+  const [savedDocument, setSavedDocument] = useState<DocumentSummary | null>(
+    initialDocument?.document ?? null,
+  );
+  const [draftName, setDraftName] = useState(initialDocument?.document.name ?? 'clonecamscanner');
+  const [dirty, setDirty] = useState(false);
   const [processorGeneration, setProcessorGeneration] = useState(0);
   const [resolvedCameraService] = useState(() => cameraService ?? createCameraService());
   const restorationClientRef = useRef<LocalRestorationClient | null>(null);
@@ -80,13 +118,34 @@ export function App({
   const pageProcessor = useRef<BackgroundPageProcessor | null>(null);
   const processorRetirement = useRef<Promise<void> | null>(null);
   const pageOperations = useRef(new Map<string, AbortController>());
-  const pageSequence = useRef(0);
+  const pageSequence = useRef(
+    Math.max(
+      0,
+      ...(initialDocument?.pages ?? []).map((page) =>
+        Number(/^page-(\d+)$/u.exec(page.id)?.[1] ?? 0),
+      ),
+    ),
+  );
   const [cameraPreparation, setCameraPreparation] = useState(() => Promise.resolve());
   const cameraRetirement = useRef<Promise<void>>(Promise.resolve());
   const recordCameraRetirement = useCallback((completion: Promise<void>) => {
     cameraRetirement.current = completion;
     void completion.catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    onDirtyChange?.(dirty);
+  }, [dirty, onDirtyChange]);
+  useEffect(() => {
+    if (!dirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => {
+      window.removeEventListener('beforeunload', warn);
+    };
+  }, [dirty]);
 
   useEffect(() => {
     if (restorationClient !== undefined) {
@@ -210,12 +269,16 @@ export function App({
   };
 
   const appendPage = (source: ScanPageSource, liveDetection: LiveDetectionResult | null = null) => {
+    setDirty(true);
     const id = `page-${String(++pageSequence.current)}`;
     dispatchBatch({ type: 'captured', id, source });
     processPage(id, source, liveDetection);
   };
 
   const resetBatch = () => {
+    setDirty(false);
+    setSavedDocument(null);
+    setDraftName('clonecamscanner');
     for (const operation of pageOperations.current.values()) operation.abort();
     pageOperations.current.clear();
     dispatchBatch({ type: 'reset' });
@@ -251,6 +314,7 @@ export function App({
             : { originalPreview: selected.page.originalPreview }),
         },
       });
+      setDirty(true);
     } finally {
       if (pageOperations.current.get(id) === controller) pageOperations.current.delete(id);
     }
@@ -265,12 +329,7 @@ export function App({
 
   const openHomeImages = (sources: readonly File[]) => {
     if (sources.length === 0) return;
-    const selectionFailure =
-      sources.length > MAX_IMPORT_IMAGES
-        ? 'too-many-images'
-        : sources.reduce((total, source) => total + source.size, 0) > MAX_IMPORT_SELECTION_BYTES
-          ? 'selection-too-large'
-          : null;
+    const selectionFailure = importSelectionFailure(sources);
     if (selectionFailure !== null) {
       setHomeImportState({ kind: 'error', code: selectionFailure });
       return;
@@ -279,6 +338,17 @@ export function App({
     resetBatch();
     for (const source of sources) appendPage(source);
     navigateTo('batch-review');
+  };
+
+  const appendImages = (sources: readonly File[]) => {
+    if (sources.length === 0) return;
+    const failure = importSelectionFailure(sources, batch.pages.length);
+    if (failure) {
+      setHomeImportState({ kind: 'error', code: failure });
+      return;
+    }
+    setHomeImportState({ kind: 'idle' });
+    for (const source of sources) appendPage(source);
   };
 
   const isLibrary = view === 'library';
@@ -315,6 +385,8 @@ export function App({
               : undefined
           }
           onImport={openHomeImages}
+          {...(onOpenDocument ? { onOpenDocument } : {})}
+          {...(onLoadMoreLibrary ? { onLoadMoreLibrary } : {})}
         />
       ) : view === 'camera' ? (
         <CameraScreen
@@ -341,6 +413,7 @@ export function App({
               return;
             }
             const nextId = `page-${String(++pageSequence.current)}`;
+            setDirty(true);
 
             pageOperations.current.get(replacementPageId)?.abort();
             pageOperations.current.delete(replacementPageId);
@@ -362,6 +435,11 @@ export function App({
               }
             : {})}
           onBack={() => {
+            if (cameraReturnView === 'library' && dirty) {
+              if (!window.confirm('Tài liệu có thay đổi chưa lưu. Bạn vẫn muốn về trang chủ?'))
+                return;
+              resetBatch();
+            }
             setReplacementPageId(null);
             navigateTo(cameraReturnView);
           }}
@@ -369,8 +447,45 @@ export function App({
       ) : (
         <ScanBatchReview
           pages={batch.pages}
+          onImportMore={appendImages}
+          {...(homeImportState.kind === 'error'
+            ? { importError: HOME_IMPORT_ERROR_GUIDANCE[homeImportState.code] }
+            : {})}
           headingRef={viewHeadingRef}
+          documentName={draftName}
+          {...(savedDocument && !dirty
+            ? {
+                savedPdfUrl: `/api/v1/documents/${savedDocument.id}/pdf?revision=${String(savedDocument.revision)}`,
+              }
+            : {})}
+          onDocumentNameChange={(name) => {
+            setDraftName(name);
+            setDirty(true);
+          }}
+          {...(onSaveDocument
+            ? {
+                onSaveDocument: async (pdf: Blob, name: string, signal: AbortSignal) => {
+                  const document = await onSaveDocument(
+                    batch.pages,
+                    pdf,
+                    name,
+                    savedDocument,
+                    signal,
+                  );
+                  if (!signal.aborted) {
+                    setSavedDocument(document);
+                    setDraftName(document.name);
+                    setDirty(false);
+                  }
+                },
+              }
+            : {})}
           onBack={() => {
+            if (
+              dirty &&
+              !window.confirm('Tài liệu có thay đổi chưa lưu. Bạn vẫn muốn về trang chủ?')
+            )
+              return;
             resetBatch();
             setProcessorGeneration((generation) => generation + 1);
             navigateTo('library');
@@ -400,6 +515,7 @@ export function App({
             processPage(id, selected.source);
           }}
           onRemovePage={(id) => {
+            setDirty(true);
             pageOperations.current.get(id)?.abort();
             pageOperations.current.delete(id);
             dispatchBatch({ type: 'removed', id });
@@ -409,9 +525,9 @@ export function App({
 
       {isLibrary ? null : (
         <footer className="app-footer">
-          <span>Không tài khoản</span>
+          <span>Xử lý trên thiết bị</span>
           <span aria-hidden="true">·</span>
-          <span>Không cloud</span>
+          <span>Lưu vào tài khoản khi hoàn tất</span>
           <span aria-hidden="true">·</span>
           <span>PDF giữ đúng tỷ lệ</span>
         </footer>

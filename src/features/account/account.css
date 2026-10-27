@@ -1,0 +1,90 @@
+.account-screen {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--space-6) var(--space-4);
+}
+.account-card {
+  width: min(100%, 28rem);
+  padding: var(--space-8);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+.account-card h1 {
+  font-size: clamp(1.6rem, 6vw, 2.2rem);
+  line-height: 1.2;
+  margin: var(--space-4) 0;
+}
+.account-intro {
+  color: var(--color-text-muted);
+  line-height: 1.6;
+}
+.account-tabs {
+  display: flex;
+  gap: var(--space-2);
+  margin: var(--space-6) 0;
+}
+.account-tabs button {
+  flex: 1;
+  min-height: 2.75rem;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  color: var(--color-text);
+}
+.account-tabs button[aria-pressed='true'] {
+  color: var(--color-accent);
+  border-color: var(--color-accent);
+}
+.account-card form {
+  display: grid;
+  gap: var(--space-3);
+}
+.account-card label {
+  margin-top: var(--space-2);
+}
+.account-card input,
+.pdf-workspace input {
+  min-width: 0;
+  width: 100%;
+  min-height: 2.75rem;
+  padding: var(--space-3);
+  color: var(--color-text);
+  background: var(--color-canvas);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-sm);
+  font: inherit;
+}
+.account-card small {
+  color: var(--color-text-muted);
+}
+.account-card .primary-button {
+  margin-top: var(--space-4);
+  width: 100%;
+}
+.account-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--color-border);
+  max-width: var(--content-width);
+  margin: auto;
+}
+.account-toolbar span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-muted);
+}
+.account-toolbar button {
+  flex-shrink: 0;
+  min-height: 2.75rem;
+}
+@media (max-width: 400px) {
+  .account-card {
+    padding: var(--space-5);
+  }
+}

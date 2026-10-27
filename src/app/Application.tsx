@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { App } from './App';
+import { AccountApplication } from './AccountApplication';
 
 const ComparisonScreen = lazy(() =>
   import('../features/comparison/ComparisonScreen').then((module) => ({
@@ -9,10 +9,14 @@ const ComparisonScreen = lazy(() =>
 
 export function Application() {
   return new URLSearchParams(location.search).get('compare') === '1' ? (
-    <Suspense fallback={<p role="status">Đang mở khu vực so sánh…</p>}>
-      <ComparisonScreen />
-    </Suspense>
+    <AccountApplication
+      comparison={
+        <Suspense fallback={<p role="status">Đang mở khu vực so sánh…</p>}>
+          <ComparisonScreen />
+        </Suspense>
+      }
+    />
   ) : (
-    <App />
+    <AccountApplication />
   );
 }

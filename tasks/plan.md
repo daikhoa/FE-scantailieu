@@ -1,5 +1,17 @@
 # Kế hoạch triển khai: clonecamscanner v1
 
+## Tài khoản và tài liệu chỉnh sửa — 27/10/2026
+
+Yêu cầu mới: [đặc tả](../docs/specs/accounts-editable-documents.md). Người dùng giao lựa chọn kỹ thuật, đăng ký email/mật khẩu dùng ngay; xác minh email/quên mật khẩu làm sau.
+
+1. Backend FastAPI: cấu hình, SQLite, đăng ký/đăng nhập/đăng xuất và bearer token cho app; kiểm thử quyền truy cập và phiên.
+2. Kho tài liệu: upload ảnh nguồn/kết quả/công thức/PDF có giới hạn, phiên bản nguyên tử, danh sách/mở/tải và xung đột cập nhật; kiểm thử hai người dùng và lỗi lưu.
+3. FE: API client, màn hình tài khoản, bảo vệ web và kho cá nhân; tái dùng pipeline SDK cho chỉnh sửa tài liệu đã lưu.
+4. PDF: chuẩn bị PDF rồi mới hiện nút tải, xem các trang cùng nguồn PDF trên mobile, mở/chia sẻ dự phòng, lỗi/thử lại; kiểm thử hồi quy.
+5. Chạy toàn bộ kiểm thử liên quan, typecheck/lint/build, thử luồng thực qua API và trình duyệt; hướng dẫn local/LAN/HTTPS và hợp đồng app.
+
+Mỗi bước giữ thay đổi hiện có, chạy kiểm thử trước khi mở rộng; không tự commit hoặc deploy.
+
 ## Bổ sung 2026-10-23 — pipeline ML-only
 
 Tiếp tục đúng Site version 25: khóa detector/recovery bằng regression test; gộp rough analysis và render cuối; nối UI/PDF; chạy quality gates và model thật trước triển khai. Quyết định và giới hạn đo đạc: [ADR 003](../docs/decisions/003-ml-only-final-image-pipeline.md). Giữ nguyên Site và audience.

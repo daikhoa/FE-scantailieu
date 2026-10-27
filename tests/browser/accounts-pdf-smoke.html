@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Kiểm thử tài khoản và PDF local</title>
+  </head>
+  <body>
+    <p id="smoke-status" role="status">Đang kiểm thử API và PDF trong trình duyệt…</p>
+    <div id="smoke-preview"></div>
+    <script>
+      document.getElementById('smoke-status').textContent =
+        'Đã tải HTML, đang nạp mô-đun kiểm thử…';
+      window.addEventListener('error', () => {
+        document.getElementById('smoke-status').textContent =
+          'FAIL: không tải hoặc chạy được mô-đun kiểm thử. Xem console trình duyệt.';
+      });
+    </script>
+    <script type="module" src="./accounts-pdf-smoke.tsx"></script>
+  </body>
+</html>

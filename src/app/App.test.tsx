@@ -34,7 +34,7 @@ describe('App shell', () => {
     render(<App restorationClient={restorationClient} />);
 
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
-    expect(screen.getByText(/Ảnh không được tải lên máy chủ/)).toBeInTheDocument();
+    expect(screen.getByText(/Ảnh được xử lý trên thiết bị/)).toBeInTheDocument();
     expect(screen.getByText('AI cục bộ')).toBeInTheDocument();
   });
 
@@ -102,7 +102,7 @@ describe('App shell', () => {
     expect(screen.getByText('Chưa có tài liệu nào')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Gần đây' })).toBeInTheDocument();
     expect(screen.getByText('0 tài liệu')).toBeInTheDocument();
-    expect(screen.getByText(/Chức năng lưu tài liệu sẽ được bổ sung sau/)).toBeInTheDocument();
+    expect(screen.getByText(/Tài liệu đã lưu sẽ xuất hiện tại đây/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Tài liệu' })).toHaveAttribute(
       'href',
       '#library-title',
@@ -110,7 +110,7 @@ describe('App shell', () => {
     expect(
       screen.queryByRole('button', { name: /Word|PDF|Đăng nhập|Đăng ký/ }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText(/Ảnh không được tải lên máy chủ/)).toBeInTheDocument();
+    expect(screen.getByText(/Ảnh được xử lý trên thiết bị/)).toBeInTheDocument();
   });
 
   it('continues from a validated library image into Scanic post-capture processing', async () => {
@@ -161,7 +161,7 @@ describe('App shell', () => {
 
     expect(await screen.findByRole('heading', { name: 'Kiểm tra 1 trang' })).toBeInTheDocument();
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Tải PDF 1 trang' })).toBeEnabled();
+      expect(screen.getByRole('button', { name: 'Xem PDF 1 trang' })).toBeEnabled();
     });
     expect(renderPage).toHaveBeenCalledOnce();
     expect(renderPage.mock.calls[0]?.[0].recipe.crop).toEqual({ kind: 'full-frame' });
@@ -181,7 +181,7 @@ describe('App shell', () => {
 
     expect(await screen.findByText('Cần xử lý lại')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Kiểm tra 1 trang' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Tải PDF 1 trang' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Xem PDF 1 trang' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Xử lý lại trang 1' })).toBeEnabled();
     fireEvent.click(screen.getByRole('button', { name: 'Xóa trang 1' }));
     expect(screen.getByText('Chưa còn trang nào')).toBeInTheDocument();
@@ -322,7 +322,7 @@ describe('App shell', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Hoàn tất chụp 2 trang' }));
     expect(await screen.findByRole('heading', { name: 'Kiểm tra 2 trang' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Tải PDF 2 trang' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Xem PDF 2 trang' })).toBeEnabled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Chụp thêm trang' }));
 
