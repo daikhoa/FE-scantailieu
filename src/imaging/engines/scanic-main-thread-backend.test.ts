@@ -6,7 +6,21 @@ vi.mock('@docscan/browser/internal/imaging/engines/scanic-frame?worker&url', () 
 }));
 class FakePort {
   onmessage: ((event: { data: unknown }) => void) | null = null;
-  postMessage = vi.fn();
+  acknowledgeDisposal = true;
+  postMessage = vi.fn((message: unknown) => {
+    if (
+      this.acknowledgeDisposal &&
+      typeof message === 'object' &&
+      message !== null &&
+      'operation' in message &&
+      message.operation === 'dispose' &&
+      'id' in message
+    ) {
+      queueMicrotask(() =>
+        this.onmessage?.({ data: { id: message.id, kind: 'success', output: null } }),
+      );
+    }
+  });
   start = vi.fn();
   close = vi.fn();
 }
@@ -24,6 +38,30 @@ afterEach(() => {
 });
 
 describe('owned DOM detector realm', () => {
+  it('keeps the fallback realm until nested model cleanup is acknowledged', async () => {
+    vi.stubGlobal('MessageChannel', FakeChannel);
+    const backend = createScanicMainThreadBackend();
+    const port = FakeChannel.latest.port1;
+    port.acknowledgeDisposal = false;
+    port.onmessage?.({ data: { kind: 'connected' } });
+    const initializing = backend.initialize();
+    await vi.waitFor(() => {
+      expect(port.postMessage).toHaveBeenCalled();
+    });
+    port.onmessage?.({ data: { id: 1, kind: 'success', output: null } });
+    await initializing;
+    const disposing = backend.dispose();
+    expect(document.querySelector('iframe')).not.toBeNull();
+    expect(port.close).not.toHaveBeenCalled();
+    expect(port.postMessage).toHaveBeenLastCalledWith({ operation: 'dispose', id: 2 });
+    port.onmessage?.({ data: { id: 1, kind: 'success', output: null } });
+    expect(port.close).not.toHaveBeenCalled();
+    port.onmessage?.({ data: { id: 2, kind: 'success', output: null } });
+    await disposing;
+    await backend.dispose();
+    expect(document.querySelector('iframe')).toBeNull();
+    expect(port.close).toHaveBeenCalledOnce();
+  });
   it('loads an external module through DOM APIs and connects only after it loads', async () => {
     vi.stubGlobal('MessageChannel', FakeChannel);
     const backend = createScanicMainThreadBackend();

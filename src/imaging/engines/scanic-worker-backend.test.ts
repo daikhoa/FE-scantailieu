@@ -6,6 +6,7 @@ class FakeWorker extends EventTarget {
   static instances: FakeWorker[] = [];
   readonly messages: { readonly message: unknown; readonly transfer: unknown }[] = [];
   readonly terminate = vi.fn();
+  acknowledgeDisposal = true;
 
   constructor(
     readonly url: URL,
@@ -17,6 +18,18 @@ class FakeWorker extends EventTarget {
 
   postMessage(message: unknown, transfer?: unknown) {
     this.messages.push({ message, transfer });
+    if (
+      this.acknowledgeDisposal &&
+      typeof message === 'object' &&
+      message !== null &&
+      'operation' in message &&
+      message.operation === 'dispose' &&
+      'id' in message
+    ) {
+      queueMicrotask(() => {
+        this.reply({ id: message.id, kind: 'success', output: null });
+      });
+    }
   }
 
   reply(data: unknown) {
@@ -52,6 +65,37 @@ afterEach(() => {
 });
 
 describe('Scanic isolated worker backend', () => {
+  it('waits for child model cleanup before terminating a realm, and bounds an unresponsive shutdown', async () => {
+    vi.useFakeTimers();
+    const backend = createScanicWorkerBackend();
+    const worker = latestWorker();
+    worker.acknowledgeDisposal = false;
+    const pending = backend.initialize();
+    const cancelled = expect(pending).rejects.toMatchObject({ code: 'unavailable' });
+    const disposing = backend.dispose();
+    await cancelled;
+    expect(worker.terminate).not.toHaveBeenCalled();
+    const command = worker.messages.at(-1)?.message;
+    expect(command).toMatchObject({ operation: 'dispose' });
+    // A late render/init result must not complete retirement before cleanup is acknowledged.
+    worker.reply({ id: 1, kind: 'success', output: null });
+    expect(worker.terminate).not.toHaveBeenCalled();
+    if (typeof command !== 'object' || command === null || !('id' in command))
+      throw new Error('Missing shutdown');
+    worker.reply({ id: command.id, kind: 'success', output: null });
+    await disposing;
+    expect(worker.terminate).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+    await backend.dispose();
+    const stalled = createScanicWorkerBackend();
+    const stalledWorker = latestWorker();
+    stalledWorker.acknowledgeDisposal = false;
+    const forced = stalled.dispose();
+    await vi.advanceTimersByTimeAsync(1000);
+    await forced;
+    expect(stalledWorker.terminate).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
+  });
   it('sends encoded originals as Blob references without transferring a full source RGBA buffer', async () => {
     const backend = createScanicWorkerBackend();
     const worker = latestWorker();

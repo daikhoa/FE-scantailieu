@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   BackgroundPageProcessor,
@@ -52,6 +52,81 @@ afterEach(() => {
 });
 
 describe('library images share the camera batch flow', () => {
+  it.each([false, true])(
+    'waits for retirement before the next selection, including a cancelled waiting batch (%s)',
+    async (cancelWaitingBatch) => {
+      let finishRetirement!: () => void;
+      const retirement = new Promise<void>((resolve) => {
+        finishRetirement = resolve;
+      });
+      const first = new File(['first'], 'first.png');
+      const second = new File(['second'], 'second.png');
+      const third = new File(['third'], 'third.png');
+      const importer = vi.fn((source: Blob) =>
+        Promise.resolve({ original: processed(source).original }),
+      );
+      const engines: ScannerEngine[] = [];
+      const view = render(
+        <App
+          restorationClient={null}
+          imageImporter={importer}
+          editorFrameSource={{
+            create: () =>
+              Promise.resolve({ dimensions: { width: 900, height: 1200 }, close: () => undefined }),
+          }}
+          editorEngineFactory={() => {
+            const current: ScannerEngine = {
+              lifecycle: { kind: 'ready' },
+              initialize: () => Promise.resolve(),
+              detect: (frame) =>
+                Promise.resolve({
+                  kind: 'full-frame',
+                  dimensions: frame.dimensions,
+                  reason: 'no-document',
+                }),
+              render: (request) => Promise.resolve(processed(request.original.blob).variant),
+              dispose: vi.fn(() =>
+                engines.indexOf(current) === 0 ? retirement : Promise.resolve(),
+              ),
+            };
+            engines.push(current);
+            return current;
+          }}
+        />,
+      );
+      try {
+        select([first]);
+        await waitFor(() =>
+          expect(screen.getByRole('button', { name: 'Tải PDF 1 trang' })).toBeEnabled(),
+        );
+        fireEvent.click(screen.getByRole('button', { name: 'Trang chủ' }));
+        select([second]);
+        await act(async () => {
+          await Promise.resolve();
+        });
+        expect(importer).toHaveBeenCalledTimes(1);
+        expect(engines).toHaveLength(1);
+        if (cancelWaitingBatch) {
+          fireEvent.click(screen.getByRole('button', { name: 'Trang chủ' }));
+          select([third]);
+        }
+        finishRetirement();
+        await waitFor(() =>
+          expect(screen.getByRole('button', { name: 'Tải PDF 1 trang' })).toBeEnabled(),
+        );
+        expect(importer).toHaveBeenCalledTimes(2);
+        expect(importer).toHaveBeenLastCalledWith(
+          cancelWaitingBatch ? third : second,
+          expect.any(AbortSignal),
+        );
+        expect(engines).toHaveLength(2);
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      } finally {
+        finishRetirement();
+        view.unmount();
+      }
+    },
+  );
   it.each([1, 2])(
     'processes %i selected images through the shared queue and review screen',
     async (count) => {
@@ -235,7 +310,7 @@ describe('library images share the camera batch flow', () => {
     expect(signals.every((signal) => signal.aborted)).toBe(true);
   });
 
-  it('cancels pending imported pages when returning home and accepts the same files again', () => {
+  it('cancels pending imported pages when returning home and accepts the same files again', async () => {
     const enqueue = vi.fn<BackgroundPageProcessor['enqueue']>(() => new Promise(() => undefined));
     setup(enqueue);
     const files = [new File(['1'], 'one.png'), new File(['2'], 'two.png')];
@@ -246,7 +321,9 @@ describe('library images share the camera batch flow', () => {
     expect(signals.every((signal) => signal.aborted)).toBe(true);
     select(files);
     expect(screen.getByRole('heading', { name: 'Kiểm tra 2 trang' })).toBeInTheDocument();
-    expect(enqueue).toHaveBeenCalledTimes(4);
+    await waitFor(() => {
+      expect(enqueue).toHaveBeenCalledTimes(4);
+    });
   });
 
   it('retires a stalled detector when leaving so a new import can finish immediately', async () => {

@@ -78,6 +78,7 @@ export function App({
   const viewHeadingRef = useRef<HTMLHeadingElement>(null);
   const shouldMoveFocus = useRef(false);
   const pageProcessor = useRef<BackgroundPageProcessor | null>(null);
+  const processorRetirement = useRef<Promise<void> | null>(null);
   const pageOperations = useRef(new Map<string, AbortController>());
   const pageSequence = useRef(0);
   const [cameraPreparation, setCameraPreparation] = useState(() => Promise.resolve());
@@ -115,7 +116,14 @@ export function App({
       if (pageProcessor.current === processor) pageProcessor.current = null;
       for (const operation of operations.values()) operation.abort();
       operations.clear();
-      void processor.dispose().catch(() => undefined);
+      // A new batch must not decode images or allocate models until the old queue has retired.
+      const retirement = Promise.all([processorRetirement.current, processor.dispose()])
+        .then(() => undefined)
+        .catch(() => undefined);
+      processorRetirement.current = retirement;
+      void retirement.then(() => {
+        if (processorRetirement.current === retirement) processorRetirement.current = null;
+      });
     };
   }, [
     editorEngineFactory,
@@ -142,6 +150,7 @@ export function App({
     // The SDK queue owns both import and editing; retire it before opening live detection.
     const preparation = Promise.all([
       pageProcessor.current?.releaseWhenIdle?.(),
+      processorRetirement.current,
       cameraRetirement.current,
     ]).then(() => undefined);
     void preparation.catch(() => undefined);
@@ -162,8 +171,10 @@ export function App({
     const controller = new AbortController();
     pageOperations.current.get(id)?.abort();
     pageOperations.current.set(id, controller);
-    void processor
-      .enqueue(
+    const enqueue = () => {
+      if (controller.signal.aborted || pageProcessor.current !== processor)
+        return Promise.reject(new DOMException('Page processing cancelled.', 'AbortError'));
+      return processor.enqueue(
         source,
         controller.signal,
         () => {
@@ -177,7 +188,10 @@ export function App({
               dispatchBatch({ type: 'source-saved', id, source: original.blob });
           },
         },
-      )
+      );
+    };
+    const retirement = processorRetirement.current;
+    void (retirement === null ? enqueue() : retirement.then(enqueue))
       .then((page) => {
         if (pageOperations.current.get(id) === controller)
           dispatchBatch({ type: 'ready', id, page });
@@ -216,6 +230,9 @@ export function App({
     pageOperations.current.get(id)?.abort();
     pageOperations.current.set(id, controller);
     try {
+      await processorRetirement.current;
+      if (pageOperations.current.get(id) !== controller)
+        throw new DOMException('Page edit cancelled.', 'AbortError');
       const processor = pageProcessor.current;
       if (!processor?.render) throw new Error('Document processor unavailable.');
       const output = await processor.render(selected.page.original, recipe, controller.signal);
