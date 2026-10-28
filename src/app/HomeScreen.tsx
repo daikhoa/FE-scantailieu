@@ -225,7 +225,7 @@ export function HomeScreen({
           <aside className="home-privacy" aria-label="Quyền riêng tư">
             <HomeIcon name="shield" />
             <p>
-              Ảnh được xử lý trên thiết bị. Khi bạn bấm Lưu, ảnh và PDF được lưu vào tài khoản trên
+              Ảnh được xử lý trên thiết bị. Khi bạn bấm PDF, ảnh và PDF được lưu vào tài khoản trên
               máy chủ.{' '}
               <a href="/licenses/" target="_blank" rel="noreferrer">
                 Giấy phép phần mềm
