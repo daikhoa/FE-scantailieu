@@ -1,28 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ImageAsset } from '../../domain/document';
+import { PdfPageImage } from './PdfPageImage';
+import { PdfReader } from './PdfReader';
 import './pdf-preview.css';
 
 export interface PdfPreviewPage {
   readonly id: string;
   readonly image: ImageAsset | string;
-}
-
-function PreviewImage({
-  page,
-  number,
-}: {
-  readonly page: PdfPreviewPage;
-  readonly number: number;
-}) {
-  const element = useRef<HTMLImageElement>(null);
-  useEffect(() => {
-    const url = typeof page.image === 'string' ? page.image : URL.createObjectURL(page.image.blob);
-    if (element.current) element.current.src = url;
-    return () => {
-      if (typeof page.image !== 'string') URL.revokeObjectURL(url);
-    };
-  }, [page.image]);
-  return <img ref={element} alt={`Trang ${String(number)} của PDF`} />;
 }
 
 export function PdfPreview({
@@ -53,11 +37,11 @@ export function PdfPreview({
   const [busy, setBusy] = useState(false);
   const [wasSaved, setWasSaved] = useState(saved);
   const [error, setError] = useState('');
-  const [downloadStarted, setDownloadStarted] = useState(false);
+  const [actionHint, setActionHint] = useState('');
+  const [reading, setReading] = useState(false);
   const operation = useRef<AbortController | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const page = pages[index];
-  const openLink = useRef<HTMLAnchorElement>(null);
   const downloadLink = useRef<HTMLAnchorElement>(null);
   const filename = `${
     Array.from(name.trim())
@@ -79,7 +63,6 @@ export function PdfPreview({
   }, []);
   useEffect(() => {
     const url = fileUrl ?? URL.createObjectURL(pdf);
-    if (openLink.current) openLink.current.href = url;
     if (downloadLink.current)
       downloadLink.current.href = fileUrl
         ? `${fileUrl}${fileUrl.includes('?') ? '&' : '?'}download=true`
@@ -89,15 +72,19 @@ export function PdfPreview({
     };
   }, [pdf, fileUrl]);
 
-  const save = async () => {
-    if (!onSave || busy) return;
+  const save = async (prepareDownload = false) => {
+    if (!onSave || operation.current) return;
     const controller = new AbortController();
     operation.current = controller;
     setBusy(true);
     setError('');
+    setActionHint('');
     try {
       await onSave(name.trim(), controller.signal);
-      if (!controller.signal.aborted) setWasSaved(true);
+      if (!controller.signal.aborted) {
+        setWasSaved(true);
+        if (prepareDownload) setActionHint('PDF đã sẵn sàng. Bấm Tải PDF để lưu về máy.');
+      }
     } catch (failure) {
       if (!controller.signal.aborted)
         setError(
@@ -105,6 +92,7 @@ export function PdfPreview({
         );
     } finally {
       if (!controller.signal.aborted) setBusy(false);
+      if (operation.current === controller) operation.current = null;
     }
   };
 
@@ -138,10 +126,13 @@ export function PdfPreview({
           setName(event.target.value);
           onNameChange?.(event.target.value);
           setWasSaved(false);
+          setActionHint('');
         }}
       />
       <div className="pdf-workspace__page" aria-label={`Trang PDF ${String(index + 1)}`}>
-        {page && <PreviewImage page={page} number={index + 1} />}
+        <div className="pdf-workspace__sheet">
+          {page && <PdfPageImage image={page.image} number={index + 1} />}
+        </div>
       </div>
       <div className="pdf-workspace__pager" role="group" aria-label="Chuyển trang PDF">
         <button
@@ -167,8 +158,7 @@ export function PdfPreview({
         </button>
       </div>
       <p className="pdf-workspace__hint">
-        Bản xem trước dùng đúng ảnh và thứ tự trang của PDF. Chọn Mở PDF để xem tệp bằng trình đọc
-        của thiết bị.
+        Mỗi trang PDF dùng khổ A4 dọc. Ảnh được căn giữa, giữ tỷ lệ và nằm trọn trong trang.
       </p>
       <div className="pdf-workspace__actions">
         {onSave && (
@@ -191,14 +181,27 @@ export function PdfPreview({
           ref={downloadLink}
           className="pdf-action"
           download={filename}
+          aria-disabled={busy}
           onClick={(event) => {
+            if (busy) {
+              event.preventDefault();
+              return;
+            }
+            // A separate second gesture follows saving: WebKit may block a delayed popup/download.
+            if (!fileUrl && onSave) {
+              event.preventDefault();
+              void save(true);
+              return;
+            }
             setError('');
             try {
               if (download) {
                 event.preventDefault();
                 download(pdf, filename);
               }
-              setDownloadStarted(true);
+              setActionHint(
+                'Nếu chưa thấy PDF trong Tệp hoặc Tải xuống, hãy dùng Chia sẻ / Lưu vào Tệp.',
+              );
             } catch {
               event.preventDefault();
               setError('Chưa tải được PDF. Hãy chọn Mở PDF hoặc Chia sẻ.');
@@ -207,9 +210,14 @@ export function PdfPreview({
         >
           Tải PDF
         </a>
-        <a ref={openLink} className="pdf-action" target="_blank" rel="noopener noreferrer">
+        <button
+          type="button"
+          onClick={() => {
+            setReading(true);
+          }}
+        >
           Mở PDF
-        </a>
+        </button>
         {canShare && (
           <button type="button" onClick={share}>
             Chia sẻ / Lưu vào Tệp
@@ -217,22 +225,26 @@ export function PdfPreview({
         )}
       </div>
       {wasSaved && <p role="status">Tài liệu đã được lưu trong tài khoản.</p>}
-      {downloadStarted && (
-        <p role="status">
-          Đã yêu cầu trình duyệt tải PDF. Nếu chưa thấy tệp, chọn Mở PDF hoặc Chia sẻ để lưu bằng
-          trình đọc của thiết bị.
-        </p>
-      )}
+      {actionHint && <p role="status">{actionHint}</p>}
       {onSave && !fileUrl && (
         <p className="pdf-workspace__hint">
-          Nếu trình duyệt trong ứng dụng không tải được tệp cục bộ, hãy lưu vào tài khoản rồi bấm
-          Tải PDF để tải trực tiếp từ máy chủ.
+          Lưu tài liệu trước khi tải PDF trên điện thoại. Bạn có thể Mở PDF hoặc Chia sẻ / Lưu vào
+          Tệp ngay.
         </p>
       )}
       {error && (
         <p className="editor__error" role="alert">
           {error}
         </p>
+      )}
+      {reading && (
+        <PdfReader
+          pages={pages}
+          name={name}
+          onClose={() => {
+            setReading(false);
+          }}
+        />
       )}
     </main>
   );

@@ -1,4 +1,4 @@
-import { PDFDocument } from 'pdf-lib';
+import { PDFDocument, PageSizes } from 'pdf-lib';
 import { describe, expect, it } from 'vitest';
 
 import { createImagePdf, PdfExportError } from './image-pdf';
@@ -18,18 +18,18 @@ function page(width: number, height: number) {
 }
 
 describe('image PDF export', () => {
-  it('creates valid pages in order while preserving every page aspect ratio', async () => {
+  it('uses the same portrait A4 sheet for portrait, landscape and small images', async () => {
     const output = await createImagePdf(
-      [page(1000, 2000), page(2000, 1000)],
+      [page(1000, 2000), page(2000, 1000), page(100, 100)],
       new AbortController().signal,
     );
     const document = await PDFDocument.load(await output.arrayBuffer());
     const pages = document.getPages();
 
     expect(output.type).toBe('application/pdf');
-    expect(pages).toHaveLength(2);
-    expect(pages[0]?.getSize()).toEqual({ width: 240, height: 480 });
-    expect(pages[1]?.getSize()).toEqual({ width: 480, height: 240 });
+    expect(pages).toHaveLength(3);
+    for (const sheet of pages)
+      expect(sheet.getSize()).toEqual({ width: PageSizes.A4[0], height: PageSizes.A4[1] });
   });
 
   it('rejects an empty document and unsupported rendered image types', async () => {

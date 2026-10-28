@@ -30,4 +30,10 @@ npm run build
 npm run library:test
 ```
 
-`npm run build` tạo frontend tĩnh trong `dist/`. Proxy API trong cấu hình Vite chỉ phục vụ dev/preview; khi deploy cần cấu hình đường dẫn API trên hosting. Backend hiện dùng SQLite và file local. Cấu hình Render và Supabase sẽ được thực hiện ở bước triển khai sau.
+`npm run build` tạo frontend tĩnh trong `dist/`. Bản Render build FE từ commit ghim trong Dockerfile BE và phục vụ web cùng `/api/v1`; tài khoản và tệp lưu ở PostgreSQL/Storage riêng tư của Supabase. Local vẫn dùng SQLite. Sau khi cập nhật FE, đổi SHA `DOCSCAN_FRONTEND_REF` trong Dockerfile BE rồi push BE để Render nhận bản mới.
+
+## PDF trên điện thoại
+
+PDF mới dùng các trang A4 dọc (210 × 297 mm) bằng nhau. Ảnh được căn giữa trên nền trắng, phóng vừa trang mà không méo hay cắt ảnh. Tài liệu PDF đã tạo bằng bản cũ cần mở **Chỉnh sửa → Xem PDF → Lưu** để tạo lại trên A4; tệp đã chia sẻ trước đó không tự thay đổi.
+
+Mở PDF hiển thị trình đọc toàn bộ trang ngay trong web, dùng các ảnh đầu ra theo cùng thứ tự và bố trí A4 của PDF, không cần popup hay plugin PDF native của webview. Nếu bấm Tải PDF khi chưa lưu, web lưu tài liệu trước rồi yêu cầu bấm lại để tải tệp HTTPS bằng một thao tác trực tiếp, tránh mất user activation trong webview iPhone. Chia sẻ/Lưu vào Tệp dùng PDF đã chuẩn bị sẵn trên thiết bị. Các giới hạn riêng của ứng dụng nhúng cần kiểm tra trực tiếp trên điện thoại.
