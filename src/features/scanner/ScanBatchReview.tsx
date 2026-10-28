@@ -29,6 +29,7 @@ interface ScanBatchReviewProps {
   readonly onDocumentNameChange?: (name: string) => void;
   readonly savedPdfUrl?: string;
   readonly onSaveDocument?: (pdf: Blob, name: string, signal: AbortSignal) => Promise<void>;
+  readonly onRenameDocument?: (name: string, signal: AbortSignal) => Promise<void>;
 }
 
 function isAbort(error: unknown): boolean {
@@ -106,6 +107,7 @@ export function ScanBatchReview({
   onDocumentNameChange,
   savedPdfUrl,
   onSaveDocument,
+  onRenameDocument,
 }: ScanBatchReviewProps) {
   const [selectedPageId, setSelectedPageId] = useState<string | null>(() => pages[0]?.id ?? null);
   const [croppingPageId, setCroppingPageId] = useState<string | null>(null);
@@ -259,7 +261,9 @@ export function ScanBatchReview({
           ? {}
           : {
               onSave: (name: string, signal: AbortSignal) =>
-                onSaveDocument(preparedPdf, name, signal),
+                onRenameDocument
+                  ? onRenameDocument(name, signal)
+                  : onSaveDocument(preparedPdf, name, signal),
             })}
         onBack={() => {
           setPreparedPdf(null);
@@ -323,6 +327,19 @@ export function ScanBatchReview({
           </div>
           <span className="batch-review__local">Trên thiết bị</span>
         </header>
+        {onDocumentNameChange && (
+          <label>
+            Tên tài liệu PDF
+            <input
+              value={documentName ?? ''}
+              maxLength={160}
+              disabled={exporting}
+              onChange={(event) => {
+                onDocumentNameChange(event.target.value);
+              }}
+            />
+          </label>
+        )}
         {onImportMore && (
           <div className="batch-review__import">
             <label className="text-button">

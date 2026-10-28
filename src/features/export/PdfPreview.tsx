@@ -101,6 +101,7 @@ export function PdfPreview({
         <h1 ref={heading} tabIndex={-1}>
           Tài liệu PDF
         </h1>
+        <p className="pdf-workspace__name">{initialName}</p>
         <div className="pdf-workspace__actions">
           {onSave && !wasSaved && (
             <button
@@ -183,9 +184,7 @@ export function PdfPreview({
             }}
           />
         </details>
-      ) : (
-        <p className="pdf-workspace__name">{name}</p>
-      )}
+      ) : null}
       {actionHint && <p role="status">{actionHint}</p>}
       {onSave && !fileUrl && (
         <p className="pdf-workspace__hint">

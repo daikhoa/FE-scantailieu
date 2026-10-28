@@ -72,6 +72,13 @@ function createRequestKey(pdf: Blob, manifest: string): string {
 const info = (image: ImageAsset): ImageInfo => ({ ...image.dimensions, mime: image.blob.type });
 
 export const documentApi = {
+  rename: (document: DocumentSummary, name: string, signal: AbortSignal) =>
+    apiJson<DocumentSummary>(`${BASE}/${encodeURIComponent(document.id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: name.trim(), revision: document.revision }),
+      signal,
+    }),
   list: (offset = 0, signal?: AbortSignal) =>
     apiJson<DocumentListing>(`${BASE}?limit=20&offset=${String(offset)}`, signal ? { signal } : {}),
   async get(id: string, signal: AbortSignal): Promise<StoredDocument> {
@@ -144,36 +151,59 @@ export const documentApi = {
     );
   },
   async edit(document: StoredDocument, signal: AbortSignal): Promise<EditableDocument> {
-    const pages: ScanBatchPage[] = [];
-    // Sequential downloads bound memory/network pressure on phones; decoding remains in the SDK.
-    for (const page of document.pages) {
-      const original: ImageAsset = {
-        blob: await apiBlob(page.originalUrl, signal),
-        dimensions: { width: page.original.width, height: page.original.height },
-      };
-      const image: ImageAsset = {
-        blob: await apiBlob(page.renderedUrl, signal),
-        dimensions: { width: page.rendered.width, height: page.rendered.height },
-      };
-      pages.push({
-        id: page.id,
-        source: original.blob,
-        kind: 'ready',
-        page: {
-          original,
-          crop: page.recipe.crop,
-          recipe: page.recipe,
-          variant: {
-            image,
-            engineVersion: page.engineVersion,
-            recipeKey: page.recipeKey,
-            dewarp: page.outcome,
-            ...(page.enhancement ? { enhancement: page.enhancement } : {}),
-            ...(page.enhancementFailure ? { enhancementFailure: page.enhancementFailure } : {}),
+    const transfers = new AbortController();
+    const cancel = () => {
+      transfers.abort();
+    };
+    signal.addEventListener('abort', cancel, { once: true });
+    if (signal.aborted) cancel();
+    const pages = new Array<ScanBatchPage>(document.pages.length);
+    let nextPage = 0;
+    // Two pages / four transfers at once avoids a serial waterfall without flooding phones.
+    const worker = async () => {
+      while (nextPage < document.pages.length && !transfers.signal.aborted) {
+        const index = nextPage++;
+        const page = document.pages[index];
+        if (!page) return;
+        const [originalBlob, renderedBlob] = await Promise.all([
+          apiBlob(page.originalUrl, transfers.signal),
+          apiBlob(page.renderedUrl, transfers.signal),
+        ]);
+        const original: ImageAsset = {
+          blob: originalBlob,
+          dimensions: { width: page.original.width, height: page.original.height },
+        };
+        const image: ImageAsset = {
+          blob: renderedBlob,
+          dimensions: { width: page.rendered.width, height: page.rendered.height },
+        };
+        pages[index] = {
+          id: page.id,
+          source: original.blob,
+          kind: 'ready',
+          page: {
+            original,
+            crop: page.recipe.crop,
+            recipe: page.recipe,
+            variant: {
+              image,
+              engineVersion: page.engineVersion,
+              recipeKey: page.recipeKey,
+              dewarp: page.outcome,
+              ...(page.enhancement ? { enhancement: page.enhancement } : {}),
+              ...(page.enhancementFailure ? { enhancementFailure: page.enhancementFailure } : {}),
+            },
           },
-        },
-      });
+        };
+      }
+    };
+    try {
+      await Promise.all(Array.from({ length: Math.min(2, document.pages.length) }, worker));
+      if (signal.aborted) throw new DOMException('Đã huỷ thao tác.', 'AbortError');
+      return { document, pages };
+    } finally {
+      cancel();
+      signal.removeEventListener('abort', cancel);
     }
-    return { document, pages };
   },
 };

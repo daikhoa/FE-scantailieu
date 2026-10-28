@@ -145,6 +145,7 @@ export function AccountApplication({ comparison }: { readonly comparison?: React
           <SavedDocumentScreen
             key={selectedId}
             id={selectedId}
+            onRenamed={() => void refreshLibrary()}
             onBack={() => {
               setSelectedId(null);
               setError('');
@@ -169,6 +170,11 @@ export function AccountApplication({ comparison }: { readonly comparison?: React
                 void refreshLibrary(library.items.length);
             }}
             onDirtyChange={setDirty}
+            onRenameDocument={async (document, name, signal) => {
+              const renamed = await documentApi.rename(document, name, signal);
+              void refreshLibrary();
+              return renamed;
+            }}
             onSaveDocument={async (pages, pdf, name, existing, signal) => {
               const document = await documentApi.save(pages, pdf, name, existing, signal);
               void refreshLibrary();

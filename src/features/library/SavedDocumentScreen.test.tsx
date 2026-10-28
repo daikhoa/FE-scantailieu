@@ -32,6 +32,25 @@ const document: StoredDocument = {
 };
 
 describe('saved document screen', () => {
+  it('renames a saved document without loading editable images or uploading a PDF', async () => {
+    vi.spyOn(documentApi, 'get').mockResolvedValue(document);
+    const rename = vi
+      .spyOn(documentApi, 'rename')
+      .mockResolvedValue({ ...document, name: 'Bài học mới', revision: 3 });
+    const changed = vi.fn();
+    render(
+      <SavedDocumentScreen id="saved" onBack={vi.fn()} onEdit={vi.fn()} onRenamed={changed} />,
+    );
+    await screen.findByRole('heading', { name: 'Tài liệu PDF' });
+    fireEvent.click(screen.getByText('Đổi tên tài liệu'));
+    fireEvent.change(screen.getByLabelText('Tên tài liệu'), { target: { value: 'Bài học mới' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => {
+      expect(changed).toHaveBeenCalledOnce();
+    });
+    expect(rename).toHaveBeenCalledWith(document, 'Bài học mới', expect.any(AbortSignal));
+    expect(screen.getByText('Bài học mới')).toBeVisible();
+  });
   it('shows a focused loading screen and cancels pending work when returning to the library', () => {
     const get = vi.spyOn(documentApi, 'get').mockImplementation(() => new Promise(() => undefined));
     const back = vi.fn();

@@ -1,11 +1,81 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { waitFor } from '@testing-library/react';
 import { createDefaultPageRecipe } from '../scanner/background-page-processor';
 import type { ScanBatchPage } from '../scanner/scan-batch';
-import { documentApi } from './document-api';
+import { documentApi, type StoredDocument } from './document-api';
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe('editable document API contract', () => {
+  it('renames with metadata only instead of uploading files', async () => {
+    const document = {
+      id: 'saved',
+      name: 'Old',
+      revision: 2,
+      pageCount: 1,
+      createdAt: '',
+      updatedAt: '',
+    };
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(new Response(JSON.stringify({ ...document, name: 'New', revision: 3 })));
+    vi.stubGlobal('fetch', fetcher);
+    await documentApi.rename(document, ' New ', new AbortController().signal);
+    expect(fetcher.mock.calls[0]?.[1]).toMatchObject({
+      method: 'PATCH',
+      body: JSON.stringify({ name: 'New', revision: 2 }),
+    });
+  });
+
+  it('loads at most two pages concurrently and preserves page order', async () => {
+    const image = { width: 12, height: 16, mime: 'image/jpeg' };
+    const document: StoredDocument = {
+      id: 'saved',
+      name: 'Test',
+      revision: 1,
+      pageCount: 3,
+      createdAt: '',
+      updatedAt: '',
+      schemaVersion: 1,
+      pdfUrl: '/api/v1/documents/saved/pdf',
+      pages: Array.from({ length: 3 }, (_, i) => ({
+        id: String(i),
+        original: image,
+        rendered: image,
+        recipe: createDefaultPageRecipe({ kind: 'full-frame' }),
+        engineVersion: 'test',
+        recipeKey: String(i),
+        outcome: { kind: 'not-requested' },
+        originalUrl: `/api/v1/documents/saved/original_${String(i)}`,
+        renderedUrl: `/api/v1/documents/saved/rendered_${String(i)}`,
+        thumbnailUrl: '',
+      })),
+    };
+    const pending: (() => void)[] = [];
+    const fetcher = vi.fn<typeof fetch>(
+      () =>
+        new Promise((resolve) =>
+          pending.push(() => {
+            resolve(new Response(new Blob(['image'], { type: 'image/jpeg' })));
+          }),
+        ),
+    );
+    vi.stubGlobal('fetch', fetcher);
+    const editing = documentApi.edit(document, new AbortController().signal);
+    await waitFor(() => {
+      expect(fetcher).toHaveBeenCalledTimes(4);
+    });
+    pending[3]?.();
+    pending[2]?.();
+    await waitFor(() => {
+      expect(fetcher).toHaveBeenCalledTimes(6);
+    });
+    pending[5]?.();
+    pending[4]?.();
+    pending[1]?.();
+    pending[0]?.();
+    expect((await editing).pages.map((page) => page.id)).toEqual(['0', '1', '2']);
+  });
   it('uploads original images, rendered pages, recipes and the PDF with the existing revision', async () => {
     const original = {
       blob: new Blob(['original'], { type: 'image/jpeg' }),

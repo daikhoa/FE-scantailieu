@@ -38,6 +38,11 @@ interface AppProps {
   readonly restorationClient?: LocalRestorationClient | null;
   readonly initialDocument?: EditableDocument;
   readonly onOpenDocument?: (id: string) => void;
+  readonly onRenameDocument?: (
+    document: DocumentSummary,
+    name: string,
+    signal: AbortSignal,
+  ) => Promise<DocumentSummary>;
   readonly onLoadMoreLibrary?: () => void;
   readonly onDirtyChange?: (dirty: boolean) => void;
   readonly onSaveDocument?: (
@@ -94,6 +99,7 @@ export function App({
   restorationClient,
   initialDocument,
   onOpenDocument,
+  onRenameDocument,
   onLoadMoreLibrary,
   onDirtyChange,
   onSaveDocument,
@@ -453,6 +459,18 @@ export function App({
             : {})}
           headingRef={viewHeadingRef}
           documentName={draftName}
+          {...(savedDocument && onRenameDocument
+            ? {
+                onRenameDocument: async (name: string, signal: AbortSignal) => {
+                  const renamed = await onRenameDocument(savedDocument, name, signal);
+                  if (!signal.aborted) {
+                    setSavedDocument(renamed);
+                    setDraftName(renamed.name);
+                    setDirty(false);
+                  }
+                },
+              }
+            : {})}
           {...(savedDocument && !dirty
             ? {
                 savedPdfUrl: `/api/v1/documents/${savedDocument.id}/pdf?revision=${String(savedDocument.revision)}`,

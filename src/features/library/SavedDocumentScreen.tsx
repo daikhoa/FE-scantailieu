@@ -12,10 +12,12 @@ export function SavedDocumentScreen({
   id,
   onBack,
   onEdit,
+  onRenamed,
 }: {
   readonly id: string;
   readonly onBack: () => void;
   readonly onEdit: (draft: EditableDocument) => void;
+  readonly onRenamed?: () => void;
 }) {
   const [state, setState] = useState<DocumentState>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
@@ -72,6 +74,13 @@ export function SavedDocumentScreen({
         fileUrl={document.pdfUrl}
         loadPdf={(signal) => apiBlob(document.pdfUrl, signal)}
         saved
+        onSave={async (name, signal) => {
+          const renamed = await documentApi.rename(document, name, signal);
+          if (!signal.aborted) {
+            setState({ kind: 'ready', document: { ...document, ...renamed } });
+            onRenamed?.();
+          }
+        }}
         pages={document.pages.map((page) => ({ id: page.id, image: page.renderedUrl }))}
         onBack={onBack}
         onEdit={() => {
