@@ -1,30 +1,19 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import { accountApi, ApiError, apiBlob, type Account } from '../features/account/api-client';
+import { accountApi, ApiError, type Account } from '../features/account/api-client';
 import { AuthScreen, type AuthMode } from '../features/account/AuthScreen';
-import {
-  documentApi,
-  type EditableDocument,
-  type StoredDocument,
-} from '../features/library/document-api';
-import { PdfPreview } from '../features/export/PdfPreview';
+import { documentApi, type EditableDocument } from '../features/library/document-api';
+import { SavedDocumentScreen } from '../features/library/SavedDocumentScreen';
 import { App, type LibraryState } from './App';
-
-interface SelectedDocument {
-  readonly document: StoredDocument;
-  readonly pdf: Blob;
-}
 
 export function AccountApplication({ comparison }: { readonly comparison?: ReactNode }) {
   const [account, setAccount] = useState<Account | null>(null);
   const [checking, setChecking] = useState(true);
   const [connectionError, setConnectionError] = useState('');
   const [library, setLibrary] = useState<LibraryState>({ kind: 'loading' });
-  const [selected, setSelected] = useState<SelectedDocument | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<EditableDocument | undefined>(undefined);
-  const [opening, setOpening] = useState(false);
   const [dirty, setDirty] = useState(false);
   const [error, setError] = useState('');
-  const activeOperation = useRef<AbortController | null>(null);
   const listingOperation = useRef<AbortController | null>(null);
 
   const refreshLibrary = useCallback(async (offset = 0) => {
@@ -87,7 +76,6 @@ export function AccountApplication({ comparison }: { readonly comparison?: React
     void checkSession(controller.signal);
     return () => {
       controller.abort();
-      activeOperation.current?.abort();
       listingOperation.current?.abort();
     };
   }, [checkSession]);
@@ -97,56 +85,13 @@ export function AccountApplication({ comparison }: { readonly comparison?: React
     void refreshLibrary();
   };
 
-  const openDocument = async (id: string) => {
-    activeOperation.current?.abort();
-    const controller = new AbortController();
-    activeOperation.current = controller;
-    setOpening(true);
-    setError('');
-    try {
-      const document = await documentApi.get(id, controller.signal);
-      const pdf = await apiBlob(document.pdfUrl, controller.signal);
-      if (!controller.signal.aborted) {
-        setSelected({ document, pdf });
-        setEditing(undefined);
-      }
-    } catch (failure) {
-      if (!controller.signal.aborted)
-        setError(failure instanceof Error ? failure.message : 'Không mở được tài liệu.');
-    } finally {
-      if (!controller.signal.aborted) setOpening(false);
-    }
-  };
-
-  const editSelected = async () => {
-    if (!selected || opening) return;
-    const controller = new AbortController();
-    activeOperation.current?.abort();
-    activeOperation.current = controller;
-    setOpening(true);
-    setError('');
-    try {
-      const draft = await documentApi.edit(selected.document, controller.signal);
-      if (!controller.signal.aborted) {
-        setEditing(draft);
-        setSelected(null);
-      }
-    } catch (failure) {
-      if (!controller.signal.aborted)
-        setError(failure instanceof Error ? failure.message : 'Không mở được bản chỉnh sửa.');
-    } finally {
-      if (!controller.signal.aborted) setOpening(false);
-    }
-  };
-
   const logout = async () => {
     if (dirty && !window.confirm('Tài liệu có thay đổi chưa lưu. Bạn vẫn muốn đăng xuất?')) return;
     try {
       await accountApi.logout();
-      activeOperation.current?.abort();
       listingOperation.current?.abort();
       setAccount(null);
-      setSelected(null);
+      setSelectedId(null);
       setEditing(undefined);
       setDirty(false);
       setError('');
@@ -186,12 +131,7 @@ export function AccountApplication({ comparison }: { readonly comparison?: React
     <>
       <div className="account-toolbar">
         <span>{account.email}</span>
-        <button
-          className="text-button"
-          type="button"
-          disabled={opening}
-          onClick={() => void logout()}
-        >
+        <button className="text-button" type="button" onClick={() => void logout()}>
           Đăng xuất
         </button>
       </div>
@@ -200,29 +140,19 @@ export function AccountApplication({ comparison }: { readonly comparison?: React
           {error}
         </p>
       )}
-      {opening && (
-        <p className="editor__status" role="status">
-          Đang mở tài liệu…
-        </p>
-      )}
       {comparison ??
-        (selected ? (
-          <PdfPreview
-            pdf={selected.pdf}
-            name={selected.document.name}
-            fileUrl={selected.document.pdfUrl}
-            saved
-            pages={selected.document.pages.map((page) => ({
-              id: page.id,
-              image: page.renderedUrl,
-            }))}
+        (selectedId ? (
+          <SavedDocumentScreen
+            key={selectedId}
+            id={selectedId}
             onBack={() => {
-              activeOperation.current?.abort();
-              setOpening(false);
-              setSelected(null);
+              setSelectedId(null);
               setError('');
             }}
-            onEdit={() => void editSelected()}
+            onEdit={(draft) => {
+              setEditing(draft);
+              setSelectedId(null);
+            }}
           />
         ) : (
           <App
@@ -231,7 +161,8 @@ export function AccountApplication({ comparison }: { readonly comparison?: React
             libraryState={library}
             onRetryLibrary={() => void refreshLibrary()}
             onOpenDocument={(id) => {
-              if (!opening) void openDocument(id);
+              setEditing(undefined);
+              setSelectedId(id);
             }}
             onLoadMoreLibrary={() => {
               if (library.kind === 'ready' && !library.loadingMore)

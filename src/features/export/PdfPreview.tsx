@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ImageAsset } from '../../domain/document';
 import { PdfPageImage } from './PdfPageImage';
 import { PdfReader } from './PdfReader';
+import { PdfShareButton } from './PdfShareButton';
 import './pdf-preview.css';
 
 export interface PdfPreviewPage {
@@ -12,6 +13,7 @@ export interface PdfPreviewPage {
 export function PdfPreview({
   pages,
   pdf,
+  loadPdf,
   name: initialName = 'clonecamscanner',
   onBack,
   onSave,
@@ -22,7 +24,8 @@ export function PdfPreview({
   saved = false,
 }: {
   readonly pages: readonly PdfPreviewPage[];
-  readonly pdf: Blob;
+  readonly pdf?: Blob;
+  readonly loadPdf?: (signal: AbortSignal) => Promise<Blob>;
   readonly name?: string;
   readonly onBack: () => void;
   readonly onSave?: (name: string, signal: AbortSignal) => Promise<void>;
@@ -49,20 +52,14 @@ export function PdfPreview({
       .join('')
       .replace(/[\\/:*?"<>|]/gu, '_') || 'document'
   }.pdf`;
-  const file = new File([pdf], filename, { type: 'application/pdf' });
-  let canShare = false;
-  try {
-    canShare = typeof navigator.canShare === 'function' && navigator.canShare({ files: [file] });
-  } catch {
-    /* File sharing is optional in embedded browsers. */
-  }
 
   useEffect(() => {
     heading.current?.focus();
     return () => operation.current?.abort();
   }, []);
   useEffect(() => {
-    const url = fileUrl ?? URL.createObjectURL(pdf);
+    const url = fileUrl ?? (pdf ? URL.createObjectURL(pdf) : null);
+    if (!url) return;
     if (downloadLink.current)
       downloadLink.current.href = fileUrl
         ? `${fileUrl}${fileUrl.includes('?') ? '&' : '?'}download=true`
@@ -94,14 +91,6 @@ export function PdfPreview({
       if (!controller.signal.aborted) setBusy(false);
       if (operation.current === controller) operation.current = null;
     }
-  };
-
-  const share = () => {
-    // Invoke directly in the gesture; awaiting PDF generation here loses mobile user activation.
-    void navigator.share({ files: [file], title: name }).catch((failure: unknown) => {
-      if (!(failure instanceof Error && failure.name === 'AbortError'))
-        setError('Chưa chia sẻ được PDF. Hãy dùng Tải PDF hoặc Mở PDF.');
-    });
   };
 
   return (
@@ -195,7 +184,7 @@ export function PdfPreview({
             }
             setError('');
             try {
-              if (download) {
+              if (download && pdf) {
                 event.preventDefault();
                 download(pdf, filename);
               }
@@ -218,11 +207,12 @@ export function PdfPreview({
         >
           Mở PDF
         </button>
-        {canShare && (
-          <button type="button" onClick={share}>
-            Chia sẻ / Lưu vào Tệp
-          </button>
-        )}
+        <PdfShareButton
+          {...(pdf ? { pdf } : {})}
+          {...(loadPdf ? { loadPdf } : {})}
+          filename={filename}
+          title={name}
+        />
       </div>
       {wasSaved && <p role="status">Tài liệu đã được lưu trong tài khoản.</p>}
       {actionHint && <p role="status">{actionHint}</p>}

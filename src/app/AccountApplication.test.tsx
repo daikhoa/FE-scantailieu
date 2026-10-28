@@ -7,7 +7,7 @@ import * as apiClient from '../features/account/api-client';
 import { createDefaultPageRecipe } from '../features/scanner/background-page-processor';
 
 describe('account boundary', () => {
-  it('opens a listed document and restores its saved page editor', async () => {
+  it('opens a listed document with edit and download even when fetching the PDF would stall', async () => {
     vi.spyOn(accountApi, 'me').mockResolvedValue({ id: 'account', email: 'reader@example.com' });
     const document = {
       id: 'abc',
@@ -42,13 +42,19 @@ describe('account boundary', () => {
         },
       ],
     });
-    vi.spyOn(apiClient, 'apiBlob').mockResolvedValue(
-      new Blob(['pdf'], { type: 'application/pdf' }),
-    );
+    const pdfDownload = vi
+      .spyOn(apiClient, 'apiBlob')
+      .mockImplementation(() => new Promise<Blob>(() => undefined));
     render(<AccountApplication />);
     fireEvent.click(await screen.findByRole('button', { name: /Tài liệu đã lưu/u }));
     expect(get).toHaveBeenCalledOnce();
     expect(await screen.findByRole('heading', { name: 'Xem trước PDF' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Chỉnh sửa tài liệu' })).toBeEnabled();
+    expect(screen.getByRole('link', { name: 'Tải PDF' })).toHaveAttribute(
+      'href',
+      '/api/v1/documents/abc/pdf?download=true',
+    );
+    expect(pdfDownload).not.toHaveBeenCalled();
   });
   it('requires authentication even for the comparison screen, then opens the personal library', async () => {
     vi.spyOn(accountApi, 'me').mockRejectedValue(new ApiError(401, 'Đăng nhập'));
