@@ -6,19 +6,12 @@ const pdf = new Blob(['pdf'], { type: 'application/pdf' });
 const pages = [{ id: 'page-1', image: 'preview.jpg' }];
 
 beforeEach(() => {
-  Object.defineProperty(HTMLDialogElement.prototype, 'showModal', {
-    configurable: true,
-    value(this: HTMLDialogElement) {
-      this.open = true;
-    },
-  });
   vi.stubGlobal('URL', {
     createObjectURL: vi.fn(() => 'blob:pdf'),
     revokeObjectURL: vi.fn(),
   });
 });
 afterEach(() => {
-  Reflect.deleteProperty(HTMLDialogElement.prototype, 'showModal');
   vi.unstubAllGlobals();
 });
 
@@ -50,14 +43,26 @@ describe('PDF file actions', () => {
     );
   });
 
-  it('opens all pages in the web reader without a save or a native PDF popup', () => {
+  it('shows every PDF page immediately with edit and download actions for a saved document', () => {
     const save = vi.fn(() => Promise.resolve());
-    render(<PdfPreview pages={pages} pdf={pdf} onBack={vi.fn()} onSave={save} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Mở PDF' }));
-    expect(screen.getByRole('dialog', { name: 'Đọc PDF' })).toBeVisible();
+    const edit = vi.fn();
+    render(
+      <PdfPreview
+        pages={[...pages, { id: 'page-2', image: 'page2.jpg' }]}
+        pdf={pdf}
+        onBack={vi.fn()}
+        onSave={save}
+        saved
+        onEdit={edit}
+      />,
+    );
+    expect(screen.getByRole('heading', { name: 'Tài liệu PDF' })).toBeVisible();
+    expect(screen.getAllByAltText(/Trang \d của PDF/u)).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Mở PDF' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Tải PDF' })).toBeVisible();
     expect(save).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole('button', { name: 'Đóng trình đọc PDF' }));
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Chỉnh sửa tài liệu' }));
+    expect(edit).toHaveBeenCalledOnce();
   });
 
   it('keeps a failed save actionable without announcing a download', async () => {
@@ -69,6 +74,6 @@ describe('PDF file actions', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Ảnh gốc trang 2');
     expect(screen.queryByText(/PDF đã sẵn sàng/u)).not.toBeInTheDocument();
     expect(screen.queryByText(/Đã yêu cầu trình duyệt/u)).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Lưu vào tài khoản' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'Lưu thay đổi' })).toBeEnabled();
   });
 });

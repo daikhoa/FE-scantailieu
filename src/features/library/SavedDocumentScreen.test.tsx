@@ -52,7 +52,7 @@ describe('saved document screen', () => {
     render(<SavedDocumentScreen id="saved" onBack={vi.fn()} onEdit={vi.fn()} />);
     expect(await screen.findByRole('alert')).toHaveTextContent('Mất kết nối.');
     fireEvent.click(screen.getByRole('button', { name: 'Thử mở lại tài liệu' }));
-    expect(await screen.findByRole('heading', { name: 'Xem trước PDF' })).toBeVisible();
+    expect(await screen.findByRole('heading', { name: 'Tài liệu PDF' })).toBeVisible();
     expect(screen.getByRole('link', { name: 'Tải PDF' })).toHaveAttribute(
       'href',
       '/api/v1/documents/saved/pdf?download=true',

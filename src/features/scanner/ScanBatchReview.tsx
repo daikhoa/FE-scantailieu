@@ -112,9 +112,20 @@ export function ScanBatchReview({
   const [busyPageId, setBusyPageId] = useState<string | null>(null);
   const [operationFailed, setOperationFailed] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [exportFailed, setExportFailed] = useState(false);
+  const [exportError, setExportError] = useState('');
   const [preparedPdf, setPreparedPdf] = useState<Blob | null>(null);
   const exportOperation = useRef<AbortController | null>(null);
+  // Reuse the Blob for idempotent retries; weak batch keys release obsolete image/PDF data after edits.
+  const exportCache = useRef(
+    new WeakMap<
+      readonly ScanBatchPage[],
+      {
+        name: string;
+        pdf: Blob;
+        saved: boolean;
+      }
+    >(),
+  );
   const carouselRef = useRef<HTMLOListElement>(null);
   const readyPages = useMemo(() => pages.filter((page) => page.kind === 'ready'), [pages]);
   const pendingCount = pages.filter(
@@ -192,22 +203,39 @@ export function ScanBatchReview({
   };
 
   const exportPdf = async () => {
-    if (!canExport || exporting) return;
+    if (!canExport || exportOperation.current) return;
     const controller = new AbortController();
-    exportOperation.current?.abort();
     exportOperation.current = controller;
-    setExportFailed(false);
+    setExportError('');
     setExporting(true);
     try {
-      const pdf = await preparePdf(
-        readyPages.map((page) => page.page.variant.image),
-        controller,
-        pdfExporter,
-      );
+      const name = (documentName ?? 'clonecamscanner').trim();
+      if (!name) throw new Error('Tên tài liệu không được để trống.');
+      let cached = exportCache.current.get(pages);
+      const pdf = cached
+        ? cached.pdf
+        : await preparePdf(
+            readyPages.map((page) => page.page.variant.image),
+            controller,
+            pdfExporter,
+          );
       if (exportOperation.current !== controller) return;
+      if (!cached) {
+        cached = { name, pdf, saved: false };
+        exportCache.current.set(pages, cached);
+      }
+      if (onSaveDocument && (!cached.saved || cached.name !== name)) {
+        await onSaveDocument(pdf, name, controller.signal);
+        if (exportOperation.current !== controller || controller.signal.aborted) return;
+        cached.name = name;
+        cached.saved = true;
+      }
       setPreparedPdf(pdf);
     } catch (error) {
-      if (exportOperation.current === controller && !isAbort(error)) setExportFailed(true);
+      if (exportOperation.current === controller && !isAbort(error))
+        setExportError(
+          error instanceof Error ? error.message : 'Không thể tạo hoặc lưu PDF. Hãy thử lại.',
+        );
     } finally {
       if (exportOperation.current === controller) {
         exportOperation.current = null;
@@ -221,10 +249,12 @@ export function ScanBatchReview({
       <PdfPreview
         pages={readyPages.map((page) => ({ id: page.id, image: page.page.variant.image }))}
         pdf={preparedPdf}
+        saved={onSaveDocument !== undefined}
         {...(documentName === undefined ? {} : { name: documentName })}
         {...(onDocumentNameChange ? { onNameChange: onDocumentNameChange } : {})}
         {...(savedPdfUrl ? { fileUrl: savedPdfUrl } : {})}
         {...(download === undefined ? {} : { download })}
+        {...(onBack ? { onLibrary: onBack } : {})}
         {...(onSaveDocument === undefined
           ? {}
           : {
@@ -271,7 +301,7 @@ export function ScanBatchReview({
     <main id="main-content" className="app-main batch-review" aria-label="Tài liệu nhiều trang">
       <section className="batch-review__content" aria-labelledby="batch-review-title">
         {onBack === undefined ? null : (
-          <button className="back-button" type="button" onClick={onBack}>
+          <button className="back-button" type="button" onClick={onBack} disabled={exporting}>
             <span aria-hidden="true">←</span> Trang chủ
           </button>
         )}
@@ -281,6 +311,7 @@ export function ScanBatchReview({
             type="button"
             aria-label="Chụp thêm trang"
             onClick={onCaptureMore}
+            disabled={exporting}
           >
             + Thêm
           </button>
@@ -300,6 +331,7 @@ export function ScanBatchReview({
                 className="visually-hidden"
                 type="file"
                 multiple
+                disabled={exporting}
                 accept={RASTER_MIME_TYPES.join(',')}
                 aria-label="Thêm ảnh vào tài liệu"
                 onChange={(event) => {
@@ -435,7 +467,7 @@ export function ScanBatchReview({
                       type="button"
                       aria-label={option.label}
                       aria-pressed={selectedPage.page.recipe.filter.mode === option.mode}
-                      disabled={busyPageId !== null}
+                      disabled={busyPageId !== null || exporting}
                       onClick={() => {
                         void applyRecipe(
                           selectedPage,
@@ -469,6 +501,7 @@ export function ScanBatchReview({
                 type="button"
                 aria-label={`Chụp lại trang ${String(selectedNumber)}`}
                 disabled={
+                  exporting ||
                   selectedPage === null ||
                   selectedPage.kind === 'queued' ||
                   selectedPage.kind === 'processing'
@@ -481,7 +514,7 @@ export function ScanBatchReview({
               </button>
               <button
                 type="button"
-                disabled={selectedPage?.kind !== 'ready' || busyPageId !== null}
+                disabled={selectedPage?.kind !== 'ready' || busyPageId !== null || exporting}
                 onClick={() => {
                   if (selectedPage?.kind === 'ready')
                     void applyRecipe(selectedPage, {
@@ -495,7 +528,7 @@ export function ScanBatchReview({
               <button
                 type="button"
                 aria-label={`Cắt trang ${String(selectedNumber)}`}
-                disabled={selectedPage?.kind !== 'ready' || busyPageId !== null}
+                disabled={selectedPage?.kind !== 'ready' || busyPageId !== null || exporting}
                 onClick={() => {
                   if (selectedPage?.kind === 'ready') setCroppingPageId(selectedPage.id);
                 }}
@@ -504,7 +537,7 @@ export function ScanBatchReview({
               </button>
               <button
                 type="button"
-                disabled={selectedPage === null || busyPageId !== null}
+                disabled={selectedPage === null || busyPageId !== null || exporting}
                 onClick={() => {
                   if (selectedPage !== null) onRemovePage(selectedPage.id);
                 }}
@@ -525,7 +558,11 @@ export function ScanBatchReview({
           </>
         )}
 
-        {busyPageId !== null || pendingCount > 0 ? (
+        {exporting ? (
+          <p className="editor__status" role="status">
+            Đang tạo và lưu PDF…
+          </p>
+        ) : busyPageId !== null || pendingCount > 0 ? (
           <p className="editor__status" role="status" aria-live="polite">
             {busyPageId !== null
               ? 'Đang áp dụng thay đổi…'
@@ -547,9 +584,9 @@ export function ScanBatchReview({
             Không thể áp dụng thay đổi. Bản trang trước vẫn được giữ nguyên.
           </p>
         ) : null}
-        {exportFailed ? (
+        {exportError ? (
           <p className="editor__error" role="alert">
-            Không thể tạo PDF. Các trang vẫn được giữ nguyên và bạn có thể thử lại.
+            {exportError} Các trang vẫn được giữ nguyên. Bấm PDF để thử lại.
           </p>
         ) : null}
       </section>

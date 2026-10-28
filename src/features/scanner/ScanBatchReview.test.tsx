@@ -61,6 +61,74 @@ afterEach(() => {
 });
 
 describe('ScanBatchReview', () => {
+  it('saves before opening the PDF reader, then shows every page with edit and download', async () => {
+    const pages = [readyPage('page-1', 'first'), readyPage('page-2', 'second')];
+    const pdf = new Blob(['pdf'], { type: 'application/pdf' });
+    let finishSave: (() => void) | undefined;
+    const save = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          finishSave = resolve;
+        }),
+    );
+    render(
+      <ScanBatchReview
+        pages={pages}
+        headingRef={null}
+        onCaptureMore={vi.fn()}
+        onApplyRecipe={vi.fn(() => Promise.resolve())}
+        onRetakePage={vi.fn()}
+        onRetryPage={vi.fn()}
+        onRemovePage={vi.fn()}
+        pdfExporter={() => Promise.resolve(pdf)}
+        onSaveDocument={save}
+        documentName="Bài học"
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Xem PDF 2 trang' }));
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledWith(pdf, 'Bài học', expect.any(AbortSignal));
+    });
+    expect(screen.queryByRole('heading', { name: 'Tài liệu PDF' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Chụp thêm trang' })).toBeDisabled();
+    finishSave?.();
+    expect(await screen.findByRole('heading', { name: 'Tài liệu PDF' })).toBeVisible();
+    expect(screen.getAllByAltText(/Trang \d của PDF/u)).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Mở PDF' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Tải PDF' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Chỉnh sửa tài liệu' }));
+    expect(screen.getByRole('heading', { name: 'Kiểm tra 2 trang' })).toBeVisible();
+  });
+
+  it('keeps edited pages after a save error and retries the same PDF without regenerating it', async () => {
+    const pdf = new Blob(['pdf'], { type: 'application/pdf' });
+    const exporter = vi.fn(() => Promise.resolve(pdf));
+    const save = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Không kết nối được kho tài liệu.'))
+      .mockResolvedValue(undefined);
+    render(
+      <ScanBatchReview
+        pages={[readyPage('page-1', 'first')]}
+        headingRef={null}
+        onCaptureMore={vi.fn()}
+        onApplyRecipe={vi.fn(() => Promise.resolve())}
+        onRetakePage={vi.fn()}
+        onRetryPage={vi.fn()}
+        onRemovePage={vi.fn()}
+        pdfExporter={exporter}
+        onSaveDocument={save}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Xem PDF 1 trang' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Không kết nối được kho tài liệu.');
+    expect(screen.getByRole('heading', { name: 'Kiểm tra 1 trang' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Xem PDF 1 trang' }));
+    expect(await screen.findByRole('heading', { name: 'Tài liệu PDF' })).toBeVisible();
+    expect(exporter).toHaveBeenCalledOnce();
+    expect(save).toHaveBeenCalledTimes(2);
+  });
+
   it('shows one selected page at a time and moves through the document in capture order', () => {
     const pages = [readyPage('page-1', 'first'), readyPage('page-2', 'second')] as const;
     render(
@@ -206,7 +274,7 @@ describe('ScanBatchReview', () => {
       pages[1].page.variant.image,
     ]);
     expect(download).not.toHaveBeenCalled();
-    expect(await screen.findByRole('heading', { name: 'Xem trước PDF' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Tài liệu PDF' })).toBeInTheDocument();
     fireEvent.click(await screen.findByRole('link', { name: 'Tải PDF' }));
     expect(download).toHaveBeenCalledWith(pdf, 'clonecamscanner.pdf');
   });

@@ -10,17 +10,8 @@
   margin: var(--space-2) 0;
   font-size: clamp(1.5rem, 5vw, 2rem);
 }
-.pdf-workspace__page {
-  display: grid;
-  place-items: center;
-  min-height: 12rem;
-  background: var(--color-surface-raised);
-  padding: var(--space-4);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-}
 .pdf-workspace__sheet {
-  width: min(100%, calc(70dvh * 210 / 297));
+  width: 100%;
   aspect-ratio: 210 / 297;
   background: white;
   display: grid;
@@ -35,7 +26,6 @@
   object-fit: contain;
   background: white;
 }
-.pdf-workspace__pager,
 .pdf-workspace__actions {
   display: flex;
   align-items: center;
@@ -108,57 +98,25 @@
   font-weight: 700;
   flex-shrink: 0;
 }
-.pdf-reader {
-  position: fixed;
-  inset: 0;
-  width: 100%;
-  height: 100dvh;
-  max-width: none;
-  max-height: none;
-  margin: 0;
-  padding: 0;
-  border: 0;
+.pdf-workspace__toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: var(--space-3) 0;
   background: var(--color-canvas);
-  color: var(--color-text);
-  overflow: hidden;
-}
-.pdf-reader[open] {
-  display: flex;
-  flex-direction: column;
-}
-.pdf-reader__toolbar {
-  flex-shrink: 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: var(--space-3);
-  padding: max(var(--space-4), env(safe-area-inset-top)) var(--space-4) var(--space-4);
-  background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
 }
-.pdf-reader__toolbar div {
-  min-width: 0;
+.pdf-workspace__name {
   overflow-wrap: anywhere;
 }
-.pdf-reader__toolbar span {
-  display: block;
-  color: var(--color-text-muted);
-  font-size: 0.875rem;
-}
 .pdf-reader__pages {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
-  padding: var(--space-4);
-  padding-bottom: max(var(--space-4), env(safe-area-inset-bottom));
+  display: grid;
+  gap: var(--space-4);
 }
 .pdf-reader__pages section {
-  margin: 0 auto var(--space-4);
-  max-width: 50rem;
-}
-.pdf-reader .pdf-workspace__sheet {
+  margin: 0 auto;
   width: 100%;
+  max-width: 50rem;
 }
 .pdf-reader__pages p {
   text-align: center;

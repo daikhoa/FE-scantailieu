@@ -93,20 +93,21 @@ describe('editing saved documents', () => {
     expect(screen.getByRole('heading', { name: 'Kiểm tra 2 trang' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Xóa trang 1' }));
     fireEvent.click(screen.getByRole('button', { name: 'Xem PDF 1 trang' }));
-    await screen.findByRole('heading', { name: 'Xem trước PDF' });
+    await screen.findByRole('heading', { name: 'Tài liệu PDF' });
     expect(screen.getByLabelText('Tên tài liệu')).toHaveValue('Bài học');
-    fireEvent.click(screen.getByRole('button', { name: 'Lưu vào tài khoản' }));
     await waitFor(() => {
       expect(save).toHaveBeenCalledOnce();
     });
     expect(save.mock.calls[0]?.[0].map((item: ScanBatchPage) => item.id)).toEqual(['page-2']);
     expect(save.mock.calls[0]?.[3]).toEqual(document);
-    expect(await screen.findByRole('button', { name: 'Đã lưu' })).toBeDisabled();
-    fireEvent.click(screen.getByRole('button', { name: '← Quay lại chỉnh sửa' }));
+    expect(screen.getByText('Tài liệu đã được lưu trong tài khoản.')).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Chỉnh sửa tài liệu' }));
     fireEvent.click(screen.getByRole('button', { name: 'Xem PDF 1 trang' }));
-    await screen.findByRole('heading', { name: 'Xem trước PDF' });
+    await screen.findByRole('heading', { name: 'Tài liệu PDF' });
+    expect(save).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByText('Đổi tên tài liệu'));
     fireEvent.change(screen.getByLabelText('Tên tài liệu'), { target: { value: 'Bài học sửa' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Lưu vào tài khoản' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
     await waitFor(() => {
       expect(save).toHaveBeenCalledTimes(2);
     });

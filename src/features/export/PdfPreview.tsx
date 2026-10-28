@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ImageAsset } from '../../domain/document';
-import { PdfPageImage } from './PdfPageImage';
 import { PdfReader } from './PdfReader';
 import { PdfShareButton } from './PdfShareButton';
 import './pdf-preview.css';
@@ -16,6 +15,7 @@ export function PdfPreview({
   loadPdf,
   name: initialName = 'clonecamscanner',
   onBack,
+  onLibrary,
   onSave,
   onEdit,
   onNameChange,
@@ -28,6 +28,7 @@ export function PdfPreview({
   readonly loadPdf?: (signal: AbortSignal) => Promise<Blob>;
   readonly name?: string;
   readonly onBack: () => void;
+  readonly onLibrary?: () => void;
   readonly onSave?: (name: string, signal: AbortSignal) => Promise<void>;
   readonly onEdit?: () => void;
   readonly onNameChange?: (name: string) => void;
@@ -35,16 +36,13 @@ export function PdfPreview({
   readonly download?: (blob: Blob, filename: string) => void;
   readonly saved?: boolean;
 }) {
-  const [index, setIndex] = useState(0);
   const [name, setName] = useState(initialName);
   const [busy, setBusy] = useState(false);
   const [wasSaved, setWasSaved] = useState(saved);
   const [error, setError] = useState('');
   const [actionHint, setActionHint] = useState('');
-  const [reading, setReading] = useState(false);
   const operation = useRef<AbortController | null>(null);
   const heading = useRef<HTMLHeadingElement>(null);
-  const page = pages[index];
   const downloadLink = useRef<HTMLAnchorElement>(null);
   const filename = `${
     Array.from(name.trim())
@@ -52,20 +50,18 @@ export function PdfPreview({
       .join('')
       .replace(/[\\/:*?"<>|]/gu, '_') || 'document'
   }.pdf`;
+  const goLibrary = onLibrary ?? (onEdit ? onBack : undefined);
 
   useEffect(() => {
     heading.current?.focus();
     return () => operation.current?.abort();
   }, []);
   useEffect(() => {
-    const url = fileUrl ?? (pdf ? URL.createObjectURL(pdf) : null);
-    if (!url) return;
-    if (downloadLink.current)
-      downloadLink.current.href = fileUrl
-        ? `${fileUrl}${fileUrl.includes('?') ? '&' : '?'}download=true`
-        : url;
+    if (fileUrl || !pdf) return;
+    const url = URL.createObjectURL(pdf);
+    if (downloadLink.current) downloadLink.current.href = url;
     return () => {
-      if (!fileUrl) URL.revokeObjectURL(url);
+      URL.revokeObjectURL(url);
     };
   }, [pdf, fileUrl]);
 
@@ -95,131 +91,106 @@ export function PdfPreview({
 
   return (
     <main id="main-content" className="app-main pdf-workspace">
-      <button className="back-button" type="button" disabled={busy} onClick={onBack}>
-        ← {onEdit ? 'Kho tài liệu' : 'Quay lại chỉnh sửa'}
-      </button>
-      <header>
+      <header className="pdf-workspace__toolbar">
+        {goLibrary && (
+          <button className="back-button" type="button" disabled={busy} onClick={goLibrary}>
+            ← Kho tài liệu
+          </button>
+        )}
         <p className="eyebrow">{pages.length} trang · PDF</p>
         <h1 ref={heading} tabIndex={-1}>
-          Xem trước PDF
+          Tài liệu PDF
         </h1>
-      </header>
-      <label htmlFor="pdf-name">Tên tài liệu</label>
-      <input
-        id="pdf-name"
-        value={name}
-        maxLength={160}
-        readOnly={!onSave}
-        disabled={busy}
-        onChange={(event) => {
-          setName(event.target.value);
-          onNameChange?.(event.target.value);
-          setWasSaved(false);
-          setActionHint('');
-        }}
-      />
-      <div className="pdf-workspace__page" aria-label={`Trang PDF ${String(index + 1)}`}>
-        <div className="pdf-workspace__sheet">
-          {page && <PdfPageImage image={page.image} number={index + 1} />}
-        </div>
-      </div>
-      <div className="pdf-workspace__pager" role="group" aria-label="Chuyển trang PDF">
-        <button
-          type="button"
-          disabled={index === 0}
-          onClick={() => {
-            setIndex(index - 1);
-          }}
-        >
-          ← Trang trước
-        </button>
-        <span aria-live="polite">
-          {index + 1} / {pages.length}
-        </span>
-        <button
-          type="button"
-          disabled={index >= pages.length - 1}
-          onClick={() => {
-            setIndex(index + 1);
-          }}
-        >
-          Trang sau →
-        </button>
-      </div>
-      <p className="pdf-workspace__hint">
-        Mỗi trang PDF dùng khổ A4 dọc. Ảnh được căn giữa, giữ tỷ lệ và nằm trọn trong trang.
-      </p>
-      <div className="pdf-workspace__actions">
-        {onSave && (
+        <div className="pdf-workspace__actions">
+          {onSave && !wasSaved && (
+            <button
+              type="button"
+              className="primary-button"
+              disabled={busy || !name.trim() || wasSaved}
+              aria-busy={busy}
+              onClick={() => void save()}
+            >
+              {busy ? 'Đang lưu…' : 'Lưu thay đổi'}
+            </button>
+          )}
           <button
             type="button"
             className="primary-button"
-            disabled={busy || !name.trim() || wasSaved}
-            aria-busy={busy}
-            onClick={() => void save()}
+            disabled={busy}
+            onClick={onEdit ?? onBack}
           >
-            {busy ? 'Đang lưu…' : wasSaved ? 'Đã lưu' : 'Lưu vào tài khoản'}
-          </button>
-        )}
-        {onEdit && (
-          <button type="button" className="primary-button" onClick={onEdit}>
             Chỉnh sửa tài liệu
           </button>
-        )}
-        <a
-          ref={downloadLink}
-          className="pdf-action"
-          download={filename}
-          aria-disabled={busy}
-          onClick={(event) => {
-            if (busy) {
-              event.preventDefault();
-              return;
+          <a
+            ref={downloadLink}
+            href={
+              fileUrl ? `${fileUrl}${fileUrl.includes('?') ? '&' : '?'}download=true` : undefined
             }
-            // A separate second gesture follows saving: WebKit may block a delayed popup/download.
-            if (!fileUrl && onSave) {
-              event.preventDefault();
-              void save(true);
-              return;
-            }
-            setError('');
-            try {
-              if (download && pdf) {
+            className="pdf-action"
+            download={filename}
+            aria-disabled={busy}
+            onClick={(event) => {
+              if (busy) {
                 event.preventDefault();
-                download(pdf, filename);
+                return;
               }
-              setActionHint(
-                'Nếu chưa thấy PDF trong Tệp hoặc Tải xuống, hãy dùng Chia sẻ / Lưu vào Tệp.',
-              );
-            } catch {
-              event.preventDefault();
-              setError('Chưa tải được PDF. Hãy chọn Mở PDF hoặc Chia sẻ.');
-            }
-          }}
-        >
-          Tải PDF
-        </a>
-        <button
-          type="button"
-          onClick={() => {
-            setReading(true);
-          }}
-        >
-          Mở PDF
-        </button>
-        <PdfShareButton
-          {...(pdf ? { pdf } : {})}
-          {...(loadPdf ? { loadPdf } : {})}
-          filename={filename}
-          title={name}
-        />
-      </div>
-      {wasSaved && <p role="status">Tài liệu đã được lưu trong tài khoản.</p>}
+              // A separate second gesture follows saving: WebKit may block a delayed popup/download.
+              if (!fileUrl && onSave) {
+                event.preventDefault();
+                void save(true);
+                return;
+              }
+              setError('');
+              try {
+                if (download && pdf) {
+                  event.preventDefault();
+                  download(pdf, filename);
+                }
+                setActionHint(
+                  'Nếu chưa thấy PDF trong Tệp hoặc Tải xuống, hãy dùng Chia sẻ / Lưu vào Tệp.',
+                );
+              } catch {
+                event.preventDefault();
+                setError('Chưa tải được PDF. Hãy dùng Chia sẻ / Lưu vào Tệp.');
+              }
+            }}
+          >
+            Tải PDF
+          </a>
+          <PdfShareButton
+            {...(pdf ? { pdf } : {})}
+            {...(loadPdf ? { loadPdf } : {})}
+            filename={filename}
+            title={name}
+          />
+        </div>
+        {wasSaved && <p role="status">Tài liệu đã được lưu trong tài khoản.</p>}
+      </header>
+      {onSave ? (
+        <details className="pdf-workspace__rename">
+          <summary>Đổi tên tài liệu</summary>
+          <label htmlFor="pdf-name">Tên tài liệu</label>
+          <input
+            id="pdf-name"
+            value={name}
+            maxLength={160}
+            disabled={busy}
+            onChange={(event) => {
+              setName(event.target.value);
+              onNameChange?.(event.target.value);
+              setWasSaved(false);
+              setActionHint('');
+            }}
+          />
+        </details>
+      ) : (
+        <p className="pdf-workspace__name">{name}</p>
+      )}
       {actionHint && <p role="status">{actionHint}</p>}
       {onSave && !fileUrl && (
         <p className="pdf-workspace__hint">
-          Lưu tài liệu trước khi tải PDF trên điện thoại. Bạn có thể Mở PDF hoặc Chia sẻ / Lưu vào
-          Tệp ngay.
+          Lưu tài liệu trước khi tải PDF trên điện thoại. Bạn có thể dùng Chia sẻ / Lưu vào Tệp
+          ngay.
         </p>
       )}
       {error && (
@@ -227,15 +198,7 @@ export function PdfPreview({
           {error}
         </p>
       )}
-      {reading && (
-        <PdfReader
-          pages={pages}
-          name={name}
-          onClose={() => {
-            setReading(false);
-          }}
-        />
-      )}
+      <PdfReader pages={pages} />
     </main>
   );
 }

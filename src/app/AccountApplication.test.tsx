@@ -48,7 +48,7 @@ describe('account boundary', () => {
     render(<AccountApplication />);
     fireEvent.click(await screen.findByRole('button', { name: /Tài liệu đã lưu/u }));
     expect(get).toHaveBeenCalledOnce();
-    expect(await screen.findByRole('heading', { name: 'Xem trước PDF' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Tài liệu PDF' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Chỉnh sửa tài liệu' })).toBeEnabled();
     expect(screen.getByRole('link', { name: 'Tải PDF' })).toHaveAttribute(
       'href',
