@@ -7,13 +7,20 @@ interface ScanPageIdentity {
   readonly preview?: RgbaBackendInput;
 }
 
-export type ScanBatchPage = ScanPageIdentity &
-  (
-    | { readonly kind: 'queued' }
-    | { readonly kind: 'processing' }
-    | { readonly kind: 'ready'; readonly page: ProcessedScanPage }
-    | { readonly kind: 'failed' }
-  );
+export type ScanBatchPage =
+  | (ScanPageIdentity &
+      (
+        | { readonly kind: 'queued' }
+        | { readonly kind: 'processing' }
+        | { readonly kind: 'ready'; readonly page: ProcessedScanPage }
+        | { readonly kind: 'failed' }
+      ))
+  | ({
+      readonly id: string;
+      readonly previewUrl: string;
+      readonly preview?: never;
+      readonly source?: never;
+    } & ({ readonly kind: 'loading-saved' } | { readonly kind: 'failed-saved' }));
 
 export interface ScanBatchState {
   readonly pages: readonly ScanBatchPage[];
@@ -54,7 +61,11 @@ function updatePage(
 export function scanBatchReducer(state: ScanBatchState, event: ScanBatchEvent): ScanBatchState {
   switch (event.type) {
     case 'source-saved':
-      return updatePage(state, event.id, (page) => ({ ...page, source: event.source }));
+      return updatePage(state, event.id, (page) =>
+        page.kind === 'loading-saved' || page.kind === 'failed-saved'
+          ? page
+          : { ...page, source: event.source },
+      );
     case 'captured':
       if (event.id.length === 0 || state.pages.some((page) => page.id === event.id)) return state;
       return {
@@ -98,7 +109,7 @@ export function scanBatchReducer(state: ScanBatchState, event: ScanBatchEvent): 
       );
     case 'ready':
       return updatePage(state, event.id, (page) =>
-        page.kind === 'queued' || page.kind === 'processing'
+        page.kind === 'queued' || page.kind === 'processing' || page.kind === 'loading-saved'
           ? {
               id: page.id,
               // The durable JPEG replaces the much larger captured RGBA buffer once processing
@@ -115,23 +126,27 @@ export function scanBatchReducer(state: ScanBatchState, event: ScanBatchEvent): 
       );
     case 'failed':
       return updatePage(state, event.id, (page) =>
-        page.kind === 'queued' || page.kind === 'processing'
-          ? {
-              id: page.id,
-              source: page.source,
-              kind: 'failed',
-            }
-          : page,
+        page.kind === 'loading-saved'
+          ? { ...page, kind: 'failed-saved' }
+          : page.kind === 'queued' || page.kind === 'processing'
+            ? {
+                id: page.id,
+                source: page.source,
+                kind: 'failed',
+              }
+            : page,
       );
     case 'retry':
       return updatePage(state, event.id, (page) =>
-        page.kind === 'failed'
-          ? {
-              id: page.id,
-              source: page.source,
-              kind: 'queued',
-            }
-          : page,
+        page.kind === 'failed-saved'
+          ? { ...page, kind: 'loading-saved' }
+          : page.kind === 'failed'
+            ? {
+                id: page.id,
+                source: page.source,
+                kind: 'queued',
+              }
+            : page,
       );
     case 'removed':
       return { pages: state.pages.filter((page) => page.id !== event.id) };
@@ -148,8 +163,9 @@ export function scanBatchStatus(state: ScanBatchState): {
   let processing = 0;
   let failed = 0;
   for (const page of state.pages) {
-    if (page.kind === 'queued' || page.kind === 'processing') processing++;
-    if (page.kind === 'failed') failed++;
+    if (page.kind === 'queued' || page.kind === 'processing' || page.kind === 'loading-saved')
+      processing++;
+    if (page.kind === 'failed' || page.kind === 'failed-saved') failed++;
   }
   return { total: state.pages.length, processing, failed };
 }

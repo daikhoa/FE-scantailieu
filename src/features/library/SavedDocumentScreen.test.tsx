@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { createDefaultPageRecipe } from '../scanner/background-page-processor';
-import { documentApi, type StoredDocument, type EditableDocument } from './document-api';
+import { documentApi, type StoredDocument } from './document-api';
 import { SavedDocumentScreen } from './SavedDocumentScreen';
 
 const image = { width: 12, height: 16, mime: 'image/jpeg' };
@@ -78,38 +78,15 @@ describe('saved document screen', () => {
     );
   });
 
-  it('restores the saved document editor through its original pages and recipe', async () => {
+  it('opens an editable shell immediately without waiting for any image download', async () => {
     vi.spyOn(documentApi, 'get').mockResolvedValue(document);
-    const blob = new Blob(['image'], { type: 'image/jpeg' });
-    const asset = { blob, dimensions: { width: 12, height: 16 } };
-    const draft: EditableDocument = {
-      document,
-      pages: [
-        {
-          id: 'page-1',
-          kind: 'ready',
-          source: blob,
-          page: {
-            original: asset,
-            crop: recipe.crop,
-            recipe,
-            variant: {
-              image: asset,
-              recipeKey: 'test',
-              engineVersion: 'test',
-              dewarp: { kind: 'not-requested' },
-            },
-          },
-        },
-      ],
-    };
-    const edit = vi.spyOn(documentApi, 'edit').mockResolvedValue(draft);
+    const edit = vi
+      .spyOn(documentApi, 'edit')
+      .mockImplementation(() => new Promise(() => undefined));
     const opened = vi.fn();
     render(<SavedDocumentScreen id="saved" onBack={vi.fn()} onEdit={opened} />);
     fireEvent.click(await screen.findByRole('button', { name: 'Chỉnh sửa tài liệu' }));
-    await waitFor(() => {
-      expect(opened).toHaveBeenCalledWith(draft);
-    });
-    expect(edit).toHaveBeenCalledWith(document, expect.any(AbortSignal));
+    expect(opened).toHaveBeenCalledWith(documentApi.draft(document));
+    expect(edit).not.toHaveBeenCalled();
   });
 });

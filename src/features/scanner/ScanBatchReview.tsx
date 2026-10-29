@@ -133,10 +133,13 @@ export function ScanBatchReview({
   const pendingCount = pages.filter(
     (page) =>
       page.kind === 'queued' ||
+      page.kind === 'loading-saved' ||
       page.kind === 'processing' ||
       (page.kind === 'ready' && page.page.restoration?.kind === 'processing'),
   ).length;
-  const failedCount = pages.filter((page) => page.kind === 'failed').length;
+  const failedCount = pages.filter(
+    (page) => page.kind === 'failed' || page.kind === 'failed-saved',
+  ).length;
   const canExport = pages.length > 0 && readyPages.length === pages.length && pendingCount === 0;
   const effectiveSelectedPageId = pages.some((page) => page.id === selectedPageId)
     ? selectedPageId
@@ -402,6 +405,12 @@ export function ScanBatchReview({
                     >
                       {page.kind === 'ready' ? (
                         <PagePreview page={page} number={number} selected={selected} />
+                      ) : page.kind === 'loading-saved' || page.kind === 'failed-saved' ? (
+                        <img
+                          src={page.previewUrl}
+                          alt={`Bản xem nhanh trang ${String(number)}`}
+                          loading={selected ? 'eager' : 'lazy'}
+                        />
                       ) : page.preview !== undefined ? (
                         <PendingPagePreview preview={page.preview} number={number} />
                       ) : (
@@ -421,17 +430,21 @@ export function ScanBatchReview({
                     <div className="batch-page__details">
                       <strong>Trang {number}</strong>
                       <span>
-                        {page.kind === 'queued' || page.kind === 'processing'
-                          ? 'Đang hoàn thiện'
-                          : page.kind === 'failed'
-                            ? 'Cần xử lý lại'
-                            : page.page.restoration?.kind === 'processing'
-                              ? 'Đang hoàn thiện trên thiết bị'
-                              : page.page.restoration?.kind === 'applied'
-                                ? 'Đã tối ưu trên thiết bị'
-                                : page.page.restoration?.kind === 'fallback'
-                                  ? 'Đã dùng bản xử lý cục bộ'
-                                  : 'Đã sẵn sàng'}
+                        {page.kind === 'loading-saved'
+                          ? 'Đang tải trang…'
+                          : page.kind === 'failed-saved'
+                            ? 'Tải trang thất bại'
+                            : page.kind === 'queued' || page.kind === 'processing'
+                              ? 'Đang hoàn thiện'
+                              : page.kind === 'failed'
+                                ? 'Cần xử lý lại'
+                                : page.page.restoration?.kind === 'processing'
+                                  ? 'Đang hoàn thiện trên thiết bị'
+                                  : page.page.restoration?.kind === 'applied'
+                                    ? 'Đã tối ưu trên thiết bị'
+                                    : page.page.restoration?.kind === 'fallback'
+                                      ? 'Đã dùng bản xử lý cục bộ'
+                                      : 'Đã sẵn sàng'}
                       </span>
                     </div>
                   </li>
@@ -501,7 +514,7 @@ export function ScanBatchReview({
                   ))}
                 </div>
               </>
-            ) : selectedPage?.kind === 'failed' ? (
+            ) : selectedPage?.kind === 'failed' || selectedPage?.kind === 'failed-saved' ? (
               <button
                 className="batch-review__retry"
                 type="button"
@@ -509,7 +522,8 @@ export function ScanBatchReview({
                   onRetryPage(selectedPage.id);
                 }}
               >
-                Xử lý lại trang {selectedNumber}
+                {selectedPage.kind === 'failed-saved' ? 'Tải lại trang' : 'Xử lý lại trang'}{' '}
+                {selectedNumber}
               </button>
             ) : null}
 
@@ -521,6 +535,8 @@ export function ScanBatchReview({
                   exporting ||
                   selectedPage === null ||
                   selectedPage.kind === 'queued' ||
+                  selectedPage.kind === 'loading-saved' ||
+                  selectedPage.kind === 'failed-saved' ||
                   selectedPage.kind === 'processing'
                 }
                 onClick={() => {
@@ -583,7 +599,9 @@ export function ScanBatchReview({
           <p className="editor__status" role="status" aria-live="polite">
             {busyPageId !== null
               ? 'Đang áp dụng thay đổi…'
-              : `Đang hoàn tất ${String(pendingCount)} trang…`}
+              : pages.some((page) => page.kind === 'loading-saved')
+                ? `Đã tải ${String(readyPages.length)}/${String(pages.length)} trang. Bạn có thể chỉnh trang đã tải xong.`
+                : `Đang hoàn tất ${String(pendingCount)} trang…`}
           </p>
         ) : failedCount > 0 ? (
           <p className="editor__error" role="alert">

@@ -4,7 +4,7 @@ import { PdfPreview } from '../export/PdfPreview';
 import { documentApi, type EditableDocument, type StoredDocument } from './document-api';
 
 type DocumentState =
-  | { readonly kind: 'loading' | 'editing' }
+  | { readonly kind: 'loading' }
   | { readonly kind: 'error'; readonly message: string }
   | { readonly kind: 'ready'; readonly document: StoredDocument };
 
@@ -47,23 +47,9 @@ export function SavedDocumentScreen({
     heading.current?.focus();
   }, [state.kind]);
 
-  const edit = async () => {
+  const edit = () => {
     if (state.kind !== 'ready') return;
-    const document = state.document;
-    const controller = new AbortController();
-    operation.current?.abort();
-    operation.current = controller;
-    setState({ kind: 'editing' });
-    try {
-      const draft = await documentApi.edit(document, controller.signal);
-      if (!controller.signal.aborted) onEdit(draft);
-    } catch (failure) {
-      if (!controller.signal.aborted)
-        setState({
-          kind: 'error',
-          message: failure instanceof Error ? failure.message : 'Không mở được bản chỉnh sửa.',
-        });
-    }
+    onEdit(documentApi.draft(state.document));
   };
   if (state.kind === 'ready') {
     const document = state.document;
@@ -84,7 +70,7 @@ export function SavedDocumentScreen({
         pages={document.pages.map((page) => ({ id: page.id, image: page.renderedUrl }))}
         onBack={onBack}
         onEdit={() => {
-          void edit();
+          edit();
         }}
       />
     );
@@ -95,11 +81,7 @@ export function SavedDocumentScreen({
         ← Kho tài liệu
       </button>
       <h1 ref={heading} tabIndex={-1}>
-        {state.kind === 'error'
-          ? 'Không mở được tài liệu'
-          : state.kind === 'editing'
-            ? 'Đang mở bản chỉnh sửa'
-            : 'Đang mở tài liệu'}
+        {state.kind === 'error' ? 'Không mở được tài liệu' : 'Đang mở tài liệu'}
       </h1>
       {state.kind === 'error' ? (
         <>
@@ -117,11 +99,7 @@ export function SavedDocumentScreen({
           </button>
         </>
       ) : (
-        <p role="status">
-          {state.kind === 'editing'
-            ? 'Đang lấy ảnh gốc và các thay đổi đã lưu…'
-            : 'Đang lấy các trang tài liệu đã lưu…'}
-        </p>
+        <p role="status">Đang lấy các trang tài liệu đã lưu…</p>
       )}
     </main>
   );

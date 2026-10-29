@@ -21,6 +21,7 @@ import type { LocalRestorationClient } from '../imaging/restoration/local-restor
 import type { DocumentSummary, EditableDocument } from '../features/library/document-api';
 import type { ScanBatchPage } from '../features/scanner/scan-batch';
 import { MAX_DOCUMENT_PAGES } from '../domain/document-limits';
+import { useStoredPages } from '../features/library/useStoredPages';
 
 export type { LibraryState } from './HomeScreen';
 
@@ -114,6 +115,7 @@ export function App({
   const [savedDocument, setSavedDocument] = useState<DocumentSummary | null>(
     initialDocument?.document ?? null,
   );
+  const storedPages = useStoredPages(initialDocument?.storedDocument, dispatchBatch);
   const [draftName, setDraftName] = useState(initialDocument?.document.name ?? 'clonecamscanner');
   const [dirty, setDirty] = useState(false);
   const [processorGeneration, setProcessorGeneration] = useState(0);
@@ -282,6 +284,7 @@ export function App({
   };
 
   const resetBatch = () => {
+    storedPages.cancelAll();
     setDirty(false);
     setSavedDocument(null);
     setDraftName('clonecamscanner');
@@ -517,6 +520,8 @@ export function App({
             const selected = batch.pages.find((page) => page.id === id);
             if (
               selected === undefined ||
+              selected.kind === 'loading-saved' ||
+              selected.kind === 'failed-saved' ||
               selected.kind === 'queued' ||
               selected.kind === 'processing'
             ) {
@@ -528,11 +533,16 @@ export function App({
           }}
           onRetryPage={(id) => {
             const selected = batch.pages.find((page) => page.id === id);
+            if (selected?.kind === 'failed-saved') {
+              storedPages.retry(id);
+              return;
+            }
             if (selected?.kind !== 'failed') return;
             dispatchBatch({ type: 'retry', id });
             processPage(id, selected.source);
           }}
           onRemovePage={(id) => {
+            storedPages.cancelPage(id);
             setDirty(true);
             pageOperations.current.get(id)?.abort();
             pageOperations.current.delete(id);

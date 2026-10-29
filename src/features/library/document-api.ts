@@ -42,6 +42,7 @@ export interface StoredDocument extends DocumentSummary {
 export interface EditableDocument {
   readonly document: DocumentSummary;
   readonly pages: readonly ScanBatchPage[];
+  readonly storedDocument?: StoredDocument;
 }
 
 export interface DocumentListing {
@@ -72,6 +73,50 @@ function createRequestKey(pdf: Blob, manifest: string): string {
 const info = (image: ImageAsset): ImageInfo => ({ ...image.dimensions, mime: image.blob.type });
 
 export const documentApi = {
+  draft: (document: StoredDocument): EditableDocument => ({
+    document,
+    storedDocument: document,
+    pages: document.pages.map((page) => ({
+      id: page.id,
+      kind: 'loading-saved',
+      previewUrl: page.thumbnailUrl,
+    })),
+  }),
+  async loadPage(
+    page: StoredPage,
+    signal: AbortSignal,
+  ): Promise<Extract<ScanBatchPage, { kind: 'ready' }>> {
+    const [originalBlob, renderedBlob] = await Promise.all([
+      apiBlob(page.originalUrl, signal),
+      apiBlob(page.renderedUrl, signal),
+    ]);
+    const original = {
+      blob: originalBlob,
+      dimensions: { width: page.original.width, height: page.original.height },
+    };
+    const image = {
+      blob: renderedBlob,
+      dimensions: { width: page.rendered.width, height: page.rendered.height },
+    };
+    return {
+      id: page.id,
+      source: originalBlob,
+      kind: 'ready',
+      page: {
+        original,
+        crop: page.recipe.crop,
+        recipe: page.recipe,
+        variant: {
+          image,
+          engineVersion: page.engineVersion,
+          recipeKey: page.recipeKey,
+          dewarp: page.outcome,
+          ...(page.enhancement ? { enhancement: page.enhancement } : {}),
+          ...(page.enhancementFailure ? { enhancementFailure: page.enhancementFailure } : {}),
+        },
+      },
+    };
+  },
   rename: (document: DocumentSummary, name: string, signal: AbortSignal) =>
     apiJson<DocumentSummary>(`${BASE}/${encodeURIComponent(document.id)}`, {
       method: 'PATCH',
@@ -165,36 +210,7 @@ export const documentApi = {
         const index = nextPage++;
         const page = document.pages[index];
         if (!page) return;
-        const [originalBlob, renderedBlob] = await Promise.all([
-          apiBlob(page.originalUrl, transfers.signal),
-          apiBlob(page.renderedUrl, transfers.signal),
-        ]);
-        const original: ImageAsset = {
-          blob: originalBlob,
-          dimensions: { width: page.original.width, height: page.original.height },
-        };
-        const image: ImageAsset = {
-          blob: renderedBlob,
-          dimensions: { width: page.rendered.width, height: page.rendered.height },
-        };
-        pages[index] = {
-          id: page.id,
-          source: original.blob,
-          kind: 'ready',
-          page: {
-            original,
-            crop: page.recipe.crop,
-            recipe: page.recipe,
-            variant: {
-              image,
-              engineVersion: page.engineVersion,
-              recipeKey: page.recipeKey,
-              dewarp: page.outcome,
-              ...(page.enhancement ? { enhancement: page.enhancement } : {}),
-              ...(page.enhancementFailure ? { enhancementFailure: page.enhancementFailure } : {}),
-            },
-          },
-        };
+        pages[index] = await documentApi.loadPage(page, transfers.signal);
       }
     };
     try {
