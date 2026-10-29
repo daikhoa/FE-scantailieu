@@ -158,7 +158,9 @@ it('restarts cleanly after StrictMode cleanup without stale page completions', a
         new Promise((_resolve, reject) => {
           signal.addEventListener(
             'abort',
-            () => reject(new DOMException('Cancelled', 'AbortError')),
+            () => {
+              reject(new DOMException('Cancelled', 'AbortError'));
+            },
             { once: true },
           );
         }),
