@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type RefObject, type UIEvent } from 'react';
+import {
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+  type UIEvent,
+} from 'react';
 
 import type { EditRecipe, QuarterTurn } from '../../domain/document';
 import type { RestorationWarning } from '../../imaging/restoration/restoration-types';
@@ -13,6 +21,7 @@ import { PendingPagePreview } from './PendingPagePreview';
 import { shadowFallbackMessage } from '../editor/shadow-status';
 import { ActionIcon } from '../../components/ActionIcon';
 import { AssetImage } from '../../components/AssetImage';
+import { PageOrderEditor } from './PageOrderEditor';
 import './scan-workspace.css';
 
 interface ScanBatchReviewProps {
@@ -26,6 +35,7 @@ interface ScanBatchReviewProps {
   readonly onRetakePage: (id: string) => void;
   readonly onRetryPage: (id: string) => void;
   readonly onRemovePage: (id: string) => void;
+  readonly onReorderPages?: (ids: readonly string[]) => void;
   readonly pdfExporter?: typeof createImagePdf;
   readonly download?: (blob: Blob, filename: string) => void;
   readonly documentName?: string;
@@ -94,6 +104,7 @@ export function ScanBatchReview({
   onRetakePage,
   onRetryPage,
   onRemovePage,
+  onReorderPages,
   pdfExporter = createImagePdf,
   download,
   documentName,
@@ -110,6 +121,8 @@ export function ScanBatchReview({
   const [exportError, setExportError] = useState('');
   const [preparedPdf, setPreparedPdf] = useState<Blob | null>(null);
   const [showFilters, setShowFilters] = useState(true);
+  const [orderingPages, setOrderingPages] = useState(false);
+  const previousSurface = useRef('editor');
   const exportOperation = useRef<AbortController | null>(null);
   // Reuse the Blob for idempotent retries; weak batch keys release obsolete image/PDF data after edits.
   const exportCache = useRef(
@@ -154,6 +167,22 @@ export function ScanBatchReview({
       : (pages.find(
           (page): page is ReadyScanBatchPage => page.id === croppingPageId && page.kind === 'ready',
         ) ?? null);
+
+  useLayoutEffect(() => {
+    const surface = orderingPages
+      ? 'order'
+      : croppingPageId
+        ? 'crop'
+        : preparedPdf
+          ? 'pdf'
+          : 'editor';
+    const returning = previousSurface.current !== 'editor' && surface === 'editor';
+    previousSurface.current = surface;
+    if (!returning) return;
+    const list = carouselRef.current;
+    const item = list?.children[selectedIndex];
+    if (list && item instanceof HTMLElement) list.scrollLeft = item.offsetLeft - list.offsetLeft;
+  }, [orderingPages, croppingPageId, preparedPdf, selectedIndex]);
 
   useEffect(
     () => () => {
@@ -270,6 +299,28 @@ export function ScanBatchReview({
           setPreparedPdf(null);
         }}
       />
+    );
+  }
+
+  if (orderingPages && onReorderPages) {
+    return (
+      <main
+        id="main-content"
+        className="app-main batch-review batch-review--ordering"
+        aria-label="Sắp xếp các trang PDF"
+      >
+        <PageOrderEditor
+          pages={pages}
+          selectedPageId={effectiveSelectedPageId}
+          onCancel={() => {
+            setOrderingPages(false);
+          }}
+          onApply={(ids) => {
+            onReorderPages(ids);
+            setOrderingPages(false);
+          }}
+        />
+      </main>
     );
   }
 
@@ -428,6 +479,20 @@ export function ScanBatchReview({
             </ol>
 
             <div className="batch-review__pager" aria-label="Điều hướng trang">
+              {onReorderPages && (
+                <button
+                  className="batch-review__order"
+                  type="button"
+                  aria-label="Sắp xếp trang"
+                  disabled={pages.length < 2 || exporting || busyPageId !== null}
+                  onClick={() => {
+                    setOrderingPages(true);
+                  }}
+                >
+                  <ActionIcon name="order" />
+                  <span>Sắp xếp</span>
+                </button>
+              )}
               <button
                 type="button"
                 aria-label="Trang trước"

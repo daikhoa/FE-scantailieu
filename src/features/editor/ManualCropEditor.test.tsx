@@ -21,6 +21,36 @@ afterEach(() => {
 });
 
 describe('ManualCropEditor', () => {
+  it('zooms into a small document without changing its original-image crop coordinates', () => {
+    const onApply = vi.fn();
+    const corners = [
+      { x: 400, y: 600 },
+      { x: 800, y: 600 },
+      { x: 800, y: 1000 },
+      { x: 400, y: 1000 },
+    ] as const;
+    const { container } = render(
+      <ManualCropEditor
+        original={original}
+        initialCrop={{ kind: 'document', corners }}
+        busy={false}
+        onCancel={vi.fn()}
+        onApply={onApply}
+      />,
+    );
+    const stage = container.querySelector<HTMLElement>('.manual-crop__stage');
+    if (!stage) throw new Error('Missing crop stage');
+    const initialWidth = Number.parseFloat(stage.style.width);
+    fireEvent.click(screen.getByRole('button', { name: 'Phóng tới tài liệu' }));
+    expect(Number.parseFloat(stage.style.width)).toBeGreaterThan(initialWidth);
+    fireEvent.click(screen.getByRole('button', { name: 'Phóng to' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Thu nhỏ' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Vừa ảnh' }));
+    expect(Number.parseFloat(stage.style.width)).toBe(initialWidth);
+    fireEvent.click(screen.getByRole('button', { name: 'Áp dụng vùng cắt' }));
+    expect(onApply).toHaveBeenCalledWith({ kind: 'document', corners });
+  });
+
   it('starts from the saved document corners and applies a keyboard adjustment', () => {
     const onApply = vi.fn();
     render(

@@ -548,6 +548,12 @@ export function App({
             pageOperations.current.delete(id);
             dispatchBatch({ type: 'removed', id });
           }}
+          onReorderPages={(ids) => {
+            const event = { type: 'reordered' as const, ids };
+            if (scanBatchReducer(batch, event) === batch) return;
+            setDirty(true);
+            dispatchBatch(event);
+          }}
         />
       )}
 

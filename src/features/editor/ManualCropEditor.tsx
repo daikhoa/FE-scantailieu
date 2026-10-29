@@ -3,6 +3,8 @@ import { AssetImage } from '../../components/AssetImage';
 
 import type { CropRegion, DocumentCorners, ImageAsset, Point } from '../../domain/document';
 import { validateQuad } from '../../imaging/geometry/quad';
+import { useCropViewport } from './use-crop-viewport';
+import './manual-crop.css';
 
 interface ManualCropEditorProps {
   readonly original: ImageAsset;
@@ -48,17 +50,21 @@ export function ManualCropEditor({
   const [corners, setCorners] = useState<DocumentCorners>(() =>
     initialCrop.kind === 'document' ? initialCrop.corners : fullFrameCorners(width, height),
   );
-  const [activeCorner, setActiveCorner] = useState<number | null>(null);
+  const activeDrag = useRef<{ corner: number; pointer: number } | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
+  const { viewportRef, stageRef, stageWidth, zoom, changeZoom, focusDocument, maxZoom } =
+    useCropViewport(width, height);
+  const screenPixel = width / stageWidth;
   const validation = validateQuad(corners, original.dimensions, width * height * 0.005);
   const points = corners.map((point) => `${String(point.x)},${String(point.y)}`).join(' ');
 
   const updateFromPointer = (event: PointerEvent<SVGSVGElement>) => {
-    if (activeCorner === null) return;
+    const drag = activeDrag.current;
+    if (drag?.pointer !== event.pointerId || busy) return;
     const bounds = event.currentTarget.getBoundingClientRect();
     if (bounds.width <= 0 || bounds.height <= 0) return;
     setCorners((current) =>
-      replaceCorner(current, activeCorner, {
+      replaceCorner(current, drag.corner, {
         x: clamp(((event.clientX - bounds.left) / bounds.width) * width, width),
         y: clamp(((event.clientY - bounds.top) / bounds.height) * height, height),
       }),
@@ -66,6 +72,7 @@ export function ManualCropEditor({
   };
 
   const moveWithKeyboard = (index: number, event: KeyboardEvent<SVGCircleElement>) => {
+    if (busy) return;
     const step = Math.max(1, Math.round(Math.min(width, height) / 100));
     const direction =
       event.key === 'ArrowLeft'
@@ -101,60 +108,123 @@ export function ManualCropEditor({
         </button>
       </header>
 
-      <p className="manual-crop__hint">Kéo từng chấm xanh vào đúng bốn góc của tờ giấy.</p>
-
-      <div className="manual-crop__stage">
-        <AssetImage
-          image={preview ?? original}
-          alt="Ảnh gốc để điều chỉnh vùng cắt"
-          draggable={false}
-        />
-        <svg
-          ref={svgRef}
-          className="manual-crop__overlay"
-          viewBox={`0 0 ${String(width)} ${String(height)}`}
-          aria-label="Vùng cắt bốn góc"
-          onPointerMove={updateFromPointer}
-          onPointerUp={() => {
-            setActiveCorner(null);
-          }}
-          onPointerCancel={() => {
-            setActiveCorner(null);
+      <p className="manual-crop__hint">
+        Kéo 4 chấm tới góc giấy. Phóng to rồi vuốt ảnh để chỉnh kỹ hơn.
+      </p>
+      <div className="manual-crop__zoom" role="group" aria-label="Phóng ảnh để chỉnh góc">
+        <button
+          type="button"
+          aria-label="Thu nhỏ"
+          disabled={busy || zoom <= 1}
+          onClick={() => {
+            changeZoom(zoom / 1.5);
           }}
         >
-          <polygon
-            className="manual-crop__shade"
-            points={`0,0 ${String(width)},0 ${String(width)},${String(height)} 0,${String(height)}`}
-          />
-          <polygon className="manual-crop__polygon" points={points} />
-          {corners.map((point, index) => (
-            <circle
-              key={CORNER_LABELS[index]}
-              className="manual-crop__handle"
-              cx={point.x}
-              cy={point.y}
-              r={Math.max(width, height) * 0.025}
-              role="slider"
-              tabIndex={0}
-              aria-label={CORNER_LABELS[index]}
-              aria-valuemin={0}
-              aria-valuemax={Math.max(width, height)}
-              aria-valuenow={Math.round((point.x + point.y) / 2)}
-              aria-valuetext={`${String(Math.round(point.x))}, ${String(Math.round(point.y))}`}
-              onKeyDown={(event) => {
-                moveWithKeyboard(index, event);
-              }}
-              onPointerDown={(event) => {
-                event.preventDefault();
-                setActiveCorner(index);
-                const overlay = svgRef.current;
-                if (overlay !== null && typeof overlay.setPointerCapture === 'function') {
-                  overlay.setPointerCapture(event.pointerId);
-                }
-              }}
+          −
+        </button>
+        <output aria-label="Mức phóng to">{Math.round(zoom * 100)}%</output>
+        <button
+          type="button"
+          aria-label="Phóng to"
+          disabled={busy || zoom >= maxZoom}
+          onClick={() => {
+            changeZoom(zoom * 1.5);
+          }}
+        >
+          +
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            focusDocument(corners);
+          }}
+        >
+          Phóng tới tài liệu
+        </button>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => {
+            changeZoom(1, { x: 0.5, y: 0.5 });
+          }}
+        >
+          Vừa ảnh
+        </button>
+      </div>
+
+      <div className="manual-crop__viewport" ref={viewportRef}>
+        <div className="manual-crop__canvas">
+          <div
+            className="manual-crop__stage"
+            ref={stageRef}
+            style={{ width: stageWidth, height: (stageWidth * height) / width }}
+          >
+            <AssetImage
+              image={preview ?? original}
+              alt="Ảnh gốc để điều chỉnh vùng cắt"
+              draggable={false}
             />
-          ))}
-        </svg>
+            <svg
+              ref={svgRef}
+              className="manual-crop__overlay"
+              viewBox={`0 0 ${String(width)} ${String(height)}`}
+              aria-label="Vùng cắt bốn góc"
+              onPointerMove={updateFromPointer}
+              onPointerUp={() => {
+                activeDrag.current = null;
+              }}
+              onPointerCancel={() => {
+                activeDrag.current = null;
+              }}
+              onLostPointerCapture={() => {
+                activeDrag.current = null;
+              }}
+            >
+              <polygon
+                className="manual-crop__shade"
+                points={`0,0 ${String(width)},0 ${String(width)},${String(height)} 0,${String(height)}`}
+              />
+              <polygon className="manual-crop__polygon" points={points} />
+              {corners.map((point, index) => (
+                <g key={CORNER_LABELS[index]}>
+                  <circle
+                    className="manual-crop__handle"
+                    cx={point.x}
+                    cy={point.y}
+                    r={22 * screenPixel}
+                    role="slider"
+                    tabIndex={0}
+                    aria-label={CORNER_LABELS[index]}
+                    aria-valuemin={0}
+                    aria-valuemax={Math.max(width, height)}
+                    aria-valuenow={Math.round((point.x + point.y) / 2)}
+                    aria-valuetext={`${String(Math.round(point.x))}, ${String(Math.round(point.y))}`}
+                    onKeyDown={(event) => {
+                      moveWithKeyboard(index, event);
+                    }}
+                    onPointerDown={(event) => {
+                      if (busy || activeDrag.current !== null) return;
+                      event.preventDefault();
+                      activeDrag.current = { corner: index, pointer: event.pointerId };
+                      const overlay = svgRef.current;
+                      if (overlay !== null && typeof overlay.setPointerCapture === 'function') {
+                        overlay.setPointerCapture(event.pointerId);
+                      }
+                    }}
+                  />
+                  <circle
+                    className="manual-crop__marker"
+                    cx={point.x}
+                    cy={point.y}
+                    r={7 * screenPixel}
+                    aria-hidden="true"
+                  />
+                </g>
+              ))}
+            </svg>
+          </div>
+        </div>
       </div>
 
       {!validation.valid ? (

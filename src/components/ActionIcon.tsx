@@ -5,6 +5,7 @@ export type ActionIconName =
   | 'crop'
   | 'rotate'
   | 'filter'
+  | 'order'
   | 'delete'
   | 'check'
   | 'edit'
@@ -21,6 +22,7 @@ export function ActionIcon({ name }: { readonly name: ActionIconName }) {
     crop: 'M6 2v16h16M2 6h16v16M18 2v4M2 18h4',
     rotate: 'M4 9a8 8 0 1 1 0 6M4 3v6h6',
     filter: 'M9 6h12M3 6h2M15 12h6M3 12h8M9 18h12M3 18h2M7 3v6M13 9v6M7 15v6',
+    order: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
     delete: 'M3 6h18M9 6V3h6v3M5 6l1 15h12l1-15M10 10v7M14 10v7',
     check: 'M4 12l5 5L20 6',
     edit: 'M14 4l6 6M4 20l5-1L21 7l-6-6L3 13z',
@@ -30,6 +32,7 @@ export function ActionIcon({ name }: { readonly name: ActionIconName }) {
   };
   return (
     <svg
+      className="action-icon"
       width="24"
       height="24"
       viewBox="0 0 24 24"

@@ -43,6 +43,37 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('editing saved documents', () => {
+  it('saves the reordered PDF and manifest to the same document revision', async () => {
+    const document = {
+      id: 'saved-id',
+      name: 'Bài học',
+      revision: 1,
+      pageCount: 3,
+      createdAt: '',
+      updatedAt: '',
+    };
+    const save = vi
+      .fn<NonNullable<ComponentProps<typeof App>['onSaveDocument']>>()
+      .mockResolvedValue({ ...document, revision: 2 });
+    const pages = [page('one'), page('two'), page('three')];
+    render(<App initialDocument={{ document, pages }} onSaveDocument={save} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Sắp xếp trang' }));
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '3' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Xong' }));
+    expect(screen.getByRole('button', { name: 'Chọn trang 3' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Xem PDF 3 trang' }));
+    await screen.findByRole('heading', { name: 'Tài liệu PDF' });
+    expect(save.mock.calls[0]?.[0].map((item) => item.id)).toEqual(['two', 'three', 'one']);
+    expect(save.mock.calls[0]?.[3]).toEqual(document);
+    expect(vi.mocked(createImagePdf).mock.calls.at(-1)?.[0]).toEqual(
+      [pages[1], pages[2], pages[0]].map((item) =>
+        item?.kind === 'ready' ? item.page.variant.image : null,
+      ),
+    );
+  });
   it('adds gallery images after saved pages without replacing the document', async () => {
     const document = {
       id: 'saved-id',

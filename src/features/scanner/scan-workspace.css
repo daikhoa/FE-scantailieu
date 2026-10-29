@@ -1,5 +1,5 @@
-.batch-review svg,
-.pdf-workspace svg {
+.batch-review .action-icon,
+.pdf-workspace .action-icon {
   width: 1.5rem;
   height: 1.5rem;
   flex-shrink: 0;
@@ -9,6 +9,14 @@
   align-items: center;
   min-width: 0;
   gap: 0.5rem;
+}
+.batch-review .batch-review__pager .batch-review__order {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  width: auto;
+  padding-inline: 0.5rem;
+  font-size: 0.75rem;
 }
 .batch-review__name input {
   width: 100%;
@@ -245,9 +253,8 @@
     background: var(--color-accent);
   }
   .batch-review--cropping .manual-crop {
-    height: 100%;
-    overflow-y: auto;
-    padding-bottom: env(safe-area-inset-bottom);
+    height: 100dvh;
+    overflow: hidden;
   }
   .batch-review .batch-review__empty {
     order: 2;

@@ -37,6 +37,10 @@
     ></iframe>
     <script type="module">
       const frame = document.querySelector('iframe');
+      if (new URLSearchParams(location.search).get('scenario') === 'crop')
+        frame.src = './crop-order-smoke.html';
+      if (new URLSearchParams(location.search).get('scenario') === 'order')
+        frame.src = './crop-order-smoke.html?order';
       const size = document.querySelector('#phone-size');
       size.addEventListener('change', () => {
         const sizes = { 390: [390, 844], 360: [360, 800], 320: [320, 740], 740: [740, 390] };
@@ -52,6 +56,23 @@
           const width = frame.contentWindow.innerWidth;
           const editor = doc.querySelector('.batch-review:not(.batch-review--cropping)');
           const pdf = doc.querySelector('.pdf-reader__pages');
+          const crop = doc.querySelector('.manual-crop');
+          if (crop) {
+            const image = crop.querySelector('img').getBoundingClientRect();
+            const overlay = crop.querySelector('svg').getBoundingClientRect();
+            const viewport = crop.querySelector('.manual-crop__viewport').getBoundingClientRect();
+            if (
+              Math.abs(image.width - overlay.width) > 1 ||
+              Math.abs(image.height - overlay.height) > 1 ||
+              viewport.height < 150
+            )
+              throw new Error('Khung cắt không khớp ảnh hoặc vùng ảnh bị co.');
+            const apply = crop.querySelector('.manual-crop__apply').getBoundingClientRect();
+            if (apply.bottom > height + 1 || apply.height < 44)
+              throw new Error('Nút áp dụng bị khuất.');
+            result.textContent = `PASS: ${width} × ${height}, khung khớp ảnh, nút áp dụng nhìn thấy.`;
+            return;
+          }
           if (!editor && !pdf) throw new Error('Hãy mở editor hoặc trang PDF trước.');
           const stage = editor ? doc.querySelector('.batch-page-list') : pdf;
           if (stage.getBoundingClientRect().height < height * 0.4)

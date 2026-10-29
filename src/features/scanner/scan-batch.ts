@@ -45,6 +45,7 @@ export type ScanBatchEvent =
   | { readonly type: 'failed'; readonly id: string }
   | { readonly type: 'retry'; readonly id: string }
   | { readonly type: 'removed'; readonly id: string }
+  | { readonly type: 'reordered'; readonly ids: readonly string[] }
   | { readonly type: 'reset' };
 
 function updatePage(
@@ -60,6 +61,19 @@ function updatePage(
 
 export function scanBatchReducer(state: ScanBatchState, event: ScanBatchEvent): ScanBatchState {
   switch (event.type) {
+    case 'reordered': {
+      if (event.ids.length !== state.pages.length || new Set(event.ids).size !== event.ids.length)
+        return state;
+      const byId = new Map(state.pages.map((page) => [page.id, page]));
+      if (event.ids.some((id) => !byId.has(id))) return state;
+      if (event.ids.every((id, index) => state.pages[index]?.id === id)) return state;
+      return {
+        pages: event.ids.flatMap((id) => {
+          const page = byId.get(id);
+          return page ? [page] : [];
+        }),
+      };
+    }
     case 'source-saved':
       return updatePage(state, event.id, (page) =>
         page.kind === 'loading-saved' || page.kind === 'failed-saved'

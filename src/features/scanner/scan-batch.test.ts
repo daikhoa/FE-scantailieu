@@ -38,6 +38,40 @@ function processed(source: Blob, key: string): ProcessedScanPage {
 }
 
 describe('scan batch reducer', () => {
+  it('reorders page identities without losing edits or late background results', () => {
+    const first = {
+      id: 'first',
+      kind: 'ready' as const,
+      source: firstSource,
+      page: processed(firstSource, 'edited'),
+    };
+    const second = { id: 'second', kind: 'loading-saved' as const, previewUrl: '/preview' };
+    const state = { pages: [first, second] };
+    const reordered = scanBatchReducer(state, { type: 'reordered', ids: ['second', 'first'] });
+    expect(reordered.pages).toEqual([second, first]);
+    expect(reordered.pages[1]).toBe(first);
+    const completed = scanBatchReducer(reordered, {
+      type: 'ready',
+      id: 'second',
+      page: processed(secondSource, 'loaded'),
+    });
+    expect(completed.pages.map((page) => page.id)).toEqual(['second', 'first']);
+    expect(completed.pages[0]?.kind).toBe('ready');
+    expect(completed.pages[1]).toBe(first);
+  });
+
+  it('rejects incomplete, duplicate or unknown orderings and preserves no-op identity', () => {
+    const state: ScanBatchState = {
+      pages: [
+        { id: 'first', kind: 'queued', source: firstSource },
+        { id: 'second', kind: 'queued', source: secondSource },
+      ],
+    };
+    for (const ids of [['first'], ['first', 'first'], ['first', 'unknown'], ['first', 'second']]) {
+      expect(scanBatchReducer(state, { type: 'reordered', ids })).toBe(state);
+    }
+  });
+
   it('releases the large captured RGBA buffer after durable processing succeeds', () => {
     const capturedSource = {
       kind: 'rgba-frame' as const,
