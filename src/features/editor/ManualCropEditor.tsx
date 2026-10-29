@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { useRef, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { AssetImage } from '../../components/AssetImage';
 
 import type { CropRegion, DocumentCorners, ImageAsset, Point } from '../../domain/document';
 import { validateQuad } from '../../imaging/geometry/quad';
@@ -49,19 +50,8 @@ export function ManualCropEditor({
   );
   const [activeCorner, setActiveCorner] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const originalUrl = useMemo(
-    () => URL.createObjectURL(preview?.blob ?? original.blob),
-    [original.blob, preview?.blob],
-  );
   const validation = validateQuad(corners, original.dimensions, width * height * 0.005);
   const points = corners.map((point) => `${String(point.x)},${String(point.y)}`).join(' ');
-
-  useEffect(
-    () => () => {
-      URL.revokeObjectURL(originalUrl);
-    },
-    [originalUrl],
-  );
 
   const updateFromPointer = (event: PointerEvent<SVGSVGElement>) => {
     if (activeCorner === null) return;
@@ -114,7 +104,11 @@ export function ManualCropEditor({
       <p className="manual-crop__hint">Kéo từng chấm xanh vào đúng bốn góc của tờ giấy.</p>
 
       <div className="manual-crop__stage">
-        <img src={originalUrl} alt="Ảnh gốc để điều chỉnh vùng cắt" draggable={false} />
+        <AssetImage
+          image={preview ?? original}
+          alt="Ảnh gốc để điều chỉnh vùng cắt"
+          draggable={false}
+        />
         <svg
           ref={svgRef}
           className="manual-crop__overlay"

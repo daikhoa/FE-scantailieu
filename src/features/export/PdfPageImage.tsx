@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { AssetImage } from '../../components/AssetImage';
 import type { ImageAsset } from '../../domain/document';
 
 export function PdfPageImage({
@@ -10,20 +10,5 @@ export function PdfPageImage({
   readonly number: number;
   readonly lazy?: boolean;
 }) {
-  const element = useRef<HTMLImageElement>(null);
-  useEffect(() => {
-    const url = typeof image === 'string' ? image : URL.createObjectURL(image.blob);
-    if (element.current) element.current.src = url;
-    return () => {
-      if (typeof image !== 'string') URL.revokeObjectURL(url);
-    };
-  }, [image]);
-  return (
-    <img
-      ref={element}
-      alt={`Trang ${String(number)} của PDF`}
-      loading={lazy ? 'lazy' : 'eager'}
-      decoding="async"
-    />
-  );
+  return <AssetImage image={image} alt={`Trang ${String(number)} của PDF`} lazy={lazy} />;
 }
