@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { StrictMode } from 'react';
 
 import type { EditRecipe } from '../../domain/document';
 import { createImagePdf } from '../export/image-pdf';
@@ -9,6 +10,7 @@ import { ScanBatchReview } from './ScanBatchReview';
 type ReadyScanBatchPage = Extract<ScanBatchPage, { readonly kind: 'ready' }>;
 
 let createObjectUrl = vi.fn<(blob: Blob) => string>();
+let revokeObjectUrl = vi.fn<(url: string) => void>();
 
 function readyPage(id: string, label: string): ReadyScanBatchPage {
   const source = new Blob([`source-${label}`], { type: 'image/jpeg' });
@@ -49,10 +51,11 @@ function readyPage(id: string, label: string): ReadyScanBatchPage {
 beforeEach(() => {
   let nextUrl = 0;
   createObjectUrl = vi.fn(() => `blob:batch-${String(++nextUrl)}`);
+  revokeObjectUrl = vi.fn();
   vi.stubGlobal('URL', {
     ...URL,
     createObjectURL: createObjectUrl,
-    revokeObjectURL: vi.fn(),
+    revokeObjectURL: revokeObjectUrl,
   });
 });
 
@@ -61,6 +64,51 @@ afterEach(() => {
 });
 
 describe('ScanBatchReview', () => {
+  it('keeps the page image URL valid after cancelling crop under StrictMode', () => {
+    render(
+      <StrictMode>
+        <ScanBatchReview
+          pages={[readyPage('one', 'first')]}
+          headingRef={null}
+          onCaptureMore={vi.fn()}
+          onApplyRecipe={vi.fn(() => Promise.resolve())}
+          onRetakePage={vi.fn()}
+          onRetryPage={vi.fn()}
+          onRemovePage={vi.fn()}
+        />
+      </StrictMode>,
+    );
+    const first = screen.getByAltText('Bản xem trước trang 1').getAttribute('src');
+    expect(revokeObjectUrl).not.toHaveBeenCalledWith(first);
+    fireEvent.click(screen.getByRole('button', { name: 'Cắt trang 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Hủy' }));
+    const restored = screen.getByAltText('Bản xem trước trang 1').getAttribute('src');
+    expect(restored).toBeTruthy();
+    expect(revokeObjectUrl).not.toHaveBeenCalledWith(restored);
+  });
+  it('opens and closes the filter tray without losing the selected page or its actions', () => {
+    render(
+      <ScanBatchReview
+        pages={[readyPage('one', 'first')]}
+        headingRef={null}
+        onCaptureMore={vi.fn()}
+        onApplyRecipe={vi.fn(() => Promise.resolve())}
+        onRetakePage={vi.fn()}
+        onRetryPage={vi.fn()}
+        onRemovePage={vi.fn()}
+      />,
+    );
+    expect(screen.getByRole('group', { name: 'Bộ lọc tài liệu' })).toBeVisible();
+    fireEvent.click(screen.getByRole('button', { name: 'Bộ lọc' }));
+    expect(screen.queryByRole('group', { name: 'Bộ lọc tài liệu' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Xoay trái' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Bộ lọc' }));
+    expect(screen.getByRole('group', { name: 'Bộ lọc tài liệu' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Chọn trang 1' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    );
+  });
   it('saves before opening the PDF reader, then shows every page with edit and download', async () => {
     const pages = [readyPage('page-1', 'first'), readyPage('page-2', 'second')];
     const pdf = new Blob(['pdf'], { type: 'application/pdf' });
@@ -232,6 +280,7 @@ describe('ScanBatchReview', () => {
     ]);
     expect(screen.getByRole('button', { name: 'Xem PDF 3 trang' })).toBeDisabled();
     expect(screen.getAllByAltText(/Bản xem trước trang/u)).toHaveLength(1);
+    // Filter samples share the displayed page's source instead of allocating more URLs.
     expect(createObjectUrl).toHaveBeenCalledOnce();
 
     const preview = screen.getByAltText('Bản xem trước trang 1');

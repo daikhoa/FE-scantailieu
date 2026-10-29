@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { ActionIcon } from '../../components/ActionIcon';
 
 export function PdfShareButton({
   pdf,
@@ -61,8 +62,16 @@ export function PdfShareButton({
   };
   return (
     <div>
-      <button type="button" disabled={busy} onClick={share}>
-        {busy ? 'Đang chuẩn bị chia sẻ…' : file ? 'Chia sẻ / Lưu vào Tệp' : 'Chuẩn bị chia sẻ PDF'}
+      <button
+        type="button"
+        disabled={busy}
+        onClick={share}
+        aria-label={
+          busy ? 'Đang chuẩn bị chia sẻ…' : file ? 'Chia sẻ / Lưu vào Tệp' : 'Chuẩn bị chia sẻ PDF'
+        }
+      >
+        <ActionIcon name="share" />
+        {busy ? 'Đang chuẩn bị…' : file ? 'Chia sẻ' : 'Chuẩn bị chia sẻ'}
       </button>
       {prepared && <p role="status">PDF đã sẵn sàng để chia sẻ.</p>}
       {error && (

@@ -219,19 +219,22 @@ export function HomeScreen({
               {importError}
             </p>
           )}
-          <a href="?compare=1" className="home-comparison-link">
-            So sánh Web / C++
-          </a>
-          <aside className="home-privacy" aria-label="Quyền riêng tư">
-            <HomeIcon name="shield" />
-            <p>
-              Ảnh được xử lý trên thiết bị. Khi bạn bấm PDF, ảnh và PDF được lưu vào tài khoản trên
-              máy chủ.{' '}
-              <a href="/licenses/" target="_blank" rel="noreferrer">
-                Giấy phép phần mềm
-              </a>
-            </p>
-          </aside>
+          <details className="home-info">
+            <summary>Thông tin ứng dụng</summary>
+            <a href="?compare=1" className="home-comparison-link">
+              So sánh Web / C++
+            </a>
+            <aside className="home-privacy" aria-label="Quyền riêng tư">
+              <HomeIcon name="shield" />
+              <p>
+                Ảnh được xử lý trên thiết bị. Khi bạn bấm PDF, ảnh và PDF được lưu vào tài khoản
+                trên máy chủ.{' '}
+                <a href="/licenses/" target="_blank" rel="noreferrer">
+                  Giấy phép phần mềm
+                </a>
+              </p>
+            </aside>
+          </details>
         </section>
         <section className="home-recent" aria-labelledby="library-title">
           <div className="home-recent__heading">

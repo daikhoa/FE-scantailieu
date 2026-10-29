@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kiểm thử web trong viewport điện thoại</title>
+  </head>
+  <body
+    style="margin: 0; min-height: 900px; background: #101012; color: white; font-family: sans-serif"
+  >
+    <div style="position: absolute; left: 800px; top: 16px; width: 400px">
+      <p style="margin: 0; padding: 12px">Ứng dụng thật · kiểm tra bố cục điện thoại</p>
+      <label
+        >Viewport
+        <select id="phone-size">
+          <option value="390">390 × 844</option>
+          <option value="360">360 × 800</option>
+          <option value="320">320 × 740</option>
+          <option value="740">740 × 390 · ngang</option>
+        </select></label
+      >
+      <button id="check-layout" type="button">Kiểm tra bố cục</button>
+      <p id="layout-result" role="status">Mở tài liệu hoặc editor rồi kiểm tra.</p>
+    </div>
+    <iframe
+      title="Ứng dụng trên điện thoại"
+      src="/"
+      style="
+        position: absolute;
+        left: 0;
+        top: 0;
+        display: block;
+        width: 390px;
+        height: 844px;
+        border: 0;
+      "
+    ></iframe>
+    <script type="module">
+      const frame = document.querySelector('iframe');
+      const size = document.querySelector('#phone-size');
+      size.addEventListener('change', () => {
+        const sizes = { 390: [390, 844], 360: [360, 800], 320: [320, 740], 740: [740, 390] };
+        const [width, height] = sizes[size.value];
+        frame.style.width = `${width}px`;
+        frame.style.height = `${height}px`;
+      });
+      document.querySelector('#check-layout').addEventListener('click', () => {
+        const result = document.querySelector('#layout-result');
+        try {
+          const doc = frame.contentDocument;
+          const height = frame.contentWindow.innerHeight;
+          const width = frame.contentWindow.innerWidth;
+          const editor = doc.querySelector('.batch-review:not(.batch-review--cropping)');
+          const pdf = doc.querySelector('.pdf-reader__pages');
+          if (!editor && !pdf) throw new Error('Hãy mở editor hoặc trang PDF trước.');
+          const stage = editor ? doc.querySelector('.batch-page-list') : pdf;
+          if (stage.getBoundingClientRect().height < height * 0.4)
+            throw new Error('Vùng tài liệu quá thấp.');
+          if (doc.documentElement.scrollWidth > width + 1) throw new Error('Trang bị tràn ngang.');
+          const selectors = editor
+            ? ['.batch-action-bar__rotate', '.batch-action-bar__crop', '.batch-action-bar__done']
+            : ['.pdf-workspace__edit', '.pdf-action'];
+          for (const selector of selectors) {
+            const control = doc.querySelector(selector);
+            const bounds = control.getBoundingClientRect();
+            if (bounds.height < 44 || bounds.width < 44 || bounds.bottom > height + 1)
+              throw new Error(`Nút nhỏ hoặc khuất: ${selector}`);
+            const target = doc.elementFromPoint(
+              bounds.x + bounds.width / 2,
+              bounds.y + bounds.height / 2,
+            );
+            if (!target || !control.contains(target)) throw new Error(`Nút bị che: ${selector}`);
+          }
+          result.textContent = `PASS: ${Math.round(width)} × ${Math.round(height)}, vùng tài liệu ${Math.round(stage.getBoundingClientRect().height)}px; các nút chính không bị che.`;
+        } catch (error) {
+          result.textContent = `FAIL: ${error.message}`;
+        }
+      });
+    </script>
+  </body>
+</html>

@@ -10,7 +10,7 @@ export function PdfReader({ pages }: { readonly pages: readonly PdfPreviewPage[]
           <div className="pdf-workspace__sheet">
             <PdfPageImage image={page.image} number={index + 1} lazy={index > 0} />
           </div>
-          <p>
+          <p className="pdf-reader__page-number">
             Trang {index + 1} / {pages.length}
           </p>
         </section>

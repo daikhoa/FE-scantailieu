@@ -3,6 +3,7 @@ import type { ImageAsset } from '../../domain/document';
 import { PdfReader } from './PdfReader';
 import { PdfShareButton } from './PdfShareButton';
 import './pdf-preview.css';
+import { ActionIcon } from '../../components/ActionIcon';
 
 export interface PdfPreviewPage {
   readonly id: string;
@@ -94,11 +95,12 @@ export function PdfPreview({
       <header className="pdf-workspace__toolbar">
         {goLibrary && (
           <button className="back-button" type="button" disabled={busy} onClick={goLibrary}>
-            ← Kho tài liệu
+            <ActionIcon name="back" />
+            <span className="visually-hidden">← Kho tài liệu</span>
           </button>
         )}
         <p className="eyebrow">{pages.length} trang · PDF</p>
-        <h1 ref={heading} tabIndex={-1}>
+        <h1 className="visually-hidden" ref={heading} tabIndex={-1}>
           Tài liệu PDF
         </h1>
         <p className="pdf-workspace__name">{initialName}</p>
@@ -106,7 +108,7 @@ export function PdfPreview({
           {onSave && !wasSaved && (
             <button
               type="button"
-              className="primary-button"
+              className="primary-button pdf-workspace__save"
               disabled={busy || !name.trim() || wasSaved}
               aria-busy={busy}
               onClick={() => void save()}
@@ -116,11 +118,13 @@ export function PdfPreview({
           )}
           <button
             type="button"
-            className="primary-button"
+            className="pdf-workspace__edit"
+            aria-label="Chỉnh sửa tài liệu"
             disabled={busy}
             onClick={onEdit ?? onBack}
           >
-            Chỉnh sửa tài liệu
+            <ActionIcon name="edit" />
+            Chỉnh sửa
           </button>
           <a
             ref={downloadLink}
@@ -156,6 +160,7 @@ export function PdfPreview({
               }
             }}
           >
+            <ActionIcon name="download" />
             Tải PDF
           </a>
           <PdfShareButton
