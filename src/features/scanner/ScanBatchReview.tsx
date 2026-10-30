@@ -22,9 +22,13 @@ import { shadowFallbackMessage } from '../editor/shadow-status';
 import { ActionIcon } from '../../components/ActionIcon';
 import { AssetImage } from '../../components/AssetImage';
 import { PageOrderEditor } from './PageOrderEditor';
+import type { StoredDocument } from '../library/document-api';
+import { apiBlob } from '../account/api-client';
 import './scan-workspace.css';
 
 interface ScanBatchReviewProps {
+  readonly onSaveStoredChanges?: (name: string, signal: AbortSignal) => Promise<StoredDocument>;
+  readonly onResumeStoredPages?: () => void;
   readonly pages: readonly ScanBatchPage[];
   readonly headingRef: RefObject<HTMLHeadingElement | null> | null;
   readonly onCaptureMore: () => void;
@@ -112,6 +116,8 @@ export function ScanBatchReview({
   savedPdfUrl,
   onSaveDocument,
   onRenameDocument,
+  onSaveStoredChanges,
+  onResumeStoredPages,
 }: ScanBatchReviewProps) {
   const [selectedPageId, setSelectedPageId] = useState<string | null>(() => pages[0]?.id ?? null);
   const [croppingPageId, setCroppingPageId] = useState<string | null>(null);
@@ -120,6 +126,7 @@ export function ScanBatchReview({
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState('');
   const [preparedPdf, setPreparedPdf] = useState<Blob | null>(null);
+  const [storedPreview, setStoredPreview] = useState<StoredDocument | null>(null);
   const [showFilters, setShowFilters] = useState(true);
   const [orderingPages, setOrderingPages] = useState(false);
   const previousSurface = useRef('editor');
@@ -147,7 +154,16 @@ export function ScanBatchReview({
   const failedCount = pages.filter(
     (page) => page.kind === 'failed' || page.kind === 'failed-saved',
   ).length;
-  const canExport = pages.length > 0 && readyPages.length === pages.length && pendingCount === 0;
+  const canExport =
+    pages.length > 0 &&
+    (onSaveStoredChanges
+      ? pages.every(
+          (page) =>
+            page.kind === 'loading-saved' ||
+            page.kind === 'failed-saved' ||
+            (page.kind === 'ready' && page.page.restoration?.kind !== 'processing'),
+        )
+      : readyPages.length === pages.length && pendingCount === 0);
   const effectiveSelectedPageId = pages.some((page) => page.id === selectedPageId)
     ? selectedPageId
     : (pages[0]?.id ?? null);
@@ -173,7 +189,7 @@ export function ScanBatchReview({
       ? 'order'
       : croppingPageId
         ? 'crop'
-        : preparedPdf
+        : preparedPdf || storedPreview
           ? 'pdf'
           : 'editor';
     const returning = previousSurface.current !== 'editor' && surface === 'editor';
@@ -182,7 +198,7 @@ export function ScanBatchReview({
     const list = carouselRef.current;
     const item = list?.children[selectedIndex];
     if (list && item instanceof HTMLElement) list.scrollLeft = item.offsetLeft - list.offsetLeft;
-  }, [orderingPages, croppingPageId, preparedPdf, selectedIndex]);
+  }, [orderingPages, croppingPageId, preparedPdf, storedPreview, selectedIndex]);
 
   useEffect(
     () => () => {
@@ -243,6 +259,11 @@ export function ScanBatchReview({
     try {
       const name = (documentName ?? 'clonecamscanner').trim();
       if (!name) throw new Error('Tên tài liệu không được để trống.');
+      if (onSaveStoredChanges) {
+        const updated = await onSaveStoredChanges(name, controller.signal);
+        if (!controller.signal.aborted) setStoredPreview(updated);
+        return;
+      }
       let cached = exportCache.current.get(pages);
       const pdf = cached
         ? cached.pdf
@@ -275,6 +296,24 @@ export function ScanBatchReview({
       }
     }
   };
+
+  if (storedPreview !== null) {
+    return (
+      <PdfPreview
+        name={storedPreview.name}
+        saved
+        fileUrl={storedPreview.pdfUrl}
+        loadPdf={(signal) => apiBlob(storedPreview.pdfUrl, signal)}
+        pages={storedPreview.pages.map((page) => ({ id: page.id, image: page.renderedUrl }))}
+        {...(onBack ? { onLibrary: onBack } : {})}
+        {...(onRenameDocument ? { onSave: onRenameDocument } : {})}
+        onBack={() => {
+          setStoredPreview(null);
+          onResumeStoredPages?.();
+        }}
+      />
+    );
+  }
 
   if (preparedPdf !== null) {
     return (

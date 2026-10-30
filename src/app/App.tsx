@@ -19,6 +19,7 @@ import type { VideoFrameSource } from '../features/scanner/video-frame-source';
 import type { ScannerEngine } from '../imaging/contracts/scanner-engine';
 import type { LocalRestorationClient } from '../imaging/restoration/local-restoration-client';
 import type { DocumentSummary, EditableDocument } from '../features/library/document-api';
+import { documentApi, type StoredDocument } from '../features/library/document-api';
 import type { ScanBatchPage } from '../features/scanner/scan-batch';
 import { MAX_DOCUMENT_PAGES } from '../domain/document-limits';
 import { useStoredPages } from '../features/library/useStoredPages';
@@ -26,6 +27,12 @@ import { useStoredPages } from '../features/library/useStoredPages';
 export type { LibraryState } from './HomeScreen';
 
 interface AppProps {
+  readonly onSaveChanges?: (
+    pages: readonly ScanBatchPage[],
+    name: string,
+    existing: StoredDocument,
+    signal: AbortSignal,
+  ) => Promise<StoredDocument>;
   readonly libraryState?: LibraryState;
   readonly onRetryLibrary?: () => void;
   readonly cameraService?: CameraService;
@@ -104,6 +111,7 @@ export function App({
   onLoadMoreLibrary,
   onDirtyChange,
   onSaveDocument,
+  onSaveChanges,
 }: AppProps) {
   const [view, setView] = useState<AppView>(initialDocument ? 'batch-review' : 'library');
   const [cameraReturnView, setCameraReturnView] = useState<CameraReturnView>('library');
@@ -115,7 +123,9 @@ export function App({
   const [savedDocument, setSavedDocument] = useState<DocumentSummary | null>(
     initialDocument?.document ?? null,
   );
-  const storedPages = useStoredPages(initialDocument?.storedDocument, dispatchBatch);
+  const [storedBase, setStoredBase] = useState(initialDocument?.storedDocument);
+  const [backgroundDocument, setBackgroundDocument] = useState(initialDocument?.storedDocument);
+  const storedPages = useStoredPages(backgroundDocument, dispatchBatch);
   const [draftName, setDraftName] = useState(initialDocument?.document.name ?? 'clonecamscanner');
   const [dirty, setDirty] = useState(false);
   const [processorGeneration, setProcessorGeneration] = useState(0);
@@ -455,6 +465,39 @@ export function App({
         />
       ) : (
         <ScanBatchReview
+          {...(storedBase && onSaveChanges
+            ? {
+                onSaveStoredChanges: async (name: string, signal: AbortSignal) => {
+                  const updated = await onSaveChanges(
+                    batch.pages,
+                    name,
+                    { ...storedBase, revision: savedDocument?.revision ?? storedBase.revision },
+                    signal,
+                  );
+                  if (!signal.aborted) {
+                    storedPages.cancelAll();
+                    setBackgroundDocument(undefined);
+                    setStoredBase(updated);
+                    setSavedDocument(updated);
+                    setDraftName(updated.name);
+                    setDirty(false);
+                    dispatchBatch({ type: 'rebased', pages: documentApi.draft(updated).pages });
+                  }
+                  return updated;
+                },
+                onResumeStoredPages: () => {
+                  setBackgroundDocument({
+                    ...storedBase,
+                    pages: storedBase.pages.filter(
+                      (page) =>
+                        !batch.pages.some(
+                          (current) => current.id === page.id && current.kind === 'ready',
+                        ),
+                    ),
+                  });
+                },
+              }
+            : {})}
           pages={batch.pages}
           onImportMore={appendImages}
           {...(homeImportState.kind === 'error'

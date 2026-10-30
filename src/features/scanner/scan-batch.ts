@@ -2,6 +2,7 @@ import type { RgbaBackendInput } from '../../imaging/engines/scanic-backend-cont
 import type { ProcessedScanPage, ScanPageSource } from './background-page-processor';
 
 interface ScanPageIdentity {
+  readonly modified?: boolean;
   readonly id: string;
   readonly source: ScanPageSource;
   readonly preview?: RgbaBackendInput;
@@ -46,6 +47,7 @@ export type ScanBatchEvent =
   | { readonly type: 'retry'; readonly id: string }
   | { readonly type: 'removed'; readonly id: string }
   | { readonly type: 'reordered'; readonly ids: readonly string[] }
+  | { readonly type: 'rebased'; readonly pages: readonly ScanBatchPage[] }
   | { readonly type: 'reset' };
 
 function updatePage(
@@ -61,6 +63,15 @@ function updatePage(
 
 export function scanBatchReducer(state: ScanBatchState, event: ScanBatchEvent): ScanBatchState {
   switch (event.type) {
+    case 'rebased':
+      return {
+        pages: event.pages.map((page) => {
+          const current = state.pages.find(
+            (current) => current.id === page.id && current.kind === 'ready',
+          );
+          return current ? { ...current, modified: false } : page;
+        }),
+      };
     case 'reordered': {
       if (event.ids.length !== state.pages.length || new Set(event.ids).size !== event.ids.length)
         return state;
@@ -136,7 +147,7 @@ export function scanBatchReducer(state: ScanBatchState, event: ScanBatchEvent): 
       );
     case 'updated':
       return updatePage(state, event.id, (page) =>
-        page.kind === 'ready' ? { ...page, page: event.page } : page,
+        page.kind === 'ready' ? { ...page, modified: true, page: event.page } : page,
       );
     case 'failed':
       return updatePage(state, event.id, (page) =>

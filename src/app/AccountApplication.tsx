@@ -157,6 +157,11 @@ export function AccountApplication({ comparison }: { readonly comparison?: React
           />
         ) : (
           <App
+            onSaveChanges={async (pages, name, existing, signal) => {
+              const updated = await documentApi.saveChanges(pages, name, existing, signal);
+              void refreshLibrary();
+              return updated;
+            }}
             key={editing?.document.id ?? 'new'}
             {...(editing ? { initialDocument: editing } : {})}
             libraryState={library}

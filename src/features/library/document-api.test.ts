@@ -3,10 +3,79 @@ import { waitFor } from '@testing-library/react';
 import { createDefaultPageRecipe } from '../scanner/background-page-processor';
 import type { ScanBatchPage } from '../scanner/scan-batch';
 import { documentApi, type StoredDocument } from './document-api';
+vi.mock('../export/image-pdf', () => ({
+  createImagePdf: vi.fn(() => Promise.resolve(new Blob(['pdf'], { type: 'application/pdf' }))),
+}));
 
 afterEach(() => vi.unstubAllGlobals());
 
 describe('editable document API contract', () => {
+  it('uploads only changed pages and references unloaded pages without fetching their assets', async () => {
+    const recipe = createDefaultPageRecipe({ kind: 'full-frame' });
+    const info = { width: 12, height: 16, mime: 'image/jpeg' };
+    const base: StoredDocument = {
+      id: 'saved',
+      name: 'Doc',
+      revision: 1,
+      pageCount: 2,
+      createdAt: '',
+      updatedAt: '',
+      schemaVersion: 1,
+      pdfUrl: '/api/v1/documents/saved/pdf',
+      pages: ['one', 'two'].map((id) => ({
+        id,
+        original: info,
+        rendered: info,
+        recipe,
+        engineVersion: 'test',
+        recipeKey: id,
+        outcome: { kind: 'not-requested' },
+        originalUrl: '/original',
+        renderedUrl: '/rendered',
+        thumbnailUrl: '/thumb',
+      })),
+    };
+    const image = {
+      blob: new Blob(['image'], { type: 'image/jpeg' }),
+      dimensions: { width: 12, height: 16 },
+    };
+    const pages: readonly ScanBatchPage[] = [
+      {
+        id: 'one',
+        kind: 'ready',
+        modified: true,
+        source: image.blob,
+        page: {
+          original: image,
+          crop: recipe.crop,
+          recipe,
+          variant: {
+            image,
+            recipeKey: 'one',
+            engineVersion: 'test',
+            dewarp: { kind: 'not-requested' },
+          },
+        },
+      },
+      { id: 'two', kind: 'loading-saved', previewUrl: '/thumb' },
+    ];
+    const fetcher = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...base, revision: 2 })))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ ...base, revision: 2 })));
+    vi.stubGlobal('fetch', fetcher);
+    await documentApi.saveChanges(pages, 'Doc', base, new AbortController().signal);
+    expect(fetcher.mock.calls.map((call) => call[0])).toEqual([
+      '/api/v1/documents/saved/pages',
+      '/api/v1/documents/saved',
+    ]);
+    const form = fetcher.mock.calls[0]?.[1]?.body as FormData;
+    expect([...form.keys()].sort()).toEqual(['manifest', 'original_0', 'pdf', 'rendered_0']);
+    const raw = form.get('manifest');
+    if (typeof raw !== 'string') throw new Error('Missing manifest');
+    const parsed = JSON.parse(raw) as { pages: readonly { id: string; reuse?: boolean }[] };
+    expect(parsed.pages[1]).toEqual({ id: 'two', reuse: true });
+  });
   it('renames with metadata only instead of uploading files', async () => {
     const document = {
       id: 'saved',

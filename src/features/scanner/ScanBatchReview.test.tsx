@@ -64,6 +64,34 @@ afterEach(() => {
 });
 
 describe('ScanBatchReview', () => {
+  it('saves changes without waiting for unloaded stored pages and keeps edits on failure', async () => {
+    const save = vi.fn().mockRejectedValue(new Error('Storage unavailable'));
+    const exporter = vi.fn();
+    render(
+      <ScanBatchReview
+        pages={[
+          readyPage('one', 'edited'),
+          { id: 'two', kind: 'loading-saved', previewUrl: '/preview' },
+        ]}
+        headingRef={null}
+        onCaptureMore={vi.fn()}
+        onApplyRecipe={vi.fn()}
+        onRetakePage={vi.fn()}
+        onRetryPage={vi.fn()}
+        onRemovePage={vi.fn()}
+        onSaveStoredChanges={save}
+        pdfExporter={exporter}
+      />,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Xem PDF 2 trang' }));
+    await waitFor(() => {
+      expect(save).toHaveBeenCalledOnce();
+    });
+    expect(await screen.findByText(/Storage unavailable/u)).toBeVisible();
+    expect(exporter).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Chọn trang 1' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Chọn trang 2' })).toBeInTheDocument();
+  });
   it('keeps the page image URL valid after cancelling crop under StrictMode', () => {
     render(
       <StrictMode>

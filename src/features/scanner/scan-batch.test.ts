@@ -38,6 +38,29 @@ function processed(source: Blob, key: string): ProcessedScanPage {
 }
 
 describe('scan batch reducer', () => {
+  it('rebases unloaded assets after save without discarding ready edits or resending them', () => {
+    const ready = {
+      id: 'one',
+      kind: 'ready' as const,
+      modified: true,
+      source: firstSource,
+      page: processed(firstSource, 'edited'),
+    };
+    const result = scanBatchReducer(
+      { pages: [ready, { id: 'two', kind: 'loading-saved', previewUrl: '/old' }] },
+      {
+        type: 'rebased',
+        pages: [
+          { id: 'two', kind: 'loading-saved', previewUrl: '/new' },
+          { id: 'one', kind: 'loading-saved', previewUrl: '/one' },
+        ],
+      },
+    );
+    expect(result.pages[0]).toMatchObject({ id: 'two', previewUrl: '/new' });
+    expect(result.pages[1]).toMatchObject({ id: 'one', kind: 'ready', modified: false });
+    if (result.pages[1]?.kind !== 'ready') throw new Error('Ready page was lost');
+    expect(result.pages[1].page).toBe(ready.page);
+  });
   it('reorders page identities without losing edits or late background results', () => {
     const first = {
       id: 'first',

@@ -1,0 +1,9 @@
+# Saving edits before stored pages finish loading
+
+Existing documents use `PUT /api/v1/documents/{id}/pages` with the expected revision and ordered page entries. Unchanged pages send `{id,reuse:true}`; changed/new pages send the existing page metadata and `original_N`/`rendered_N` files. The optional `pdf` contains only changed pages in manifest order. New documents keep the original complete-upload endpoint. Newly added queued/failed pages and active restoration still block saving.
+
+The server resolves references only against the authenticated owner's current document. It merges stored PDF pages with the uploaded edited PDF, assembles a complete private version, and reuses the existing validated atomic save/quota/GC path. This avoids downloading untouched originals/rendered images to the phone and re-uploading them. The server currently stages and uploads a complete version; cloud transfers and PDF assembly still take time. Cloud reads stream with byte limits, timeouts and a shared connection; request concurrency remains bounded by upload slots.
+
+The editor marks modified ready pages explicitly (including restoration updates). After save it rebases pending asset URLs to the new version, keeps ready page Blobs, clears modification markers and stops background downloads in the PDF reader. Returning to edit resumes only missing pages. A stale revision returns 409; failures preserve unsaved edits and the previous stored version. An unchanged name/order with only reuse entries returns the existing revision.
+
+Verification: frontend 657 tests passed before the final rebase test; focused save/reducer checks, lint and production build passed. Backend 36 tests passed, including private cloud reuse, storage failure rollback, stale revisions, invalid references, reorder/delete and merged PDF page selection. Physical phone gestures are outside these automated checks.

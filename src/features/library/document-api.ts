@@ -2,6 +2,7 @@ import type { EditRecipe, ImageAsset, RenderedVariant } from '../../domain/docum
 import type { ScanBatchPage } from '../scanner/scan-batch';
 import { apiBlob, apiJson } from '../account/api-client';
 import { MAX_DOCUMENT_PAGES } from '../../domain/document-limits';
+import { createImagePdf } from '../export/image-pdf';
 
 export interface DocumentSummary {
   readonly id: string;
@@ -73,6 +74,58 @@ function createRequestKey(pdf: Blob, manifest: string): string {
 const info = (image: ImageAsset): ImageInfo => ({ ...image.dimensions, mime: image.blob.type });
 
 export const documentApi = {
+  async saveChanges(
+    pages: readonly ScanBatchPage[],
+    name: string,
+    existing: StoredDocument,
+    signal: AbortSignal,
+  ): Promise<StoredDocument> {
+    const base = new Map(existing.pages.map((page) => [page.id, page]));
+    const changed: ImageAsset[] = [];
+    const form = new FormData();
+    const manifestPages = pages.map((page, index) => {
+      const saved = base.get(page.id);
+      if (
+        saved &&
+        (page.kind === 'loading-saved' ||
+          page.kind === 'failed-saved' ||
+          (page.kind === 'ready' &&
+            !page.modified &&
+            page.page.variant.recipeKey === saved.recipeKey &&
+            JSON.stringify(page.page.recipe) === JSON.stringify(saved.recipe)))
+      )
+        return { id: page.id, reuse: true };
+      if (page.kind !== 'ready')
+        throw new Error('Hãy đợi các trang mới thêm xử lý xong trước khi lưu.');
+      changed.push(page.page.variant.image);
+      form.append(`original_${String(index)}`, page.page.original.blob, 'original');
+      form.append(`rendered_${String(index)}`, page.page.variant.image.blob, 'rendered');
+      return {
+        id: page.id,
+        original: info(page.page.original),
+        rendered: info(page.page.variant.image),
+        recipe: page.page.recipe,
+        engineVersion: page.page.variant.engineVersion,
+        recipeKey: page.page.variant.recipeKey,
+        outcome: page.page.variant.dewarp,
+        enhancement: page.page.variant.enhancement,
+        enhancementFailure: page.page.variant.enhancementFailure,
+      };
+    });
+    if (changed.length) {
+      form.append('pdf', await createImagePdf(changed, signal), 'edited.pdf');
+    }
+    form.append(
+      'manifest',
+      JSON.stringify({ name: name.trim(), revision: existing.revision, pages: manifestPages }),
+    );
+    await apiJson<DocumentSummary>(
+      `${BASE}/${encodeURIComponent(existing.id)}/pages`,
+      { method: 'PUT', body: form, signal },
+      120_000,
+    );
+    return documentApi.get(existing.id, signal);
+  },
   draft: (document: StoredDocument): EditableDocument => ({
     document,
     storedDocument: document,
