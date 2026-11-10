@@ -57,6 +57,10 @@ assert.equal(
       heapBytes,
       'repeated corner refinement does not grow the WASM heap',
     );
+    module.HEAPU8.fill(230, input, input + rgba.length);
+    module.HEAPF64.set([8, 8, 160, 9, 170, 39, 7, 123], refined / 8);
+    assert.equal(module._ds_wasm_refine_corners(input, w, h, refined, 0.99), 0);
+    assert.equal(module.HEAPF64[refined / 8 + 9], 0, 'reject a distorted crop with weak edges');
   } finally {
     module._free(input);
     module._free(refined);
@@ -112,6 +116,22 @@ try {
     output().every((value, index) => value === source[index]),
     'original full-frame preserves every byte',
   );
+  module._ds_wasm_release();
+  for (const [maximum, expected] of [
+    [3000, 320],
+    [240, 240],
+  ]) {
+    assert.equal(begin([10, 10, 110, 10, 110, 170, 10, 170], maximum), 0);
+    writePatches();
+    assert.equal(module._ds_wasm_prepare(0, 0), 0);
+    assert.equal(module._ds_wasm_finish(0, 0, 0, 0, 0), 0);
+    assert.equal(
+      module._ds_wasm_height(),
+      expected,
+      'small crop uses denser sampling within the cap',
+    );
+    module._ds_wasm_release();
+  }
   for (const filter of [0, 1, 2, 3, 4]) {
     assert.equal(begin([7, 9, 120, 5, 123, 182, 4, 187], 96), 0);
     writePatches();

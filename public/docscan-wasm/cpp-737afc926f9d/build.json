@@ -1,0 +1,30 @@
+{
+  "schema": 2,
+  "browser_abi": 9,
+  "wasm_sha256": "f3e270a482d9da092dec41257c8157765092bd503f9361a1f8bfc43322b81c31",
+  "module_sha256": "ef20dfabe1ec5876cf29c1bf2b1696516c4ae15a5309cc4f2a138081d1030cbb",
+  "sources": {
+    "wasm/bridge.cpp": "578e911651affbee7ad22a43ddf850762c11accf9f5b90b26ca02c1705f84981",
+    "wasm/CMakeLists.txt": "4391f89aed2ce59b10dae8473165f3bfc501bf1224c57c4131e7dc3e00e51c83",
+    "include/docscan/docscan.h": "0e303290db21e35b21b615029187dc52296eb7d032faa6aa0359ada56ef12d17",
+    "src/pixels.hpp": "d431c28ec9d4f0bdc893caec1d85bba08e2f57129c3ce46888d8fe41598f33c9",
+    "src/corner-refinement.hpp": "89297dd4bcc832a1008235b44463ec954da599de793a8f40a78b25f5ecf0a4cd",
+    "src/corner-refinement.cpp": "ea90bcf3a17957bda0d5b47c647fd7b6fda4741008bbe62a4a2c344518572cd0",
+    "src/geometry.cpp": "36911645984a4294a42ba3905bf17f18db3bb1c81083838dba6b67717bce98b6",
+    "src/quality.cpp": "3f6b9478cef85517e5e9fae3bfd3e5908dba0d370f5abf20cacf625ccccc5c41",
+    "src/appearance-plan.cpp": "e962b28b6c0e59c0f6dead5772fe606d34bdcccfebad5a353b241d08d46dea08",
+    "src/filters.cpp": "dee59ef22e8df5602731c5316223945f8f77fec1d316631b19830642b64b2d9a",
+    "src/lab.hpp": "c024c306d12442ff2c4872842a7f1ecc684b35b3f0de8a41b50d6341c6c1c399",
+    "src/paper-restoration.hpp": "dfb7e97e628a3f5dfe91b7b5f0affcb2c46166fcd6c846c098fce3666d775223",
+    "src/paper-restoration.cpp": "f83307b06cfffa7b03e8b47af50ea62f8ce058fda91c08ee0133df3cfe489bb8",
+    "src/paper-field.hpp": "ef8d7f6e2baf1637c9d6569441843c357ad874bccca5021b304f1bd698a78ab5",
+    "src/paper-field.cpp": "e04e4263f8766a10cb1de52ec1af4fb91dda65b7c41024b94d7eb361c03c9578",
+    "src/adaptive-enhancement.hpp": "2ceba02dfad1ebc45fe500dc8036f47dd3edfb6a92a5ce3d5f7cca9e26d870cb",
+    "src/adaptive-enhancement.cpp": "9bde97983037e66012b08595920fecf8d2435fcaa959849a7a52ebac512a933a"
+  },
+  "maximum_input_pixels": 50000000,
+  "maximum_output_side": 3000,
+  "maximum_patch_pixels": 1048576,
+  "maximum_wasm_bytes": 805306368,
+  "boundary": "browser codecs/inference -> native tiled geometry, analysis, filters, rotation -> browser encode/PDF"
+}

@@ -125,7 +125,7 @@ describe('editable document API contract', () => {
       () =>
         new Promise((resolve) =>
           pending.push(() => {
-            resolve(new Response(new Blob(['image'], { type: 'image/jpeg' })));
+            resolve(new Response('image', { headers: { 'Content-Type': 'image/jpeg' } }));
           }),
         ),
     );

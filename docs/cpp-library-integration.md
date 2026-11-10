@@ -57,6 +57,15 @@ khác cần build tương ứng và binding phù hợp, không cần viết lạ
 Browser dùng cùng lõi C++ qua WASM, nhưng codec/runtime model và PDF theo nền tảng;
 không cam kết kết quả byte giống hệt DLL ở mọi định dạng.
 
+## Ảnh nhỏ và khung cắt dùng cho OCR
+
+SDK dùng cùng chính sách kiểm tra đường biên với thư viện native. Khi đề xuất cắt
+có hai cạnh đối diện chênh hơn hai lần và thiếu bằng chứng đường biên, bộ dò ảnh
+tĩnh sẽ thử đề xuất khác hoặc giữ toàn khung. Khi nắn một vùng đã chọn có cạnh dài
+tự nhiên dưới 800 pixel, WASM lấy mẫu trực tiếp từ ảnh nguồn với kích thước tối đa
+hai lần, trong giới hạn cạnh đầu ra. Cùng một recipe tạo cùng kích thước khi nhập,
+chỉnh sửa và mở lại tài liệu. Khung đầy đủ vẫn dùng kích thước tự nhiên.
+
 ## Nơi sửa và build
 
 | Phần | Nguồn chính trong thuvien |
